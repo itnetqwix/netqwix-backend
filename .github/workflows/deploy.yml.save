@@ -1,0 +1,3 @@
+git add .github/workflows/deploy.yml
+git commit -m "Add EC2 auto deploy workflow"
+git push origin main

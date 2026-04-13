@@ -1,0 +1,1377 @@
+{
+	"info": {
+		"_postman_id": "50f60704-d5c5-4caa-b78f-e4cb8d1a8420",
+		"name": "Netquix",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "18921435"
+	},
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Signup",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"fullname\": \"Arjun Dave\",\n    \"password\": \"Test@12345\",\n    \"email\": \"arjun@mailinator.com\",\n    \"mobile_no\": \"1234567\",\n    \"isGoogleRegister\": \"false\",\n    \"account_type\": \"Trainer\",\n    \"category\": \"personal training\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{localhost-8000}}/auth/signup",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"auth",
+								"signup"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Signup",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"fullname\": \"trainee1\",\n    \"password\": \"Test@123\",\n    \"email\": \"triee31@gmail.com\",\n    \"mobile_no\": \"1234567\",\n    \"isGoogleRegister\": \"false\",\n    \"account_type\": \"Trainer\",\n    \"category\": \"Golf\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{localhost-8000}}/auth/signup",
+									"host": [
+										"{{localhost-8000}}"
+									],
+									"path": [
+										"auth",
+										"signup"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "X-Powered-By",
+									"value": "Express"
+								},
+								{
+									"key": "Access-Control-Allow-Origin",
+									"value": "*"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Content-Length",
+									"value": "223"
+								},
+								{
+									"key": "ETag",
+									"value": "W/\"df-I3SoyDiW/GA4KLDmaJGoO5PTDyM\""
+								},
+								{
+									"key": "Date",
+									"value": "Mon, 10 Jul 2023 14:11:37 GMT"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"status\": \"SUCCESS\",\n    \"data\": {\n        \"fullname\": \"trainee1\",\n        \"password\": \"Test@123\",\n        \"email\": \"triee31@gmail.com\",\n        \"mobile_no\": \"1234567\",\n        \"account_type\": \"Trainer\",\n        \"category\": \"Golf\",\n        \"message\": \"User created successfully\",\n        \"status\": \"SUCCESS\"\n    }\n}"
+						},
+						{
+							"name": "Signup",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"fullname\": \"trainee1\",\n    \"password\": \"Test@123\",\n    \"email\": \"trainee@gmail.com\",\n    \"mobile_no\": \"1234567\",\n    \"isGoogleRegister\": \"false\",\n    \"account_type\": \"Trainee\",\n    \"category\": \"Golf\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{localhost-8000}}/auth/signup",
+									"host": [
+										"{{localhost-8000}}"
+									],
+									"path": [
+										"auth",
+										"signup"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "X-Powered-By",
+									"value": "Express"
+								},
+								{
+									"key": "Access-Control-Allow-Origin",
+									"value": "*"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Content-Length",
+									"value": "223"
+								},
+								{
+									"key": "ETag",
+									"value": "W/\"df-dQ5AxOsdc2qcKY6AylsQHptm8GM\""
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 14 Jul 2023 10:18:29 GMT"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"status\": \"SUCCESS\",\n    \"data\": {\n        \"fullname\": \"trainee1\",\n        \"password\": \"Test@123\",\n        \"email\": \"trainee@gmail.com\",\n        \"mobile_no\": \"1234567\",\n        \"account_type\": \"Trainee\",\n        \"category\": \"Golf\",\n        \"message\": \"User created successfully\",\n        \"status\": \"SUCCESS\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"trainee@gmail.com\",\n    \"password\": \"Test@123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{localhost-8000}}/auth/login",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Login",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\": \"test_trainer@gmail.com\",\n    \"password\": \"Test@123\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{localhost-8000}}/auth/login",
+									"host": [
+										"{{localhost-8000}}"
+									],
+									"path": [
+										"auth",
+										"login"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "X-Powered-By",
+									"value": "Express"
+								},
+								{
+									"key": "Access-Control-Allow-Origin",
+									"value": "*"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Content-Length",
+									"value": "366"
+								},
+								{
+									"key": "ETag",
+									"value": "W/\"16e-czuSLItXOTiJfKPtma5SrxAbSTU\""
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 07 Jul 2023 13:14:43 GMT"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"code\": 200,\n    \"result\": {\n        \"data\": {\n            \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjRhNmM1NGFlZjJkYWFjNzY1MjBjMDYxIiwiYWNjb3VudF90eXBlIjoiVHJhaW5lciIsImlhdCI6MTY4ODczNTY4M30.ZSfG6kHDwnZ2QFqhshw2OcXPbwYPU_D8uZN0wc_TrcU\",\n            \"account_type\": \"Trainer\"\n        },\n        \"message\": \"You have successfully logged in\",\n        \"status\": \"SUCCESS\"\n    },\n    \"msg\": \"You have successfully logged in\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Google login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\":\"traee31@gmail.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{localhost-8000}}/auth/verify-google-login",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"auth",
+								"verify-google-login"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Google login - user doesnt exists",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\":\"dev1.skywinds@gmail.com\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{localhost-8000}}/auth/verify-google-login",
+									"host": [
+										"{{localhost-8000}}"
+									],
+									"path": [
+										"auth",
+										"verify-google-login"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "X-Powered-By",
+									"value": "Express"
+								},
+								{
+									"key": "Access-Control-Allow-Origin",
+									"value": "*"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Content-Length",
+									"value": "20"
+								},
+								{
+									"key": "ETag",
+									"value": "W/\"14-vHQSG0awRWjBBvlwUoZ8M2lTLrs\""
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 07 Jul 2023 12:26:48 GMT"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"allowSignup\": true\n}"
+						},
+						{
+							"name": "Google login - User exists",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"email\":\"dev1.skywinds@gmail.com\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{localhost-8000}}/auth/verify-google-login",
+									"host": [
+										"{{localhost-8000}}"
+									],
+									"path": [
+										"auth",
+										"verify-google-login"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "X-Powered-By",
+									"value": "Express"
+								},
+								{
+									"key": "Access-Control-Allow-Origin",
+									"value": "*"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Content-Length",
+									"value": "366"
+								},
+								{
+									"key": "ETag",
+									"value": "W/\"16e-yW+0QTC2pIJfJBo1pNWmh9Bt4sE\""
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 07 Jul 2023 13:13:43 GMT"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"code\": 200,\n    \"result\": {\n        \"data\": {\n            \"access_token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjRhNmM1NTllZjJkYWFjNzY1MjBjMDY0IiwiYWNjb3VudF90eXBlIjoiVHJhaW5lZSIsImlhdCI6MTY4ODczNTYyM30.55sul3q94tmJ1sbfm4IxklQ2pPh1bbNUvBEb2PSRMNw\",\n            \"account_type\": \"Trainee\"\n        },\n        \"message\": \"You have successfully logged in\",\n        \"status\": \"SUCCESS\"\n    },\n    \"msg\": \"You have successfully logged in\"\n}"
+						}
+					]
+				},
+				{
+					"name": "send forgot password mail",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"mark@mailinator.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{localhost-8000}}/auth/forgot-password",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"auth",
+								"forgot-password"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "confirm-reset-password",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjRlYzZkMTk1MzM1YWRkYjEwNjRlNjhlIiwiYWNjb3VudF90eXBlIjoiVHJhaW5lciIsImlhdCI6MTY5MzIxNjE5MCwiZXhwIjoxNjkzMjU5MzkwfQ.uIaTQrCPUM91yAfEjiHbJUqZqwirvXdO-sRDwsJyYl0\",\n    \"password\": \"mark@mailinator.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8000/auth/confirm-reset-password",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"auth",
+								"confirm-reset-password"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Master",
+			"item": [
+				{
+					"name": "Get master data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{localhost-8000}}/master/master-data",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"master",
+								"master-data"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Get master data",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{localhost-8000}}/master/master-data",
+									"host": [
+										"{{localhost-8000}}"
+									],
+									"path": [
+										"master",
+										"master-data"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "X-Powered-By",
+									"value": "Express"
+								},
+								{
+									"key": "Access-Control-Allow-Origin",
+									"value": "*"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Content-Length",
+									"value": "176"
+								},
+								{
+									"key": "ETag",
+									"value": "W/\"b0-Ozy0AMC+stCTsNqVSLwHQnuoaB0\""
+								},
+								{
+									"key": "Date",
+									"value": "Tue, 11 Jul 2023 06:05:43 GMT"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"status\": \"SUCCESS\",\n    \"data\": [\n        {\n            \"_id\": \"64acf1270e6bf2c3afd53449\",\n            \"category\": [\n                \"Golf\",\n                \"baseball\",\n                \"tennis\",\n                \"skiing\",\n                \"personal training\",\n                \"yoga\",\n                \"physical therapy\",\n                \"acting\",\n                \"music\"\n            ]\n        }\n    ]\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Trainer",
+			"item": [
+				{
+					"name": "Update scheduling slots",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjRkZWY3YTM3YjA2MTYyNjM0MDQ3M2NjIiwiYWNjb3VudF90eXBlIjoiVHJhaW5lZSIsImlhdCI6MTY5Mjg1MTUzMCwiZXhwIjoxNjkyODk0NzMwfQ.W2uv3V8-FPauqGKvV7khqnZEw31puZJqe2wLDCvn8Mg",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"available_slots\": [\n        {\n            \"day\": \"monday\",\n            \"slots\": [\n                 {\n                    \"start_time\": \"08:00:00\",\n                    \"end_time\": \"12:00:00\"\n                }\n            ]\n        },\n        {\n            \"day\": \"tuesday\",\n            \"slots\": [\n                {\n                    \"start_time\": \"08:00:00\",\n                    \"end_time\": \"12:00:00\"\n                },\n                {\n                    \"start_time\": \"14:00:00\",\n                    \"end_time\": \"18:00:00\"\n                }\n            ]\n        },\n        {\n            \"day\": \"wednesday\",\n            \"slots\": []\n        },\n        {\n            \"day\": \"thursday\",\n            \"slots\": []\n        },\n        {\n            \"day\": \"friday\",\n            \"slots\": []\n        }\n    ]\n\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{localhost-8000}}/trainer/update-slots",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"trainer",
+								"update-slots"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Update scheduling slots",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"available_slots\": [\n        {\n            \"day\": \"monday\",\n            \"slots\": [\n                 {\n                    \"start_time\": \"08:00:00\",\n                    \"end_time\": \"12:00:00\"\n                }\n            ]\n        },\n        {\n            \"day\": \"tuesday\",\n            \"slots\": [\n                {\n                    \"start_time\": \"08:00:00\",\n                    \"end_time\": \"12:00:00\"\n                },\n                {\n                    \"start_time\": \"14:00:00\",\n                    \"end_time\": \"18:00:00\"\n                }\n            ]\n        },\n        {\n            \"day\": \"wednesday\",\n            \"slots\": []\n        },\n        {\n            \"day\": \"thursday\",\n            \"slots\": []\n        },\n        {\n            \"day\": \"friday\",\n            \"slots\": []\n        }\n    ]\n\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{localhost-8000}}/trainer/update-slots",
+									"host": [
+										"{{localhost-8000}}"
+									],
+									"path": [
+										"trainer",
+										"update-slots"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "X-Powered-By",
+									"value": "Express"
+								},
+								{
+									"key": "Access-Control-Allow-Origin",
+									"value": "*"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Content-Length",
+									"value": "405"
+								},
+								{
+									"key": "ETag",
+									"value": "W/\"195-HZ29ivqQnQxIwWueoGycLinPqWU\""
+								},
+								{
+									"key": "Date",
+									"value": "Thu, 13 Jul 2023 11:36:49 GMT"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"status\": \"SUCCESS\",\n    \"data\": {\n        \"available_slots\": [\n            {\n                \"day\": \"monday\",\n                \"slots\": [\n                    {\n                        \"start_time\": \"08:00:00\",\n                        \"end_time\": \"12:00:00\"\n                    }\n                ]\n            },\n            {\n                \"day\": \"tuesday\",\n                \"slots\": [\n                    {\n                        \"start_time\": \"08:00:00\",\n                        \"end_time\": \"12:00:00\"\n                    },\n                    {\n                        \"start_time\": \"14:00:00\",\n                        \"end_time\": \"18:00:00\"\n                    }\n                ]\n            },\n            {\n                \"day\": \"wednesday\",\n                \"slots\": []\n            },\n            {\n                \"day\": \"thursday\",\n                \"slots\": []\n            },\n            {\n                \"day\": \"friday\",\n                \"slots\": []\n            }\n        ],\n        \"message\": \"Successfully updated scheduled slots\",\n        \"status\": \"SUCCESS\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get slots by trainer id",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{trainer-token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{localhost-8000}}/trainer/get-slots",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"trainer",
+								"get-slots"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get all trainers",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{trainee-token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{localhost-8000}}/trainer/get-trainers?search=",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"trainer",
+								"get-trainers"
+							],
+							"query": [
+								{
+									"key": "search",
+									"value": ""
+								}
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Get all trainers",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{localhost-8000}}/trainer/get-trainers",
+									"host": [
+										"{{localhost-8000}}"
+									],
+									"path": [
+										"trainer",
+										"get-trainers"
+									],
+									"query": [
+										{
+											"key": "search",
+											"value": "raj",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "X-Powered-By",
+									"value": "Express"
+								},
+								{
+									"key": "Access-Control-Allow-Origin",
+									"value": "*"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Content-Length",
+									"value": "881"
+								},
+								{
+									"key": "ETag",
+									"value": "W/\"371-TsamGu+YAeKd2qsViIXn5wcTgo8\""
+								},
+								{
+									"key": "Date",
+									"value": "Thu, 13 Jul 2023 14:21:28 GMT"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"status\": \"SUCCESS\",\n    \"data\": [\n        {\n            \"_id\": \"64ac09b3dd6a5880970ca13e\",\n            \"fullname\": \"trainee1\",\n            \"email\": \"trainee1@gmail.com\",\n            \"profile_picture\": \"www.google.com\",\n            \"category\": \"Golf\"\n        },\n        {\n            \"_id\": \"64ac0a4d7facbd8219dab373\",\n            \"fullname\": \"trainee1\",\n            \"email\": \"trainee31@gmail.com\",\n            \"profile_picture\": \"www.google.com\",\n            \"category\": \"Golf\"\n        },\n        {\n            \"_id\": \"64ac0be0be20e0c993ae0182\",\n            \"fullname\": \"trainee1\",\n            \"email\": \"traiee31@gmail.com\",\n            \"profile_picture\": \"www.google.com\",\n            \"category\": \"Golf\"\n        },\n        {\n            \"_id\": \"64ad268cf60129c4b3ddc8e3\",\n            \"fullname\": \"kjj\",\n            \"email\": \"dc-investor@primary-portal.com\",\n            \"profile_picture\": \"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRRefViTsx85xM_U01LKGg8JF353Bjkywkx8w&usqp=CAU\"\n        },\n        {\n            \"_id\": \"64ad3d88f60129c4b3ddc90e\",\n            \"fullname\": \"rajtrainer\",\n            \"email\": \"raj@gmail.com\",\n            \"profile_picture\": \"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRRefViTsx85xM_U01LKGg8JF353Bjkywkx8w&usqp=CAU\",\n            \"category\": \"yoga\"\n        }\n    ]\n}"
+						}
+					]
+				},
+				{
+					"name": "save/update drawing",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{trainer-token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"url": {
+							"raw": "{{localhost-8000}}/trainer/drawing",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"trainer",
+								"drawing"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Trainee",
+			"item": [
+				{
+					"name": "Get trainers with slots",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjUwMDM5NDhlNzc1ZTBmNWUwZTY1MTJiIiwiYWNjb3VudF90eXBlIjoiVHJhaW5lZSIsImlhdCI6MTY5NDUxMzQ4OSwiZXhwIjoxNjk0NTU2Njg5fQ.vGSmx_gSQMrDAfalGC4MpU2Ed82OG8m6Ge3EBi68N3k",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "",
+								"value": "",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{localhost-8000}}/trainee/get-trainers-with-slots?search=Mant",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"trainee",
+								"get-trainers-with-slots"
+							],
+							"query": [
+								{
+									"key": "search",
+									"value": "Mant"
+								}
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "Get trainers with slots",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{localhost-8000}}/trainee/get-trainers-with-slots?search=raj",
+									"host": [
+										"{{localhost-8000}}"
+									],
+									"path": [
+										"trainee",
+										"get-trainers-with-slots"
+									],
+									"query": [
+										{
+											"key": "search",
+											"value": "raj"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "X-Powered-By",
+									"value": "Express"
+								},
+								{
+									"key": "Access-Control-Allow-Origin",
+									"value": "*"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Content-Length",
+									"value": "782"
+								},
+								{
+									"key": "ETag",
+									"value": "W/\"30e-fGzLTvXUaAPhWnjEfts1Tph7w98\""
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 14 Jul 2023 05:42:44 GMT"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"status\": \"SUCCESS\",\n    \"data\": [\n        {\n            \"_id\": \"64afab722d41e75c5084aabb\",\n            \"trainer_id\": \"64ac09b3dd6a5880970ca13e\",\n            \"available_slots\": [\n                {\n                    \"day\": \"monday\",\n                    \"slots\": [\n                        {\n                            \"start_time\": \"08:00:00\",\n                            \"end_time\": \"12:00:00\",\n                            \"_id\": \"64afe903040ec34dae27258d\"\n                        }\n                    ],\n                    \"_id\": \"64afe903040ec34dae27258c\"\n                },\n                {\n                    \"day\": \"tuesday\",\n                    \"slots\": [\n                        {\n                            \"start_time\": \"08:00:00\",\n                            \"end_time\": \"12:00:00\",\n                            \"_id\": \"64afe903040ec34dae27258f\"\n                        },\n                        {\n                            \"start_time\": \"14:00:00\",\n                            \"end_time\": \"18:00:00\",\n                            \"_id\": \"64afe903040ec34dae272590\"\n                        }\n                    ],\n                    \"_id\": \"64afe903040ec34dae27258e\"\n                },\n                {\n                    \"day\": \"wednesday\",\n                    \"slots\": [],\n                    \"_id\": \"64afe903040ec34dae272591\"\n                },\n                {\n                    \"day\": \"thursday\",\n                    \"slots\": [],\n                    \"_id\": \"64afe903040ec34dae272592\"\n                },\n                {\n                    \"day\": \"friday\",\n                    \"slots\": [],\n                    \"_id\": \"64afe903040ec34dae272593\"\n                }\n            ],\n            \"fullname\": \"trainee1raj\",\n            \"email\": \"trainee1@gmail.com\",\n            \"category\": \"Golf\",\n            \"profilePicture\": \"www.google.com\"\n        }\n    ]\n}"
+						}
+					]
+				},
+				{
+					"name": "book-session",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjRkZWY3YTM3YjA2MTYyNjM0MDQ3M2NjIiwiYWNjb3VudF90eXBlIjoiVHJhaW5lZSIsImlhdCI6MTY5NTAxMzEwNywiZXhwIjoxNjk1MDU2MzA3fQ.rlnVwC8zzYD9OxKfXLMPyDKe_KgJv6FjgOSlWPF2Z7s",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"trainer_id\": \"64e452738523f55ec652d285\",\n    \"status\": \"confirmed\",\n    \"booked_date\": \"2023-09-22T06:17:29.952Z\",\n    \"charging_price\": \"10\",\n    \"session_start_time\": \"10:34\",\n    \"session_end_time\": \"11:35\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{localhost-8000}}/trainee/book-session",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"trainee",
+								"book-session"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "book instant meeting",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjRhYzBhMjg0YTlmMmI3NzNiODgwMGI3IiwiYWNjb3VudF90eXBlIjoiVHJhaW5lZSIsImlhdCI6MTY4OTc2MTUwOCwiZXhwIjoxNjkyMzUzNTA4fQ.qzgzd96-7GkyzAF5sElQfckCSH1vh3m6dk8It7t2FhY"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"trainer_id\": \"64ac09b3dd6a5880970ca13e\",\n    \"booked_date\": \"2023-07-19T09:10:48.780Z\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8000/trainee/book-instant-meeting",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"trainee",
+								"book-instant-meeting"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "check-slot",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjRiMTIwZTgyMTNhNWEzNjY3ODNlNDMxIiwiYWNjb3VudF90eXBlIjoiVHJhaW5lciIsImlhdCI6MTY5NTI3NDM2MywiZXhwIjoxNjk1MzE3NTYzfQ.WggCe7tPxBUX8bbn5OhgMaENXeFxZa_EXvBvaPsFZ-c"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"trainer_id\": \"64b120e8213a5a366783e431\",\n    \"booked_date\": \"2023-08-22\",\n    \"slotTime\": {\n        \"from\": \"12:00\",\n        \"to\": \"18:00\"\n    }\n}"
+						},
+						"url": {
+							"raw": "{{localhost-8000}}/trainee/check-slot",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"trainee",
+								"check-slot"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "common",
+			"item": [
+				{
+					"name": "update-booked-session",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjRkZWY3YTM3YjA2MTYyNjM0MDQ3M2NjIiwiYWNjb3VudF90eXBlIjoiVHJhaW5lZSIsImlhdCI6MTY5Mjg1MTUzMCwiZXhwIjoxNjkyODk0NzMwfQ.W2uv3V8-FPauqGKvV7khqnZEw31puZJqe2wLDCvn8Mg",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"booked_status\": \"confirmed\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{localhost-8000}}/user/update-booked-session/64ec6ebef8134dd7232efa11",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"user",
+								"update-booked-session",
+								"64ec6ebef8134dd7232efa11"
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "update-booked-session",
+							"originalRequest": {
+								"method": "PUT",
+								"header": [],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"booked_status\": \"booked\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{localhost-8000}}/user/update-booked-session/64b0f64a7bfa32700e845214",
+									"host": [
+										"{{localhost-8000}}"
+									],
+									"path": [
+										"user",
+										"update-booked-session",
+										"64b0f64a7bfa32700e845214"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "X-Powered-By",
+									"value": "Express"
+								},
+								{
+									"key": "Access-Control-Allow-Origin",
+									"value": "*"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Content-Length",
+									"value": "419"
+								},
+								{
+									"key": "ETag",
+									"value": "W/\"1a3-FnWMuXhRrhKn7L3f/kS/pfT62CA\""
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 14 Jul 2023 09:36:15 GMT"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"result\": {\n        \"_id\": \"64b0f64a7bfa32700e845214\",\n        \"trainer_id\": \"64b0f0277b95a8bde90e2cb9\",\n        \"trainee_id\": \"64b0e879529b1b1c895dcd3d\",\n        \"status\": \"booked\",\n        \"booked_date\": \"2023-07-14T06:17:29.952Z\",\n        \"session_start_time\": \"08:00:00\",\n        \"session_end_time\": \"08:30:00\",\n        \"session_link\": null,\n        \"createdAt\": \"2023-07-14T07:16:26.607Z\",\n        \"updatedAt\": \"2023-07-14T09:36:15.581Z\",\n        \"__v\": 0\n    },\n    \"message\": \"Session status updated successfully\",\n    \"status\": \"SUCCESS\"\n}"
+						}
+					]
+				},
+				{
+					"name": "get scheduled meetings for trainer/trainee",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjRkZWY3YTM3YjA2MTYyNjM0MDQ3M2NjIiwiYWNjb3VudF90eXBlIjoiVHJhaW5lZSIsImlhdCI6MTY5NTAxMzEwNywiZXhwIjoxNjk1MDU2MzA3fQ.rlnVwC8zzYD9OxKfXLMPyDKe_KgJv6FjgOSlWPF2Z7s",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{localhost-8000}}/user/scheduled-meetings?status=cancelled",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"user",
+								"scheduled-meetings"
+							],
+							"query": [
+								{
+									"key": "booking_date",
+									"value": "2023-09-20T06:17:29.952Z",
+									"disabled": true
+								},
+								{
+									"key": "status",
+									"value": "cancelled"
+								}
+							]
+						}
+					},
+					"response": [
+						{
+							"name": "get scheduled meetings for trainer/trainee",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{localhost-8000}}/user/scheduled-meetings",
+									"host": [
+										"{{localhost-8000}}"
+									],
+									"path": [
+										"user",
+										"scheduled-meetings"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "X-Powered-By",
+									"value": "Express"
+								},
+								{
+									"key": "Access-Control-Allow-Origin",
+									"value": "*"
+								},
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Content-Length",
+									"value": "1250"
+								},
+								{
+									"key": "ETag",
+									"value": "W/\"4e2-yQJxAOAtaaurijFMhGJISQMmRB8\""
+								},
+								{
+									"key": "Date",
+									"value": "Fri, 14 Jul 2023 10:15:26 GMT"
+								},
+								{
+									"key": "Connection",
+									"value": "keep-alive"
+								},
+								{
+									"key": "Keep-Alive",
+									"value": "timeout=5"
+								}
+							],
+							"cookie": [],
+							"body": "{\n    \"data\": [\n        {\n            \"_id\": \"64b0f6aaf07ce2d2ebbd0d33\",\n            \"status\": \"booked\",\n            \"booked_date\": \"2023-07-14T06:17:29.952Z\",\n            \"session_start_time\": \"08:00:00\",\n            \"session_end_time\": \"08:30:00\",\n            \"session_link\": null,\n            \"createdAt\": \"2023-07-14T07:18:02.285Z\",\n            \"updatedAt\": \"2023-07-14T07:18:02.285Z\",\n            \"trainer_info\": {\n                \"_id\": \"64b0f730f07ce2d2ebbd0d38\",\n                \"fullname\": \"trainee1\",\n                \"email\": \"trainer@gmail.com\",\n                \"password\": \"$2b$10$JlzPbXI1cToP52ZSe03Nw.rbbzAdyaQ4un0jIiSM49HEviIJh1Im2\",\n                \"mobile_no\": \"1234567\",\n                \"account_type\": \"Trainer\",\n                \"login_type\": \"google\",\n                \"profile_picture\": \"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRRefViTsx85xM_U01LKGg8JF353Bjkywkx8w&usqp=CAU\",\n                \"category\": \"Golf\",\n                \"createdAt\": \"2023-07-14T07:20:16.848Z\",\n                \"updatedAt\": \"2023-07-14T07:20:16.848Z\",\n                \"__v\": 0\n            },\n            \"trainee_info\": {\n                \"_id\": \"64b0e879529b1b1c895dcd3d\",\n                \"fullname\": \"manthan\",\n                \"email\": \"manthan@mailinator.com\",\n                \"password\": \"$2b$10$iBGC39HCVSAJwQPgXhydHuUPs/HmGlc8xWz3WgjxktBaukMqWY7ce\",\n                \"mobile_no\": \"84019949342\",\n                \"account_type\": \"Trainee\",\n                \"login_type\": \"default\",\n                \"profile_picture\": \"https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRRefViTsx85xM_U01LKGg8JF353Bjkywkx8w&usqp=CAU\",\n                \"createdAt\": \"2023-07-14T06:17:29.952Z\",\n                \"updatedAt\": \"2023-07-14T06:17:29.952Z\",\n                \"__v\": 0\n            }\n        }\n    ],\n    \"message\": \"Meetings fetched successfully\",\n    \"status\": \"SUCCESS\"\n}"
+						}
+					]
+				},
+				{
+					"name": "user info",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjRiMTIwZjUyMTNhNWEzNjY3ODNlNDNhIiwiYWNjb3VudF90eXBlIjoiVHJhaW5lZSIsImlhdCI6MTY5MjE2MDM2OCwiZXhwIjoxNjkyMjAzNTY4fQ.ZLJkxy_dszO8zP6SRTP-ZXmNEqSVvNhkMSW8fJGUZZk",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8000/user/me",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8000",
+							"path": [
+								"user",
+								"me"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "add rating",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{trainer-token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"rating\": 4.2,\n    \"booking_id\": \"64c3883385345825ac4dce2b\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{localhost-8000}}/user/rating",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"user",
+								"rating"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "{{localhost-8000}}/common/upload",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNjRlYzg0M2Q3ZGRkNzE2YTdhMDBiNDIzIiwiYWNjb3VudF90eXBlIjoiVHJhaW5lciIsImlhdCI6MTY5MzIyMTk1MSwiZXhwIjoxNjkzMjY1MTUxfQ.ZTKH4PFG-ZVpeMA1rxA9PfTDSp0nZIG2904iFJC4aW4",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "files",
+									"type": "file",
+									"src": "/home/shyam-dadhaniya/Downloads/wallpaperflare.com_wallpaper (1).jpg"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{localhost-8000}}/common/upload",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"common",
+								"upload"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "transaction",
+			"item": [
+				{
+					"name": "create stripe payment intent",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"amount\": 5\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{localhost-8000}}/transaction/create-payment-intent",
+							"host": [
+								"{{localhost-8000}}"
+							],
+							"path": [
+								"transaction",
+								"create-payment-intent"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

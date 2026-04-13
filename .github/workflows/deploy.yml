@@ -1,0 +1,38 @@
+name: Deploy Backend to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "📦 Moving to backend directory"
+            cd /home/ubuntu/nq-backend
+
+            echo "🔄 Fetching latest code"
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "📥 Installing dependencies"
+            npm install --no-audit --no-fund
+
+            echo "🏗️ Building project"
+            npm run build
+
+            echo "♻️ Reloading PM2 process"
+            pm2 reload netqwix-api
+
+            echo "✅ Deployment completed successfully"
