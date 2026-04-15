@@ -311,8 +311,10 @@ export class TraineeService {
         const rawDate = typeof payload.booked_date === "string"
           ? payload.booked_date.split("T")[0]
           : new Date(payload.booked_date as any).toISOString().split("T")[0];
-        const [startH, startM] = payload.session_start_time.split(":").map(Number);
-        const [endH, endM] = payload.session_end_time.split(":").map(Number);
+        const sessionStartTime = String(payload.session_start_time);
+        const sessionEndTime = String(payload.session_end_time);
+        const [startH, startM] = sessionStartTime.split(":").map(Number);
+        const [endH, endM] = sessionEndTime.split(":").map(Number);
         const startDT = DateTime.fromObject(
           { year: Number(rawDate.split("-")[0]), month: Number(rawDate.split("-")[1]), day: Number(rawDate.split("-")[2]), hour: startH, minute: startM, second: 0 },
           { zone: payload.time_zone }
