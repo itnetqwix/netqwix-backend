@@ -50,8 +50,9 @@ export class SocketInit {
         });
         
         // Store the complete user data
-        this.connectedUsers.set(socket.user._id, { socketId: socket.id, userData: socket.user });
-        MemCache.setDetail(process.env.SOCKET_CONFIG, socket.user._id, socket.id);
+        const userId = String(socket.user._id);
+        this.connectedUsers.set(userId, { socketId: socket.id, userData: socket.user });
+        MemCache.setDetail(process.env.SOCKET_CONFIG, userId, socket.id);
         
         // Handle socket events
         handleSocketEvents(socket);
@@ -69,7 +70,7 @@ export class SocketInit {
 
     const onDisconnect = (socket) => {
       socket.on(EVENTS.ON_DISCONNECT, async () => {
-        const userId = socket.user._id;
+        const userId = String(socket.user._id);
         this.logger.info(`User Disconnected ---> ${userId}`);
         
         // Remove the user from the connected users map

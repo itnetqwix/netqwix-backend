@@ -145,15 +145,16 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
 // Update user's activity status
 async function updateUserActivity(socket) {
   try {
-    const userId = socket.user._id;
+    const userId = String(socket.user._id);
 
     // Add the current user to the active users list
 
     if (socket?.user?._doc?.account_type === "Trainer") {
       activeUsers[userId] = { ...socket.user._doc };
       if (socket.user._doc._id) {
+        const trainerId = String(socket.user._doc._id);
         const checkIfUserIsAlreadyAdded = await onlineUser.findOne({
-          trainer_id: socket.user._doc._id,
+          trainer_id: trainerId,
         });
 
         // console.log(
@@ -163,12 +164,12 @@ async function updateUserActivity(socket) {
 
         if (checkIfUserIsAlreadyAdded) {
           await onlineUser.updateOne(
-            { trainer_id: socket.user._doc._id },
+            { trainer_id: trainerId },
             { $set: { last_activity_time: Date.now() } }
           );
         } else {
           const createNewOnlineUser = await new onlineUser({
-            trainer_id: socket.user._doc._id,
+            trainer_id: trainerId,
             last_activity_time: Date.now(),
           }).save();
         }
