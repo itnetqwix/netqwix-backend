@@ -18,18 +18,29 @@ export class SocketInit {
     setIoInstance(io);
     
     io.use(async (socket, next) => {
-      const token = socket.handshake.query.authorization;
-      if (token) {
+      const token =
+        socket.handshake?.auth?.authorization ||
+        socket.handshake?.query?.authorization;
+
+      if (!token) {
+        this.logger.info(`Socket auth failed: missing token`);
+        return next(new Error("Socket authentication token missing"));
+      }
+
+      try {
         const userInfo = await this.middleware.loadSocketUser(token);
-        if (userInfo.user) {
-          this.logger.info(`User Connected --> ${userInfo?.user?._id}`);
+        if (userInfo?.user) {
+          this.logger.info(`User Connected --> ${userInfo.user._id}`);
           socket.user = userInfo.user;
-          next();
-        } else {
-          this.logger.info(`After Connection getting ERR -> ${JSON.stringify(userInfo)}`);
-          this.logger.info(`token --- , ${JSON.stringify(token)}`);
-          socket.emit(EVENTS.ON_ERROR, { msg: JSON.stringify(userInfo.error) });
+          return next();
         }
+
+        this.logger.info(`After Connection getting ERR -> ${JSON.stringify(userInfo)}`);
+        this.logger.info(`token --- , ${JSON.stringify(token)}`);
+        return next(new Error("Socket authentication failed"));
+      } catch (error) {
+        this.logger.info(`Socket auth exception -> ${JSON.stringify(error)}`);
+        return next(new Error("Socket authentication error"));
       }
     })
     .on("connection", async (socket, request) => {
