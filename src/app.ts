@@ -5,6 +5,7 @@ import * as cors from "cors";
 import * as l10n from "jm-ez-l10n";
 import * as express from "express";
 const socketio = require("socket.io");
+const { ExpressPeerServer } = require("peer");
 
 import * as bodyParser from "body-parser";
 import * as dotEnv from "dotenv";
@@ -54,6 +55,17 @@ export class App {
     });
     // it's a function to execute all cron jobs
     cronjobs();
+
+    // Mount self-hosted PeerJS signaling server at /peerjs.
+    // This eliminates dependency on the unreliable PeerJS public cloud (0.peerjs.com)
+    // so both trainer and trainee always use the same signaling server as the backend.
+    const peerServer = ExpressPeerServer(server, {
+      path: "/",
+      allow_discovery: false,
+    });
+    this.app.use("/peerjs", peerServer);
+    this.logger.info("PeerJS signaling server mounted at /peerjs");
+
     const io = socketio(server, {
       maxHttpBufferSize: 1e8,
       transports: ['websocket', 'polling'], // Explicitly allow both transports

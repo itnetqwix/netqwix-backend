@@ -457,6 +457,13 @@ export const handleSocketEvents = (socket, connections = {}) => {
       process.env.SOCKET_CONFIG,
       userInfo?.to_user
     );
+    if (!toUserId) {
+      console.warn("[VideoCall:ON_CALL_JOIN] No socket mapping found for target user", {
+        to_user: userInfo?.to_user,
+        from_user: userInfo?.from_user,
+        peerId: userInfo?.peerId,
+      });
+    }
 
     // Track join state for timer logic - sessionId is booked_session._id
     const sessionId = userInfo?.sessionId || userInfo?.meetingId || userInfo?.lessonId;
