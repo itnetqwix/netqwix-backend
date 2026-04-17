@@ -69,7 +69,10 @@ export class SocketInit {
     });
 
     const onDisconnect = (socket) => {
-      socket.on(EVENTS.ON_DISCONNECT, async () => {
+      // Socket.IO emits the built-in "disconnect" event; relying on a custom
+      // ON_DISCONNECT event leaves stale socket ids in MemCache and breaks
+      // peer signaling (calls target dead sockets).
+      socket.on("disconnect", async () => {
         const userId = String(socket.user._id);
         this.logger.info(`User Disconnected ---> ${userId}`);
         
