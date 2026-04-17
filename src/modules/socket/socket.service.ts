@@ -447,6 +447,18 @@ export const handleSocketEvents = (socket, connections = {}) => {
       process.env.SOCKET_CONFIG,
       userInfo?.to_user
     );
+    console.log("[VideoCall:ON_OFFER]", {
+      from_user: userInfo?.from_user,
+      to_user: userInfo?.to_user,
+      toUserSocketMapped: !!toUserId,
+    });
+    if (!toUserId) {
+      console.warn("[VideoCall:ON_OFFER] Target socket missing", {
+        from_user: userInfo?.from_user,
+        to_user: userInfo?.to_user,
+      });
+      return;
+    }
     socket.to(toUserId).emit("offer", offer);
     // TODO:for now broadcasting the event, it needs to send to specific user.
     // socket.broadcast.emit('offer', offer);
@@ -758,6 +770,18 @@ export const handleSocketEvents = (socket, connections = {}) => {
       process.env.SOCKET_CONFIG,
       userInfo?.to_user
     );
+    console.log("[VideoCall:ON_ICE_CANDIDATE]", {
+      from_user: userInfo?.from_user,
+      to_user: userInfo?.to_user,
+      toUserSocketMapped: !!toUserSocketId,
+    });
+    if (!toUserSocketId) {
+      console.warn("[VideoCall:ON_ICE_CANDIDATE] Target socket missing", {
+        from_user: userInfo?.from_user,
+        to_user: userInfo?.to_user,
+      });
+      return;
+    }
 
     // Broadcast the ICE candidate to the other connected peers
     socket.to(toUserSocketId).emit("ice-candidate", data);
@@ -796,6 +820,19 @@ export const handleSocketEvents = (socket, connections = {}) => {
       process.env.SOCKET_CONFIG,
       userInfo?.to_user
     );
+    console.log("[VideoCall:STOP_FEED]", {
+      from_user: userInfo?.from_user,
+      to_user: userInfo?.to_user,
+      feedStatus,
+      toUserSocketMapped: !!toUserSocketId,
+    });
+    if (!toUserSocketId) {
+      console.warn("[VideoCall:STOP_FEED] Target socket missing", {
+        from_user: userInfo?.from_user,
+        to_user: userInfo?.to_user,
+      });
+      return;
+    }
     socket.to(toUserSocketId).emit(EVENTS.VIDEO_CALL.STOP_FEED, { feedStatus });
   });
 
