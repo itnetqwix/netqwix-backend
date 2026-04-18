@@ -498,6 +498,7 @@ export class TraineeService {
         session_end_time,
         start_time,
         end_time,
+        is_instant: true,
       });
 
       const bookingData = await userObj.save();

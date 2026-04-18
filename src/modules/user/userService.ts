@@ -622,7 +622,8 @@ export class UserService {
               report: 1,
               iceServers: 1,
               extended_session_end_time:1,
-              extended_end_time:1
+              extended_end_time:1,
+              is_instant: { $ifNull: ["$is_instant", false] },
             },
           },
           {

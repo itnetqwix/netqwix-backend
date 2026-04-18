@@ -86,7 +86,12 @@ const bookedSessionsSchema: Schema = new Schema(
         extended_end_time:{
             type: Date,
             default: null,
-        }
+        },
+        /** True when the booking was created via instant lesson flow (trainer UI uses Stop, not Pause). */
+        is_instant: {
+            type: Boolean,
+            default: false,
+        },
 
     },
     { timestamps: true }
