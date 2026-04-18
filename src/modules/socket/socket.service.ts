@@ -82,6 +82,7 @@ type LessonSessionState = {
   duration: number; // in seconds, calculated from session_start_time and session_end_time
   remainingSeconds: number; // canonical remaining time in seconds
   status: "waiting" | "running" | "paused" | "ended";
+  trainerLeftPaused?: boolean; // true when timer was auto-paused because trainer disconnected
   warningTimeoutId?: NodeJS.Timeout | null;
   endTimeoutId?: NodeJS.Timeout | null;
 };
@@ -213,16 +214,54 @@ async function updateUserActivity(socket) {
         console.error("Error updating last_activity_time on disconnect:", error);
       }
 
-      // Clean up timer state if user disconnects during a session
-      // Reset their join status but don't stop the timer if it's already started
+      // Clean up timer state if user disconnects during a session.
+      // Trainer disconnect auto-pauses a running timer; trainee disconnect leaves it running.
       const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
       for (const [sessionId, session] of lessonSessions.entries()) {
+        const roomName = `session:${sessionId}`;
+
         if (accountType === "Trainer" && session.coachJoined) {
           session.coachJoined = false;
           console.log(`[TIMER] Trainer ${userId} disconnected from session ${sessionId}`);
+
+          // Auto-pause running timer when trainer leaves
+          if (session.status === "running" && session.startedAt != null) {
+            const elapsedSeconds = Math.floor((Date.now() - session.startedAt) / 1000);
+            session.remainingSeconds = Math.max(0, session.remainingSeconds - elapsedSeconds);
+            session.startedAt = null;
+            session.status = "paused";
+            session.trainerLeftPaused = true; // distinguish from manual pause
+            clearLessonTimeouts(session);
+            console.log(`[TIMER] Auto-paused timer for session ${sessionId} at ${session.remainingSeconds}s remaining`);
+
+            const pausedPayload = {
+              sessionId: session.sessionId,
+              remainingSeconds: session.remainingSeconds,
+              duration: session.duration,
+              reason: "trainer_left",
+            };
+            if (ioInstance) ioInstance.to(roomName).emit("LESSON_TIME_PAUSED", pausedPayload);
+            else socket.nsp.to(roomName).emit("LESSON_TIME_PAUSED", pausedPayload);
+            emitLessonStateSync(socket, roomName, session);
+          }
+
+          // Notify the other participant the trainer left
+          socket.to(roomName).emit("PARTICIPANT_LEFT", {
+            sessionId,
+            role: "trainer",
+            userId,
+          });
+
         } else if (accountType !== "Trainer" && session.userJoined) {
           session.userJoined = false;
           console.log(`[TIMER] Trainee ${userId} disconnected from session ${sessionId}`);
+
+          // Notify the trainer the trainee left (timer keeps running)
+          socket.to(roomName).emit("PARTICIPANT_LEFT", {
+            sessionId,
+            role: "trainee",
+            userId,
+          });
         }
       }
     });
@@ -588,6 +627,25 @@ export const handleSocketEvents = (socket, connections = {}) => {
           }
         }
         
+        // If trainer rejoins after an auto-disconnect-pause, auto-resume the timer.
+        if (accountType === "Trainer" && session.status === "paused" && session.trainerLeftPaused) {
+          session.startedAt = Date.now();
+          session.status = "running";
+          session.trainerLeftPaused = false;
+          console.log(`[TIMER] Auto-resuming timer for session ${sessionId} after trainer rejoin. Remaining: ${session.remainingSeconds}s`);
+
+          const resumedPayload = {
+            sessionId: session.sessionId,
+            startedAt: session.startedAt,
+            duration: session.duration,
+            remainingSeconds: session.remainingSeconds,
+            reason: "trainer_rejoined",
+          };
+          if (ioInstance) ioInstance.to(roomName).emit("LESSON_TIME_RESUMED", resumedPayload);
+          else socket.nsp.to(roomName).emit("LESSON_TIME_RESUMED", resumedPayload);
+          scheduleLessonEnd(socket, roomName, session);
+        }
+
         // Coach manually controls start/pause/resume now.
         // On join, only sync current state to both peers.
         emitLessonStateSync(socket, roomName, session);
@@ -719,6 +777,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
     session.remainingSeconds = Math.max(0, session.remainingSeconds - elapsedSeconds);
     session.startedAt = null;
     session.status = "paused";
+    session.trainerLeftPaused = false; // explicit manual pause — not a disconnect-pause
     clearLessonTimeouts(session);
 
     const pausedPayload = {
