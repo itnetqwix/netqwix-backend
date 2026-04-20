@@ -508,6 +508,18 @@ export const handleSocketEvents = (socket, connections = {}) => {
       process.env.SOCKET_CONFIG,
       userInfo?.to_user
     );
+
+    // Critical: log the full MemCache lookup result so we can see if the target user's socket is registered
+    console.log("[VideoCall:ON_CALL_JOIN] 🔍 MemCache socket lookup:", {
+      from_user: userInfo?.from_user,
+      to_user: userInfo?.to_user,
+      peerId: userInfo?.peerId,
+      toUserSocketId: toUserId || "❌ NOT FOUND IN MEMCACHE",
+      socketConfigKey: process.env.SOCKET_CONFIG,
+      WARNING: !toUserId ? "⚠️ Target user socket not in MemCache — ON_CALL_JOIN will NOT reach them. Is the other user connected?" : undefined,
+      WARNING_peerId: !userInfo?.peerId ? "⚠️ peerId is missing in userInfo — trainer cannot dial trainee without peerId!" : undefined,
+    });
+
     if (!toUserId) {
       console.warn("[VideoCall:ON_CALL_JOIN] No socket mapping found for target user", {
         to_user: userInfo?.to_user,
@@ -670,7 +682,16 @@ export const handleSocketEvents = (socket, connections = {}) => {
     
     // Also emit to the specific user (for backward compatibility)
     if (toUserId) {
+      console.log("[VideoCall:ON_CALL_JOIN] 📤 Forwarding to target socket:", {
+        toUserSocketId: toUserId,
+        peerId: userInfo?.peerId,
+        from_user: userInfo?.from_user,
+        to_user: userInfo?.to_user,
+        WARNING: !userInfo?.peerId ? "⚠️ Forwarding WITHOUT peerId — trainer cannot dial!" : undefined,
+      });
       socket.to(toUserId).emit(EVENTS.VIDEO_CALL.ON_CALL_JOIN, { userInfo });
+    } else {
+      console.error("[VideoCall:ON_CALL_JOIN] 🚨 CANNOT FORWARD — no socket ID found for to_user:", userInfo?.to_user);
     }
   });
 

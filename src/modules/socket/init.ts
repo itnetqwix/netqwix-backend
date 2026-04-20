@@ -53,6 +53,7 @@ export class SocketInit {
         const userId = String(socket.user._id);
         this.connectedUsers.set(userId, { socketId: socket.id, userData: socket.user });
         MemCache.setDetail(process.env.SOCKET_CONFIG, userId, socket.id);
+        this.logger.info(`[MemCache] ✅ Socket registered: userId=${userId} socketId=${socket.id}`);
         
         // Handle socket events
         handleSocketEvents(socket);
