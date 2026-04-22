@@ -873,7 +873,8 @@ export const handleSocketEvents = (socket, connections = {}) => {
       process.env.SOCKET_CONFIG,
       userInfo?.to_user
     );
-    socket.to(toUserSocketId).emit(EVENTS.ON_CLEAR_CANVAS, {});
+    // Forward the full payload so canvasIndex reaches the recipient correctly.
+    socket.to(toUserSocketId).emit(EVENTS.ON_CLEAR_CANVAS, payload);
   });
 
   socket.on(EVENTS.EMIT_UNDO, (payload) => {
