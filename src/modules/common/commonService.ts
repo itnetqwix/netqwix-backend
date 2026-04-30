@@ -25,6 +25,7 @@ import sharp = require("sharp");
 import ReferredUser from "../../model/referred.user.schema";
 import { SendEmail } from "../../Utils/sendEmail";
 import user from "../../model/user.schema";
+import { AccountType } from "../auth/authEnum";
 const bucketName = process.env.AWS_BUCKET_NAME;
 const region = process.env.AWS_REGION;
 const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
@@ -191,6 +192,42 @@ export class commonService {
 
         // Object to track users who need emails and their thumbnails with titles
         const usersToEmail: Record<string, { thumbnails: { url: string, title: string }[], isNewUser: boolean }> = {};
+
+        // Enforce role-based restrictions for uploads-to-others (friends sharing flow):
+        // - Trainee can upload only to trainee
+        // - Trainer can upload only to trainee
+        if (shareOptions?.type === shareWithConstants.myFriends) {
+          const uploaderType = req?.authUser?.account_type;
+          if (![AccountType.TRAINER, AccountType.TRAINEE].includes(uploaderType)) {
+            return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
+              success: 0,
+              message: "Only trainer or trainee accounts can share clips to friends.",
+            });
+          }
+
+          const targetUsers = await user.find(
+            { _id: { $in: processedUserIds } },
+            { _id: 1, account_type: 1 }
+          );
+
+          if (targetUsers.length !== processedUserIds.length) {
+            return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
+              success: 0,
+              message: "One or more selected users were not found.",
+            });
+          }
+
+          const hasInvalidTarget = targetUsers.some(
+            (targetUser: any) => targetUser?.account_type !== AccountType.TRAINEE
+          );
+
+          if (hasInvalidTarget) {
+            return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
+              success: 0,
+              message: "You can upload clips only to trainee accounts.",
+            });
+          }
+        }
 
         // Process each clip in the bulk upload
         for (const clipData of req.body.clips) {
