@@ -1,4 +1,4 @@
-import { Server } from "ws";
+import type { Server } from "socket.io";
 import { log } from "../../../logger";
 import { Events } from "./events";
 import { handleSocketEvents, setIoInstance } from "./socket.service";
@@ -43,7 +43,7 @@ export class SocketInit {
         return next(new Error("Socket authentication error"));
       }
     })
-    .on("connection", async (socket, request) => {
+    .on("connection", async (socket) => {
       try {
         socket.emit(EVENTS.ON_CONNECT, {
           msg: "Welcome, Socket Connect Successfully, socket",
@@ -91,4 +91,11 @@ export class SocketInit {
   public getConnectedUsers = () => {
     return Array.from(this.connectedUsers.values()); // Return an array of user data objects
   };
+}
+
+/** Module augmentation — auth middleware sets `socket.user` on Socket.IO sockets */
+declare module "socket.io" {
+  interface Socket {
+    user?: any;
+  }
 }

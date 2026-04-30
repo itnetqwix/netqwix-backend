@@ -1,4 +1,4 @@
-import { Server } from "ws";
+import type { Server } from "socket.io";
 import { log } from "./../../../logger";
 import { EVENTS } from "../../config/constance";
 export class Events {
