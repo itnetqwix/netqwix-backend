@@ -75,10 +75,26 @@ export class userController {
         var newResult = JSON.parse(JSON.stringify(result.result));
         if (result.status !== CONSTANCE.FAIL) {
           if (req?.authUser?.account_type === "Trainer") {
-            var ratings = await booked_session.find({
-              trainer_id: req?.authUser?._id,
-            });
-            newResult.userInfo.ratings = ratings;
+            const ratingBookings = await booked_session.find(
+              {
+                trainer_id: req?.authUser?._id,
+                "ratings.trainee.recommendRating": { $exists: true, $ne: null },
+              },
+              {
+                "ratings.trainee.recommendRating": 1,
+              }
+            );
+
+            const totalRating = ratingBookings.length;
+            const avgRatingNumber = ratingBookings.reduce((acc, booking) => {
+              const value = Number(booking?.ratings?.trainee?.recommendRating || 0);
+              return acc + (Number.isFinite(value) ? value : 0);
+            }, 0);
+
+            newResult.userInfo.rating_summary = {
+              ratingRatio: totalRating ? Number((avgRatingNumber / totalRating).toFixed(2)) : 0,
+              totalRating,
+            };
           }
           res.status(result.code).json(newResult);
         } else {

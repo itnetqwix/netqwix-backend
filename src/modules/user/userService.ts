@@ -443,9 +443,11 @@ export class UserService {
 
   public async getScheduledMeetings(req) {
     const { authUser, query } = req;
-    const { status, datetime, timezone } = query;
+    const { status, id } = query;
     try {
       let matchCondition = {};
+      const page = Math.max(Number(query?.page) || 1, 1);
+      const limit = Math.min(Math.max(Number(query?.limit) || 25, 1), 100);
 
       // Check both trainer_id and trainee_id to handle cases where user might have sessions in both roles
       // This is more flexible and handles edge cases where account_type might not match the session role
@@ -478,6 +480,12 @@ export class UserService {
         $exists: true, 
         $ne: null
       };
+
+      if (id && Types.ObjectId.isValid(id)) {
+        additionalFilters = {
+          _id: new Types.ObjectId(id),
+        };
+      }
       
       if (status) {
         const now = new Date();
@@ -542,8 +550,7 @@ export class UserService {
         };
       }
 
-      const result = await booked_session
-        .aggregate([
+      const pipeline: PipelineStage[] = [
           {
             $match: {
               ...matchCondition,
@@ -564,7 +571,18 @@ export class UserService {
               as: "trainer_info",
               pipeline: [
                 {
-                  $project: Constant.pipelineUser,
+                  $project: {
+                    _id: 1,
+                    fullname: 1,
+                    email: 1,
+                    mobile_no: 1,
+                    account_type: 1,
+                    login_type: 1,
+                    profile_picture: 1,
+                    category: 1,
+                    commission: 1,
+                    status: 1,
+                  },
                 },
               ],
             },
@@ -577,7 +595,16 @@ export class UserService {
               as: "trainee_info",
               pipeline: [
                 {
-                  $project: Constant.pipelineUser,
+                  $project: {
+                    _id: 1,
+                    fullname: 1,
+                    email: 1,
+                    mobile_no: 1,
+                    account_type: 1,
+                    login_type: 1,
+                    profile_picture: 1,
+                    status: 1,
+                  },
                 },
               ],
             },
@@ -623,6 +650,7 @@ export class UserService {
               iceServers: 1,
               extended_session_end_time:1,
               extended_end_time:1,
+              trainee_clip: 1,
               is_instant: { $ifNull: ["$is_instant", false] },
             },
           },
@@ -631,8 +659,16 @@ export class UserService {
               createdAt: -1,
             },
           },
-        ])
-        .exec();
+      ];
+
+      if (!id) {
+        pipeline.push({ $skip: (page - 1) * limit });
+        pipeline.push({ $limit: limit });
+      } else {
+        pipeline.push({ $limit: 1 });
+      }
+
+      const result = await booked_session.aggregate(pipeline).exec();
 
       // Debug logging
       this.log.debug("getScheduledMeetings - result count:", result?.length || 0);
@@ -650,7 +686,15 @@ export class UserService {
         this.log.debug("getScheduledMeetings - countDocuments result:", countResult);
       }
 
-      return ResponseBuilder.data({ data: result }, l10n.t("MEETING_FETCHED"));
+      return ResponseBuilder.data(
+        {
+          data: result,
+          page,
+          limit,
+          hasMore: !id ? result.length === limit : false,
+        },
+        l10n.t("MEETING_FETCHED")
+      );
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
     }
