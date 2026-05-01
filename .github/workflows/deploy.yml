@@ -10,30 +10,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to EC2
+      - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: 3.149.125.57
-          username: ubuntu
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-
+          port: 22
           script: |
             set -e
 
-            echo "📦 Moving to backend directory"
+            echo "🚀 Starting Deployment..."
+
+            echo "📂 Moving to project directory"
             cd /home/ubuntu/nq-backend
 
-            echo "🔄 Pull latest code"
+            echo "🔄 Fetching latest code"
             git fetch origin
+
+            echo "📌 Resetting to latest main"
             git reset --hard origin/main
 
-            echo "📥 Install dependencies"
+            echo "📦 Installing dependencies"
             npm install --no-audit --no-fund
 
-            echo "🏗️ Build project"
+            echo "🏗️ Building project"
             npm run build
 
-            echo "♻️ Restart PM2"
+            echo "♻️ Reloading PM2 process"
             pm2 reload netqwix-api-prod
 
-            echo "✅ Deployment done"
+            echo "✅ Deployment completed successfully"
