@@ -89,6 +89,107 @@ type LessonSessionState = {
 
 const lessonSessions: Map<string, LessonSessionState> = new Map();
 
+/** Brief disconnects (e.g. ERR_NETWORK_CHANGED → reconnect) must not pause the lesson or emit PARTICIPANT_LEFT. */
+const SESSION_LEAVE_GRACE_MS = 12000;
+const pendingLessonDisconnectTimers = new Map<string, NodeJS.Timeout>();
+
+function cancelLessonDisconnectGrace(sessionId: string, userId: string) {
+  const key = `${String(sessionId)}:${String(userId)}`;
+  const t = pendingLessonDisconnectTimers.get(key);
+  if (t) {
+    clearTimeout(t);
+    pendingLessonDisconnectTimers.delete(key);
+  }
+}
+
+function lessonRoomEmit(roomName: string, event: string, payload: unknown) {
+  if (ioInstance) ioInstance.to(roomName).emit(event, payload);
+}
+
+function finalizeLessonParticipantDisconnect(
+  sessionId: string,
+  roomName: string,
+  role: "trainer" | "trainee",
+  disconnectedUserId: string,
+) {
+  const session = lessonSessions.get(sessionId);
+  if (!session) return;
+
+  if (role === "trainer") {
+    if (!session.coachJoined) return;
+    session.coachJoined = false;
+    console.log(`[SESSION] Trainer ${disconnectedUserId} confirmed leave after grace for session ${sessionId}`);
+
+    if (session.status === "running" && session.startedAt != null) {
+      const elapsedSeconds = Math.floor((Date.now() - session.startedAt) / 1000);
+      session.remainingSeconds = Math.max(0, session.remainingSeconds - elapsedSeconds);
+      session.startedAt = null;
+      session.status = "paused";
+      session.trainerLeftPaused = true;
+      clearLessonTimeouts(session);
+
+      const pausedPayload = {
+        sessionId: session.sessionId,
+        remainingSeconds: session.remainingSeconds,
+        duration: session.duration,
+        reason: "trainer_left",
+      };
+      lessonRoomEmit(roomName, "LESSON_TIME_PAUSED", pausedPayload);
+      const statePayload = {
+        sessionId: session.sessionId,
+        status: session.status,
+        startedAt: session.startedAt,
+        duration: session.duration,
+        remainingSeconds: session.remainingSeconds,
+        trainerConnected: session.coachJoined,
+        traineeConnected: session.userJoined,
+      };
+      lessonRoomEmit(roomName, "LESSON_STATE_SYNC", statePayload);
+    }
+
+    lessonRoomEmit(roomName, "PARTICIPANT_STATUS_CHANGED", {
+      sessionId,
+      role: "trainer",
+      status: "disconnected",
+      userId: disconnectedUserId,
+    });
+    lessonRoomEmit(roomName, EVENTS.VIDEO_CALL.ON_CALL_LEAVE, {
+      userId: disconnectedUserId,
+      accountType: "Trainer",
+      sessionId,
+      timestamp: Date.now(),
+    });
+    lessonRoomEmit(roomName, "PARTICIPANT_LEFT", {
+      sessionId,
+      role: "trainer",
+      userId: disconnectedUserId,
+    });
+    return;
+  }
+
+  if (!session.userJoined) return;
+  session.userJoined = false;
+  console.log(`[SESSION] Trainee ${disconnectedUserId} confirmed leave after grace for session ${sessionId}`);
+
+  lessonRoomEmit(roomName, "PARTICIPANT_STATUS_CHANGED", {
+    sessionId,
+    role: "trainee",
+    status: "disconnected",
+    userId: disconnectedUserId,
+  });
+  lessonRoomEmit(roomName, EVENTS.VIDEO_CALL.ON_CALL_LEAVE, {
+    userId: disconnectedUserId,
+    accountType: "Trainee",
+    sessionId,
+    timestamp: Date.now(),
+  });
+  lessonRoomEmit(roomName, "PARTICIPANT_LEFT", {
+    sessionId,
+    role: "trainee",
+    userId: disconnectedUserId,
+  });
+}
+
 const emitLessonStateSync = (socket: any, roomName: string, session: LessonSessionState) => {
   const statePayload = {
     sessionId: session.sessionId,
@@ -214,56 +315,8 @@ async function updateUserActivity(socket) {
         console.error("Error updating last_activity_time on disconnect:", error);
       }
 
-      // Clean up timer state if user disconnects during a session.
-      // Trainer disconnect auto-pauses a running timer; trainee disconnect leaves it running.
-      const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
-      for (const [sessionId, session] of lessonSessions.entries()) {
-        const roomName = `session:${sessionId}`;
-
-        if (accountType === "Trainer" && session.coachJoined) {
-          session.coachJoined = false;
-          console.log(`[TIMER] Trainer ${userId} disconnected from session ${sessionId}`);
-
-          // Auto-pause running timer when trainer leaves
-          if (session.status === "running" && session.startedAt != null) {
-            const elapsedSeconds = Math.floor((Date.now() - session.startedAt) / 1000);
-            session.remainingSeconds = Math.max(0, session.remainingSeconds - elapsedSeconds);
-            session.startedAt = null;
-            session.status = "paused";
-            session.trainerLeftPaused = true; // distinguish from manual pause
-            clearLessonTimeouts(session);
-            console.log(`[TIMER] Auto-paused timer for session ${sessionId} at ${session.remainingSeconds}s remaining`);
-
-            const pausedPayload = {
-              sessionId: session.sessionId,
-              remainingSeconds: session.remainingSeconds,
-              duration: session.duration,
-              reason: "trainer_left",
-            };
-            if (ioInstance) ioInstance.to(roomName).emit("LESSON_TIME_PAUSED", pausedPayload);
-            else socket.nsp.to(roomName).emit("LESSON_TIME_PAUSED", pausedPayload);
-            emitLessonStateSync(socket, roomName, session);
-          }
-
-          // Notify the other participant the trainer left
-          socket.to(roomName).emit("PARTICIPANT_LEFT", {
-            sessionId,
-            role: "trainer",
-            userId,
-          });
-
-        } else if (accountType !== "Trainer" && session.userJoined) {
-          session.userJoined = false;
-          console.log(`[TIMER] Trainee ${userId} disconnected from session ${sessionId}`);
-
-          // Notify the trainer the trainee left (timer keeps running)
-          socket.to(roomName).emit("PARTICIPANT_LEFT", {
-            sessionId,
-            role: "trainee",
-            userId,
-          });
-        }
-      }
+      // Lesson leave / timer pause / PARTICIPANT_LEFT are handled in handleSocketEvents
+      // with a reconnect grace period (see finalizeLessonParticipantDisconnect).
     });
 
     // Listen for any event to update the user's last activity time
@@ -292,47 +345,35 @@ export const handleSocketEvents = (socket, connections = {}) => {
   socket.on("disconnect", () => {
     socketHeartbeats.delete(socketId);
     
-    // Notify all rooms this socket was in that the user disconnected
     const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
     const userId = socket?.user?._doc?._id || socket?.user?._id;
-    
-    // Find all session rooms this socket was in
-    socket.rooms.forEach((roomName) => {
-      if (roomName.startsWith("session:")) {
-        const sessionId = roomName.replace("session:", "");
-        const session = lessonSessions.get(sessionId);
-        
-        if (session) {
-          // Update join status
-          let role = "trainee";
-          if (accountType === "Trainer") {
-            session.coachJoined = false;
-            role = "trainer";
-            console.log(`[SESSION] Trainer ${userId} disconnected from session ${sessionId}`);
-          } else {
-            session.userJoined = false;
-            role = "trainee";
-            console.log(`[SESSION] Trainee ${userId} disconnected from session ${sessionId}`);
-          }
+    if (!userId) return;
 
-          // Keep frontend presence state in sync
-          socket.to(roomName).emit("PARTICIPANT_STATUS_CHANGED", {
-            sessionId,
-            role,
-            status: "disconnected",
-            userId,
-          });
-          
-          // Notify other party in the room
-          socket.to(roomName).emit(EVENTS.VIDEO_CALL.ON_CALL_LEAVE, {
-            userId,
-            accountType,
-            sessionId,
-            timestamp: Date.now()
-          });
-          console.log(`[SESSION] Notified room ${roomName} that ${userId} (${accountType}) disconnected`);
-        }
-      }
+    socket.rooms.forEach((roomName) => {
+      if (!roomName.startsWith("session:")) return;
+      const sessionId = roomName.replace("session:", "");
+      const session = lessonSessions.get(sessionId);
+      if (!session) return;
+
+      const role = accountType === "Trainer" ? "trainer" : "trainee";
+      const key = `${sessionId}:${String(userId)}`;
+      const existing = pendingLessonDisconnectTimers.get(key);
+      if (existing) clearTimeout(existing);
+
+      const timer = setTimeout(() => {
+        pendingLessonDisconnectTimers.delete(key);
+        finalizeLessonParticipantDisconnect(
+          sessionId,
+          roomName,
+          role,
+          String(userId),
+        );
+      }, SESSION_LEAVE_GRACE_MS);
+      pendingLessonDisconnectTimers.set(key, timer);
+
+      console.log(
+        `[SESSION] Socket disconnect in ${roomName} — deferring leave notification ${SESSION_LEAVE_GRACE_MS}ms (user ${userId}, ${role})`,
+      );
     });
   });
 
@@ -547,6 +588,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
       // Join the room immediately when user joins (don't wait for both parties)
       const roomName = `session:${sessionId}`;
       socket.join(roomName);
+      cancelLessonDisconnectGrace(sessionId, String(userId));
       console.log(`[SESSION] User ${userId} (${accountType}) joined room ${roomName} for session ${sessionId}`);
       
       let session = lessonSessions.get(sessionId);
