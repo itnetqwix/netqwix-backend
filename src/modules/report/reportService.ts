@@ -13,7 +13,6 @@ import { Utils } from "../../Utils/Utils";
 import { commonService } from "../common/commonService";
 import * as AWS from "aws-sdk";
 import mongoose from "mongoose";
-import { Constant } from "../../Utils/constant";
 import { s3, S3_BUCKET } from "../../Utils/s3Client";
 
 export class ReportService {
@@ -344,7 +343,12 @@ export class ReportService {
             as: "trainee",
             pipeline: [
               {
-                $project: Constant.pipelineUser,
+                $project: {
+                  _id: 1,
+                  fullname: 1,
+                  profile_picture: 1,
+                  account_type: 1,
+                },
               },
             ],
           },
@@ -362,7 +366,12 @@ export class ReportService {
             as: "trainer",
             pipeline: [
               {
-                $project: Constant.pipelineUser,
+                $project: {
+                  _id: 1,
+                  fullname: 1,
+                  profile_picture: 1,
+                  account_type: 1,
+                },
               },
             ],
           },
@@ -378,11 +387,44 @@ export class ReportService {
             localField: "sessions",
             foreignField: "_id",
             as: "session",
+            pipeline: [
+              {
+                $project: {
+                  _id: 1,
+                  report: 1,
+                  status: 1,
+                  booked_date: 1,
+                  session_start_time: 1,
+                  session_end_time: 1,
+                  start_time: 1,
+                  end_time: 1,
+                  createdAt: 1,
+                  updatedAt: 1,
+                },
+              },
+            ],
           },
         },
         {
           $unwind: {
             path: "$session",
+          },
+        },
+        {
+          // Keep payload minimal for Locker/Game Plan consumers.
+          $project: {
+            _id: 1,
+            reportData: 1,
+            sessions: 1,
+            sessionRecordingUrl: 1,
+            trainer: 1,
+            trainee: 1,
+            session: 1,
+            title: 1,
+            description: 1,
+            status: 1,
+            createdAt: 1,
+            updatedAt: 1,
           },
         },
         {
