@@ -11,20 +11,10 @@ import user from "../../model/user.schema";
 import { AccountType } from "../auth/authEnum";
 import { Utils } from "../../Utils/Utils";
 import { commonService } from "../common/commonService";
-const bucketName = process.env.AWS_BUCKET_NAME;
-const region = process.env.AWS_REGION;
-const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 import * as AWS from "aws-sdk";
 import mongoose from "mongoose";
 import { Constant } from "../../Utils/constant";
-const s3 = new AWS.S3({
-  endpoint: `https://${process.env.CLOUDFLARE_R2}.r2.cloudflarestorage.com`,
-  region,
-  accessKeyId,
-  secretAccessKey,
-  signatureVersion: "v4",
-});
+import { s3, S3_BUCKET } from "../../Utils/s3Client";
 
 export class ReportService {
   public log = log.getLogger();
@@ -53,7 +43,7 @@ export class ReportService {
 
   generatePreSignedPutUrl = async (fileName, fileType) => {
     const params = {
-      Bucket: bucketName,
+      Bucket: S3_BUCKET,
       Key: fileName,
       Expires: 60,
       // ACL: "public-read",
@@ -71,6 +61,41 @@ export class ReportService {
     }
     return url;
   };
+
+  public async addSessionRecording(data: any): Promise<ResponseBuilder> {
+    const filename = "session-rec-" + new Date().getTime().toString() + ".webm";
+    const isReportExist = await Report.findOne({
+      sessions: data?.sessions,
+      trainee: data?.trainee,
+      trainer: data?.trainer,
+    });
+    if (isReportExist) {
+      await Report.updateOne(
+        {
+          sessions: data?.sessions,
+          trainee: data?.trainee,
+          trainer: data?.trainer,
+        },
+        { $set: { sessionRecordingUrl: filename } }
+      );
+    } else {
+      const obj = {
+        title: data?.title || "",
+        description: data?.description || "",
+        reportData: [],
+        sessions: data?.sessions,
+        trainer: data?.trainer,
+        trainee: data?.trainee,
+        sessionRecordingUrl: filename,
+      };
+      await new Report(obj).save();
+    }
+    const fileUrl = await this.generatePreSignedPutUrl(filename, "video/webm");
+    if (fileUrl) {
+      return ResponseBuilder.data({ url: fileUrl }, l10n.t("REPORT_GENERATED"));
+    }
+    return ResponseBuilder.errorMessage(l10n.t("ERR_INTERNAL_SERVER"));
+  }
 
   public async addImage(data: any): Promise<ResponseBuilder> {
     var filename = "file-" + new Date().getTime().toString() + ".png";

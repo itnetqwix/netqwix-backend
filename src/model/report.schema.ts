@@ -27,7 +27,11 @@ const reportSchema: Schema = new Schema(
     status: {
       type : Boolean,
       default : true
-    }
+    },
+    /** S3 key (e.g. session-rec-*.webm) for full instant-lesson session recording */
+    sessionRecordingUrl: {
+      type: String,
+    },
   },
   { timestamps: true }
 );

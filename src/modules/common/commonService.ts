@@ -16,7 +16,6 @@ import clip from "../../model/clip.schema";
 import savedSession from "../../model/saved_sessions.schema";
 import book from "../../model/booked_sessions.schema";
 
-import * as AWS from "aws-sdk";
 import mongoose from "mongoose";
 import booked_session from "../../model/booked_sessions.schema";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
@@ -26,17 +25,7 @@ import ReferredUser from "../../model/referred.user.schema";
 import { SendEmail } from "../../Utils/sendEmail";
 import user from "../../model/user.schema";
 import { AccountType } from "../auth/authEnum";
-const bucketName = process.env.AWS_BUCKET_NAME;
-const region = process.env.AWS_REGION;
-const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-const s3 = new AWS.S3({
-  endpoint: `https://${process.env.CLOUDFLARE_R2}.r2.cloudflarestorage.com`,
-  region,
-  accessKeyId,
-  secretAccessKey,
-  signatureVersion: "v4",
-});
+import { s3, S3_BUCKET } from "../../Utils/s3Client";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -77,7 +66,7 @@ export class commonService {
 
   generatePreSignedPutUrl = async (fileName, fileType) => {
     const params = {
-      Bucket: bucketName,
+      Bucket: S3_BUCKET,
       Key: fileName,
       Expires: 600,
       // ACL: "public-read",

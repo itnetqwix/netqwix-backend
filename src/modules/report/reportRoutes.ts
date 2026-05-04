@@ -22,6 +22,11 @@ route.use([
 
 route.post("", reportMiddleware.isTrainer, reportC.createReport);
 route.post("/add-image", reportMiddleware.isTrainer, reportC.addImage);
+route.post(
+  "/add-session-recording",
+  reportMiddleware.isTrainer,
+  reportC.addSessionRecording
+);
 route.post("/remove-image", reportMiddleware.isTrainer, reportC.removeImage);
 route.post("/crop-image", reportMiddleware.isTrainer, reportC.cropImage);
 route.post("/get", reportMiddleware.isTrainer, reportC.getReport);

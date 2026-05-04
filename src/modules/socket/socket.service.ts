@@ -6,7 +6,6 @@ const path = require("path");
 const { spawn } = require("child_process");
 const axios = require("axios");
 import savedSession from "../../model/saved_sessions.schema";
-import * as AWS from "aws-sdk";
 import onlineUser from "../../model/online_user.schema";
 import CallDiagnostics from "../../model/call_diagnostics.schema";
 import * as webpush from "web-push";
@@ -15,19 +14,8 @@ import user from "../../model/user.schema";
 import { NotificationType } from "../../enum/notification.enum";
 import mongoose from "mongoose";
 import booked_session from "../../model/booked_sessions.schema";
+import { s3, S3_BUCKET } from "../../Utils/s3Client";
 const logoPath = path.resolve(__dirname, "../../assets/netqwix_logo.png");
-
-const bucketName = process.env.AWS_BUCKET_NAME;
-const region = process.env.AWS_REGION;
-const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-const s3 = new AWS.S3({
-  endpoint: `https://${process.env.CLOUDFLARE_R2}.r2.cloudflarestorage.com`,
-  region,
-  accessKeyId,
-  secretAccessKey,
-  signatureVersion: "v4",
-});
 
 //NOTE -  Set VAPID details
 webpush.setVapidDetails(
@@ -988,6 +976,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
   listenVideoShowEvent(socket);
   listenDrawingModeToggle(socket);
   listenFullscreenToggle(socket);
+  listenInstantLessonSessionRecording(socket);
   listenLockModeToggle(socket);
   listenVideoChunksEvent(socket);
   listenNotificationEvents(socket);
@@ -1424,6 +1413,25 @@ const listenLockModeToggle = (socket) => {
   }
 };
 
+/** Instant lesson: trainer toggles "record session" so peer can show the same state in-call */
+const listenInstantLessonSessionRecording = (socket) => {
+  try {
+    socket.on(EVENTS.INSTANT_LESSON.SESSION_RECORDING, async (socketReq: any) => {
+      const { userInfo } = socketReq || {};
+      const toUserSocketId = MemCache.getDetail(
+        process.env.SOCKET_CONFIG,
+        userInfo?.to_user
+      );
+      if (toUserSocketId) {
+        socket.to(toUserSocketId).emit(EVENTS.INSTANT_LESSON.SESSION_RECORDING, socketReq);
+      }
+    });
+  } catch (err) {
+    console.error(`Error while listening to instant lesson session recording:`, err);
+    throw err;
+  }
+};
+
 
 
 const listenVideoPositionEvent = (socket) => {
@@ -1539,7 +1547,7 @@ const listenVideoTimeEvent = (socket) => {
 
 const generatePreSignedPutUrl = async (fileName, fileType) => {
   const params = {
-    Bucket: bucketName,
+    Bucket: S3_BUCKET,
     Key: fileName,
     Expires: 60,
     // ACL: "public-read",
