@@ -1,4 +1,4 @@
-import { Server } from "ws";
+import { Server } from "socket.io";
 import { log } from "../../../logger";
 import { Events } from "./events";
 import { handleSocketEvents, setIoInstance } from "./socket.service";
