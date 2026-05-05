@@ -6,6 +6,13 @@ import { EVENTS } from "../../config/constance";
 import { AuthMiddleware } from "../auth/authMiddleware";
 import { MemCache } from "../../Utils/memCache";
 
+// Extend Socket.IO socket type to include authenticated user
+declare module "socket.io" {
+  interface Socket {
+    user?: any;
+  }
+}
+
 export class SocketInit {
   private logger = log.getLogger();
   private middleware: AuthMiddleware = new AuthMiddleware();
@@ -43,7 +50,7 @@ export class SocketInit {
         return next(new Error("Socket authentication error"));
       }
     })
-    .on("connection", async (socket, request) => {
+    .on("connection", async (socket) => {
       try {
         socket.emit(EVENTS.ON_CONNECT, {
           msg: "Welcome, Socket Connect Successfully, socket",
