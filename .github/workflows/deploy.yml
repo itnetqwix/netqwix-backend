@@ -1,16 +1,18 @@
-name: Deploy Backend to Production
+name: Deploy Backend
 
 on:
   push:
     branches:
+      - pre_production
       - main
 
 jobs:
-  deploy:
+  deploy-staging:
+    if: github.ref == 'refs/heads/pre_production'
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to EC2 via SSH
+      - name: Deploy staging to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -20,7 +22,44 @@ jobs:
           script: |
             set -e
 
-            echo "🚀 Starting Deployment..."
+            echo "🚀 Starting STAGING deployment..."
+
+            echo "📂 Moving to project directory"
+            cd /home/ubuntu/nq-backend
+
+            echo "🔄 Fetching latest code"
+            git fetch origin
+
+            echo "📌 Resetting to latest pre_production"
+            git reset --hard origin/pre_production
+
+            echo "📦 Installing dependencies"
+            npm install --no-audit --no-fund
+
+            echo "🏗️ Building project"
+            npm run build
+
+            echo "♻️ Reloading PM2 process"
+            pm2 reload netqwix-api-staging
+
+            echo "✅ Staging deployment completed successfully"
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy production to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            set -e
+
+            echo "🚀 Starting PRODUCTION deployment..."
 
             echo "📂 Moving to project directory"
             cd /home/ubuntu/nq-backend
@@ -40,4 +79,4 @@ jobs:
             echo "♻️ Reloading PM2 process"
             pm2 reload netqwix-api-prod
 
-            echo "✅ Deployment completed successfully"
+            echo "✅ Production deployment completed successfully"
