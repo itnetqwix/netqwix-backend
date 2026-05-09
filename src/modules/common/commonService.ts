@@ -436,7 +436,10 @@ export class commonService {
         { _id: req.body.session_id },
         { report: filename }
       );
-      let fileUrl = await this.generatePreSignedPutUrl(filename, "pdf");
+      let fileUrl = await this.generatePreSignedPutUrl(
+        filename,
+        "application/pdf"
+      );
       return res
         .status(CONSTANCE.RES_CODE.success)
         .json({ success: 1, url: fileUrl });

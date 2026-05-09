@@ -137,7 +137,7 @@ export class ReportService {
       };
       const report = new Report(obj).save();
     }
-    let fileUrl = await this.generatePreSignedPutUrl(filename, "png");
+    let fileUrl = await this.generatePreSignedPutUrl(filename, "image/png");
     if (fileUrl) {
       return ResponseBuilder.data({ url: fileUrl }, l10n.t("REPORT_GENERATED"));
     } else {
@@ -168,7 +168,7 @@ export class ReportService {
         },
         { reportData: newReportData }
       );
-      let fileUrl = await this.generatePreSignedPutUrl(filename, "png");
+      let fileUrl = await this.generatePreSignedPutUrl(filename, "image/png");
       if (fileUrl) {
         return ResponseBuilder.data(
           { url: fileUrl },
