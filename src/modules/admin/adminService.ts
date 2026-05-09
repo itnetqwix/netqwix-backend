@@ -68,10 +68,15 @@ export class AdminService {
     const limit = Math.min(100, Math.max(1, Number(query?.limit || 20)));
     const skip = (page - 1) * limit;
     const sortBy = String(query?.sortBy || "createdAt");
-    const sortOrder = String(query?.sortOrder || "desc").toLowerCase() === "asc" ? 1 : -1;
+    const sortOrder: 1 | -1 =
+      String(query?.sortOrder || "desc").toLowerCase() === "asc" ? 1 : -1;
     const search = String(query?.search || "").trim();
     const status = String(query?.status || "").trim();
     return { page, limit, skip, sortBy, sortOrder, search, status };
+  }
+
+  private getSortSpec(sortBy: string, sortOrder: 1 | -1): { [key: string]: 1 | -1 } {
+    return { [sortBy]: sortOrder };
   }
 
   public async getUser360(
@@ -178,7 +183,7 @@ export class AdminService {
         .find(lessonQuery)
         .populate("trainer_id", "fullname email account_type")
         .populate("trainee_id", "fullname email account_type")
-        .sort({ [sortBy]: sortOrder })
+        .sort(this.getSortSpec(sortBy, sortOrder))
         .skip(skip)
         .limit(limit)
         .lean();
@@ -206,7 +211,7 @@ export class AdminService {
         .find(reviewQuery)
         .populate("trainer_id", "fullname email account_type")
         .populate("trainee_id", "fullname email account_type")
-        .sort({ [sortBy]: sortOrder })
+        .sort(this.getSortSpec(sortBy, sortOrder))
         .skip(skip)
         .limit(limit)
         .lean();
@@ -248,16 +253,16 @@ export class AdminService {
       if (search) savedQuery.file_name = { $regex: search, $options: "i" };
 
       const [clips, reports, savedSessions, clipsTotal, reportsTotal, savedTotal] = await Promise.all([
-        clip.find(clipsQuery).sort({ [sortBy]: sortOrder }).skip(skip).limit(limit).lean(),
+        clip.find(clipsQuery).sort(this.getSortSpec(sortBy, sortOrder)).skip(skip).limit(limit).lean(),
         Report.find(reportsQuery)
         .populate("trainer", "fullname email account_type")
         .populate("trainee", "fullname email account_type")
         .populate("sessions", "booked_date status session_start_time session_end_time")
-        .sort({ [sortBy]: sortOrder })
+        .sort(this.getSortSpec(sortBy, sortOrder))
         .skip(skip)
         .limit(limit)
         .lean(),
-        saved_session.find(savedQuery).sort({ [sortBy]: sortOrder }).skip(skip).limit(limit).lean(),
+        saved_session.find(savedQuery).sort(this.getSortSpec(sortBy, sortOrder)).skip(skip).limit(limit).lean(),
         clip.countDocuments(clipsQuery),
         Report.countDocuments(reportsQuery),
         saved_session.countDocuments(savedQuery),
@@ -364,7 +369,7 @@ export class AdminService {
         .find(query)
         .populate("admin_id", "fullname email account_type")
         .populate("target_user_id", "fullname email account_type")
-        .sort({ [sortBy]: sortOrder })
+        .sort(this.getSortSpec(sortBy, sortOrder))
         .skip(skip)
         .limit(limit)
         .lean();
