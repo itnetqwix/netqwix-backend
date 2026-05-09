@@ -31,7 +31,9 @@ export class authController {
 
   public login = async (req: Request, res: Response) => {
     try {
-      const result: ResponseBuilder = await this.authService.login(req.body);
+      const fwd = (req.headers["x-forwarded-for"] as string) || "";
+      const ip = fwd || req.socket?.remoteAddress || "";
+      const result: ResponseBuilder = await this.authService.login(req.body, { ip });
       if (result.status !== CONSTANCE.FAIL) {
         res.status(result.code).json(result);
       } else {

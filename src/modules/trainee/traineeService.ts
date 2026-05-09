@@ -15,6 +15,7 @@ import schedule_inventory from "../../model/schedule_inventory.schema";
 import * as l10n from "jm-ez-l10n";
 import { bookSessionModal, bookInstantMeetingModal } from "./traineeValidator";
 import booked_session from "../../model/booked_sessions.schema";
+import { recordUserActivityMany, UserActivityEvent } from "../../helpers/userActivity";
 import { PipelineStage } from "mongoose";
 import { DateFormat } from "../../Utils/dateFormat";
 import { SendEmail } from "../../Utils/sendEmail";
@@ -423,6 +424,11 @@ export class TraineeService {
         }
       }
       var bookingData = await sessionObj.save();
+      void recordUserActivityMany(
+        [String(bookingData.trainee_id), String(bookingData.trainer_id)],
+        UserActivityEvent.BOOKING_CREATED,
+        { sessionId: String(bookingData._id), kind: "scheduled" }
+      );
       await user.updateOne(
         { _id: payload.trainer_id },
         { $inc: { wallet_amount: +payload.charging_price || 0 } }
@@ -502,6 +508,11 @@ export class TraineeService {
       });
 
       const bookingData = await userObj.save();
+      void recordUserActivityMany(
+        [String(bookingData.trainee_id), String(bookingData.trainer_id)],
+        UserActivityEvent.BOOKING_CREATED,
+        { sessionId: String(bookingData._id), kind: "instant" }
+      );
 
       // Emit booking created event for instant lesson (trainer sees in upcoming / gets popup)
       try {

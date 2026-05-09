@@ -5,6 +5,12 @@ import { Request, Response } from "express";
 import { AdminService } from "./adminService";
 import CallDiagnostics from "../../model/call_diagnostics.schema";
 
+const adminErrorBody = (result: ResponseBuilder) => ({
+  status: result.status,
+  error: ResponseBuilder.stringifyError(result.error),
+  code: result.code || CONSTANCE.RES_CODE.error.badRequest,
+});
+
 export class AdminController {
   public adminService = new AdminService();
   public logger = log.getLogger();
@@ -16,17 +22,13 @@ export class AdminController {
         if (result.status !== CONSTANCE.FAIL) {
           res.status(result.code).json(result);
         } else {
-          res.status(result.code).json({
-            status: result.status,
-            error: result.error,
-            code: CONSTANCE.RES_CODE.error.badRequest,
-          });
+          res.status(result.code).json(adminErrorBody(result));
         }
       }
     } catch (err) {
       return res
         .status(err.code)
-        .send({ status: CONSTANCE.FAIL, error: err.error });
+        .send({ status: CONSTANCE.FAIL, error: ResponseBuilder.stringifyError(err.error) });
     }
   };
 
@@ -36,16 +38,12 @@ export class AdminController {
       if (result.status !== CONSTANCE.FAIL) {
         res.status(result.code).json(result);
       } else {
-        res.status(result.code).json({
-          status: result.status,
-          error: result.error,
-          code: CONSTANCE.RES_CODE.error.badRequest,
-        });
+        res.status(result.code).json(adminErrorBody(result));
       }
     } catch (err) {
       return res
         .status(err.code)
-        .send({ status: CONSTANCE.FAIL, error: err.error });
+        .send({ status: CONSTANCE.FAIL, error: ResponseBuilder.stringifyError(err.error) });
     }
   };
 
@@ -164,11 +162,7 @@ export class AdminController {
       if (result.status !== CONSTANCE.FAIL) {
         return res.status(result.code).json(result);
       }
-      return res.status(result.code).json({
-        status: result.status,
-        error: result.error,
-        code: CONSTANCE.RES_CODE.error.badRequest,
-      });
+      return res.status(result.code).json(adminErrorBody(result));
     } catch (err) {
       this.logger.error(err);
       return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
@@ -182,11 +176,7 @@ export class AdminController {
       if (result.status !== CONSTANCE.FAIL) {
         return res.status(result.code).json(result);
       }
-      return res.status(result.code).json({
-        status: result.status,
-        error: result.error,
-        code: CONSTANCE.RES_CODE.error.badRequest,
-      });
+      return res.status(result.code).json(adminErrorBody(result));
     } catch (err) {
       this.logger.error(err);
       return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
@@ -200,11 +190,7 @@ export class AdminController {
       if (result.status !== CONSTANCE.FAIL) {
         return res.status(result.code).json(result);
       }
-      return res.status(result.code).json({
-        status: result.status,
-        error: result.error,
-        code: CONSTANCE.RES_CODE.error.badRequest,
-      });
+      return res.status(result.code).json(adminErrorBody(result));
     } catch (err) {
       this.logger.error(err);
       return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
@@ -218,11 +204,7 @@ export class AdminController {
       if (result.status !== CONSTANCE.FAIL) {
         return res.status(result.code).json(result);
       }
-      return res.status(result.code).json({
-        status: result.status,
-        error: result.error,
-        code: CONSTANCE.RES_CODE.error.badRequest,
-      });
+      return res.status(result.code).json(adminErrorBody(result));
     } catch (err) {
       this.logger.error(err);
       return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
@@ -244,11 +226,7 @@ export class AdminController {
       if (result.status !== CONSTANCE.FAIL) {
         return res.status(result.code).json(result);
       }
-      return res.status(result.code).json({
-        status: result.status,
-        error: result.error,
-        code: CONSTANCE.RES_CODE.error.badRequest,
-      });
+      return res.status(result.code).json(adminErrorBody(result));
     } catch (err) {
       this.logger.error(err);
       return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
@@ -262,11 +240,35 @@ export class AdminController {
       if (result.status !== CONSTANCE.FAIL) {
         return res.status(result.code).json(result);
       }
-      return res.status(result.code).json({
-        status: result.status,
-        error: result.error,
-        code: CONSTANCE.RES_CODE.error.badRequest,
-      });
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getUserTimeline = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result: ResponseBuilder = await this.adminService.getUserTimeline(req["authUser"], id, req.query);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getClipPlayUrl = async (req: Request, res: Response) => {
+    try {
+      const { clipId } = req.params;
+      const result: ResponseBuilder = await this.adminService.getAdminClipPlayUrl(req["authUser"], clipId);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
     } catch (err) {
       this.logger.error(err);
       return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
@@ -279,11 +281,7 @@ export class AdminController {
       if (result.status !== CONSTANCE.FAIL) {
         return res.status(result.code).json(result);
       }
-      return res.status(result.code).json({
-        status: result.status,
-        error: result.error,
-        code: CONSTANCE.RES_CODE.error.badRequest,
-      });
+      return res.status(result.code).json(adminErrorBody(result));
     } catch (err) {
       this.logger.error(err);
       return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });

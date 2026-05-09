@@ -26,6 +26,7 @@ import { SendEmail } from "../../Utils/sendEmail";
 import user from "../../model/user.schema";
 import { AccountType } from "../auth/authEnum";
 import { s3, S3_BUCKET } from "../../Utils/s3Client";
+import { recordUserActivity, UserActivityEvent } from "../../helpers/userActivity";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -237,6 +238,10 @@ export class commonService {
           for (const userId of processedUserIds) {
             const clipObj = new clip({ ...clipPayload, user_id: userId });
             await clipObj.save();
+            void recordUserActivity(String(userId), UserActivityEvent.CLIP_CREATED, {
+              clipId: String(clipObj._id),
+              title: clipObj.title,
+            });
             savedClips.push(clipObj);
 
             // Track users who need emails and collect their thumbnails

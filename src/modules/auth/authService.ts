@@ -15,6 +15,7 @@ import { CONSTANCE, NetquixImage } from "../../config/constance";
 import { stripeHelperController } from "../stripe/stripeHelperController";
 import admin_setting from "../../model/default_admin_setting.schema";
 import ReferredUser from "../../model/referred.user.schema";
+import { recordUserActivity, UserActivityEvent } from "../../helpers/userActivity";
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
 
@@ -197,7 +198,7 @@ export class AuthService {
     }
   };
 
-  public login = async (user: loginModel): Promise<ResponseBuilder> => {
+  public login = async (user: loginModel, client?: { ip?: string }): Promise<ResponseBuilder> => {
     try {
       const { email, password } = user;
       if (!email) {
@@ -213,6 +214,12 @@ export class AuthService {
           userDetails.password
         );
         if (validPassword) {
+          const rawIp = client?.ip || "";
+          const ip =
+            typeof rawIp === "string" && rawIp.includes(",")
+              ? rawIp.split(",")[0].trim()
+              : rawIp;
+          void recordUserActivity(String(userDetails._id), UserActivityEvent.LOGIN, { channel: "password" }, ip);
           const payload = {
             user_id: userDetails._id,
             account_type: userDetails.account_type,

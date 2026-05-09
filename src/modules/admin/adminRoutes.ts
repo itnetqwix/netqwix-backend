@@ -19,6 +19,8 @@ route.get("/get-global-commission", adminController.getGlobalCommission);
 route.get("/call-diagnostics", adminController.getCallDiagnostics);
 route.get("/call-quality-summary/:sessionId", adminController.getCallQualitySummary);
 route.get("/user-360/:id", adminController.getUser360);
+route.get("/user-timeline/:id", adminController.getUserTimeline);
+route.get("/clip-play-url/:clipId", adminController.getClipPlayUrl);
 route.get("/user-lessons/:id", adminController.getUserLessons);
 route.get("/user-reviews/:id", adminController.getUserReviews);
 route.get("/user-assets/:id", adminController.getUserAssets);

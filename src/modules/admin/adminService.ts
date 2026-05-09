@@ -13,6 +13,11 @@ import Report from "../../model/report.schema";
 import saved_session from "../../model/saved_sessions.schema";
 import admin_audit from "../../model/admin_audit.schema";
 import mongoose from "mongoose";
+import notification from "../../model/notifications.schema";
+import onlineUser from "../../model/online_user.schema";
+import user_presence from "../../model/user_presence.schema";
+import user_activity from "../../model/user_activity.schema";
+import { s3, S3_BUCKET } from "../../Utils/s3Client";
 
 
 export class AdminService {
@@ -45,10 +50,56 @@ export class AdminService {
   }
 
   private ensureAdmin(authUser: any): ResponseBuilder | null {
-    if (!authUser || authUser?.account_type !== AccountType.ADMIN) {
+    const at = String(authUser?.account_type ?? "").trim().toLowerCase();
+    if (!authUser || at !== String(AccountType.ADMIN).toLowerCase()) {
       return ResponseBuilder.badRequest("Only admin can access this resource");
     }
     return null;
+  }
+
+  private resolveCdnBase(): string {
+    return (process.env.DATA_CDN_BASE || "https://data.netqwix.com/").replace(/\/?$/, "/");
+  }
+
+  private resolveMediaUrl(path?: string | null): string {
+    if (!path) return "";
+    const s = String(path);
+    if (/^https?:\/\//i.test(s)) return s;
+    return `${this.resolveCdnBase()}${s.replace(/^\//, "")}`;
+  }
+
+  private normalizeLessonSort(sortBy: string): string {
+    const allowed = new Set([
+      "createdAt",
+      "updatedAt",
+      "booked_date",
+      "status",
+      "session_start_time",
+      "session_end_time",
+      "start_time",
+      "end_time",
+    ]);
+    return allowed.has(sortBy) ? sortBy : "createdAt";
+  }
+
+  private normalizeClipSort(sortBy: string): string {
+    const allowed = new Set(["createdAt", "updatedAt", "title", "category"]);
+    return allowed.has(sortBy) ? sortBy : "createdAt";
+  }
+
+  private normalizeReportSort(sortBy: string): string {
+    const allowed = new Set(["createdAt", "updatedAt", "title"]);
+    return allowed.has(sortBy) ? sortBy : "createdAt";
+  }
+
+  private normalizeSavedSort(sortBy: string): string {
+    const allowed = new Set(["createdAt", "updatedAt", "title", "file_name"]);
+    return allowed.has(sortBy) ? sortBy : "createdAt";
+  }
+
+  private normalizeAuditSort(sortBy: string): string {
+    const allowed = new Set(["createdAt", "updatedAt", "action", "entity_type"]);
+    return allowed.has(sortBy) ? sortBy : "createdAt";
   }
 
   private getHardDeletePolicy(authUser: any) {
@@ -135,8 +186,52 @@ export class AdminService {
         .sort({ createdAt: -1 })
         .lean();
 
+      const [notificationsCount, presenceDoc, onlineTrainerRow] = await Promise.all([
+        notification.countDocuments({ receiverId: userId }),
+        user_presence.findOne({ user_id: userId }).lean(),
+        onlineUser.findOne({ trainer_id: userId }).lean(),
+      ]);
+
+      const lastSeenCandidates: number[] = [];
+      if (presenceDoc?.last_seen_at) lastSeenCandidates.push(new Date(presenceDoc.last_seen_at as any).getTime());
+      if (onlineTrainerRow?.last_activity_time) lastSeenCandidates.push(new Date(onlineTrainerRow.last_activity_time as any).getTime());
+      const lastOnlineAt =
+        lastSeenCandidates.length > 0 ? new Date(Math.max(...lastSeenCandidates)).toISOString() : null;
+
+      const friendsCount = Array.isArray((targetUser as any).friends) ? (targetUser as any).friends.length : 0;
+
+      const overview = {
+        identity: {
+          fullname: (targetUser as any).fullname,
+          email: (targetUser as any).email,
+          mobile_no: (targetUser as any).mobile_no,
+          account_type: (targetUser as any).account_type,
+          status: (targetUser as any).status,
+          login_type: (targetUser as any).login_type,
+          category: (targetUser as any).category,
+          createdAt: (targetUser as any).createdAt,
+          updatedAt: (targetUser as any).updatedAt,
+        },
+        media: {
+          profile_picture_url: this.resolveMediaUrl((targetUser as any).profile_picture),
+        },
+        money: {
+          wallet_amount: (targetUser as any).wallet_amount,
+          stripe_account_id: (targetUser as any).stripe_account_id,
+          is_kyc_completed: (targetUser as any).is_kyc_completed,
+          is_registered_with_stript: (targetUser as any).is_registered_with_stript,
+          commission: (targetUser as any).commission,
+        },
+        preferences: {
+          notifications: (targetUser as any).notifications,
+          extraInfo: (targetUser as any).extraInfo,
+        },
+        lastOnlineAt,
+      };
+
       const payload: any = {
         user: targetUser,
+        overview,
         summary: {
           lessonsCount: lessons.length,
           completedLessonsCount: lessons.filter((l: any) => String(l?.status).toLowerCase() === "completed").length,
@@ -144,6 +239,9 @@ export class AdminService {
           clipsCount: clips.length,
           reportsCount: reports.length,
           savedSessionsCount: savedSessions.length,
+          friendsCount,
+          notificationsCount,
+          lastOnlineAt,
         },
         lessons,
         reviews,
@@ -169,7 +267,9 @@ export class AdminService {
       if (guard) return guard;
       if (!mongoose.isValidObjectId(userId)) return ResponseBuilder.badRequest("Invalid user id");
 
-      const { page, limit, skip, sortBy, sortOrder, search, status } = this.getQueryOptions(query);
+      const qo = this.getQueryOptions(query);
+      const sortBy = this.normalizeLessonSort(qo.sortBy);
+      const { page, limit, skip, sortOrder, search, status } = qo;
       const userScope = { $or: [{ trainer_id: userId }, { trainee_id: userId }] };
       const filters: any[] = [userScope];
       if (status) filters.push({ status });
@@ -207,7 +307,9 @@ export class AdminService {
       if (guard) return guard;
       if (!mongoose.isValidObjectId(userId)) return ResponseBuilder.badRequest("Invalid user id");
 
-      const { page, limit, skip, sortBy, sortOrder, status, search } = this.getQueryOptions(query);
+      const qo = this.getQueryOptions(query);
+      const sortBy = this.normalizeLessonSort(qo.sortBy);
+      const { page, limit, skip, sortOrder, status, search } = qo;
       const filters: any[] = [{ $or: [{ trainer_id: userId }, { trainee_id: userId }] }, { ratings: { $ne: null } }];
       if (status) filters.push({ status });
       if (search && String(search).trim()) {
@@ -248,7 +350,11 @@ export class AdminService {
       if (guard) return guard;
       if (!mongoose.isValidObjectId(userId)) return ResponseBuilder.badRequest("Invalid user id");
 
-      const { page, limit, skip, sortBy, sortOrder, search } = this.getQueryOptions(query);
+      const qo = this.getQueryOptions(query);
+      const clipSort = this.normalizeClipSort(qo.sortBy);
+      const reportSort = this.normalizeReportSort(qo.sortBy);
+      const savedSort = this.normalizeSavedSort(qo.sortBy);
+      const { page, limit, skip, sortOrder, search } = qo;
       const section = String(query?.section || "all").toLowerCase();
       const wantClips = section === "all" || section === "clips";
       const wantPlans = section === "all" || section === "plans";
@@ -267,20 +373,20 @@ export class AdminService {
       if (search && String(search).trim()) savedQuery.file_name = { $regex: String(search).trim(), $options: "i" };
 
       const clipPromise = wantClips
-        ? clip.find(clipsQuery).sort(this.getSortSpec(sortBy, sortOrder)).skip(skip).limit(limit).lean()
+        ? clip.find(clipsQuery).sort(this.getSortSpec(clipSort, sortOrder)).skip(skip).limit(limit).lean()
         : Promise.resolve([]);
       const reportsPromise = wantPlans
         ? Report.find(reportsQuery)
             .populate("trainer", "fullname email account_type")
             .populate("trainee", "fullname email account_type")
             .populate("sessions", "booked_date status session_start_time session_end_time")
-            .sort(this.getSortSpec(sortBy, sortOrder))
+            .sort(this.getSortSpec(reportSort, sortOrder))
             .skip(skip)
             .limit(limit)
             .lean()
         : Promise.resolve([]);
       const savedPromise = wantPlans
-        ? saved_session.find(savedQuery).sort(this.getSortSpec(sortBy, sortOrder)).skip(skip).limit(limit).lean()
+        ? saved_session.find(savedQuery).sort(this.getSortSpec(savedSort, sortOrder)).skip(skip).limit(limit).lean()
         : Promise.resolve([]);
       const clipsCountPromise = wantClips ? clip.countDocuments(clipsQuery) : Promise.resolve(0);
       const reportsCountPromise = wantPlans ? Report.countDocuments(reportsQuery) : Promise.resolve(0);
@@ -386,21 +492,24 @@ export class AdminService {
       const guard = this.ensureAdmin(authUser);
       if (guard) return guard;
 
-      const { page, limit, skip, sortBy, sortOrder, search } = this.getQueryOptions(queryOptions);
+      const qo = this.getQueryOptions(queryOptions);
+      const sortBy = this.normalizeAuditSort(qo.sortBy);
+      const { page, limit, skip, sortOrder, search } = qo;
       const filters: any[] = [];
       if (userId && mongoose.isValidObjectId(userId)) {
         filters.push({ target_user_id: userId });
       }
       if (search && String(search).trim()) {
         const s = String(search).trim();
-        filters.push({
-          $or: [
-            { reason: { $regex: s, $options: "i" } },
-            { entity_id: { $regex: s, $options: "i" } },
-            { action: { $regex: s, $options: "i" } },
-            { entity_type: { $regex: s, $options: "i" } },
-          ],
-        });
+        const orClause: any[] = [
+          { reason: { $regex: s, $options: "i" } },
+          { action: { $regex: s, $options: "i" } },
+          { entity_type: { $regex: s, $options: "i" } },
+        ];
+        if (mongoose.isValidObjectId(s)) {
+          orClause.push({ entity_id: new mongoose.Types.ObjectId(s) });
+        }
+        filters.push({ $or: orClause });
       }
       const query: any = filters.length === 0 ? {} : filters.length === 1 ? filters[0] : { $and: filters };
       const logs = await admin_audit
@@ -414,6 +523,216 @@ export class AdminService {
       const total = await admin_audit.countDocuments(query);
 
       return ResponseBuilder.data({ items: logs, pagination: { page, limit, total } }, "Audit logs fetched successfully");
+    } catch (error) {
+      return ResponseBuilder.error(error, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
+  public async getUserTimeline(authUser: any, userId: string, query: any = {}): Promise<ResponseBuilder> {
+    try {
+      const guard = this.ensureAdmin(authUser);
+      if (guard) return guard;
+      if (!mongoose.isValidObjectId(userId)) return ResponseBuilder.badRequest("Invalid user id");
+
+      const page = Math.max(1, Number(query?.page || 1));
+      const limit = Math.min(100, Math.max(1, Number(query?.limit || 30)));
+      const eventTypeRaw = String(query?.eventType || "").trim();
+      const typeTokens = eventTypeRaw
+        ? eventTypeRaw
+            .split(",")
+            .map((t) => t.trim().toLowerCase())
+            .filter(Boolean)
+        : [];
+
+      const uid = new mongoose.Types.ObjectId(userId);
+      const userBookings = { $or: [{ trainer_id: uid }, { trainee_id: uid }] };
+      const cap = 400;
+
+      const [bookings, clipRows, reportRows, savedRows, auditRows, onlineRow, activityRows] = await Promise.all([
+        booked_session.find(userBookings).sort({ updatedAt: -1 }).limit(cap).lean(),
+        clip.find({ user_id: userId, status: true }).sort({ updatedAt: -1 }).limit(cap).lean(),
+        Report.find({ $or: [{ trainer: userId }, { trainee: userId }], status: true }).sort({ updatedAt: -1 }).limit(cap).lean(),
+        saved_session.find({ $or: [{ trainer: userId }, { trainee: userId }], status: true }).sort({ updatedAt: -1 }).limit(cap).lean(),
+        admin_audit.find({ target_user_id: userId }).sort({ updatedAt: -1 }).limit(cap).lean(),
+        onlineUser.findOne({ trainer_id: userId }).lean(),
+        user_activity.find({ user_id: userId }).sort({ createdAt: -1 }).limit(cap).lean(),
+      ]);
+
+      const items: Array<{ type: string; at: string; title: string; meta: Record<string, unknown> }> = [];
+
+      for (const b of bookings as any[]) {
+        const cr = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        if (cr) {
+          items.push({
+            type: "booking_created",
+            at: new Date(cr).toISOString(),
+            title: "Booking created",
+            meta: {
+              sessionId: String(b._id),
+              status: b.status,
+              trainer_id: String(b.trainer_id),
+              trainee_id: String(b.trainee_id),
+            },
+          });
+        }
+        const up = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        if (up && cr && up > cr + 2000) {
+          items.push({
+            type: "booking_updated",
+            at: new Date(up).toISOString(),
+            title: "Booking updated",
+            meta: { sessionId: String(b._id), status: b.status },
+          });
+        }
+      }
+
+      for (const c of clipRows as any[]) {
+        const cr = c.createdAt ? new Date(c.createdAt).getTime() : 0;
+        if (cr) {
+          items.push({
+            type: "clip",
+            at: new Date(cr).toISOString(),
+            title: `Clip: ${c.title || "Untitled"}`,
+            meta: { clipId: String(c._id), title: c.title },
+          });
+        }
+        const up = c.updatedAt ? new Date(c.updatedAt).getTime() : 0;
+        if (up && cr && up > cr + 2000) {
+          items.push({
+            type: "clip_updated",
+            at: new Date(up).toISOString(),
+            title: "Clip updated",
+            meta: { clipId: String(c._id) },
+          });
+        }
+      }
+
+      for (const r of reportRows as any[]) {
+        const cr = r.createdAt ? new Date(r.createdAt).getTime() : 0;
+        if (cr) {
+          items.push({
+            type: "report",
+            at: new Date(cr).toISOString(),
+            title: `Report: ${r.title || "Untitled"}`,
+            meta: { reportId: String(r._id) },
+          });
+        }
+      }
+
+      for (const s of savedRows as any[]) {
+        const cr = s.createdAt ? new Date(s.createdAt).getTime() : 0;
+        if (cr) {
+          items.push({
+            type: "saved_session",
+            at: new Date(cr).toISOString(),
+            title: `Saved session: ${s.file_name || s.title || "file"}`,
+            meta: { savedSessionId: String(s._id) },
+          });
+        }
+      }
+
+      for (const a of auditRows as any[]) {
+        const cr = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        if (cr) {
+          items.push({
+            type: "admin_audit",
+            at: new Date(cr).toISOString(),
+            title: `Admin: ${a.action || "action"} (${a.entity_type || "-"})`,
+            meta: {
+              auditId: String(a._id),
+              action: a.action,
+              entity_type: a.entity_type,
+              entity_id: String(a.entity_id),
+              reason: a.reason,
+            },
+          });
+        }
+      }
+
+      if (onlineRow?.last_activity_time) {
+        items.push({
+          type: "trainer_online_snapshot",
+          at: new Date(onlineRow.last_activity_time as any).toISOString(),
+          title: "Trainer last activity (online_user)",
+          meta: { source: "online_user" },
+        });
+      }
+
+      for (const ev of activityRows as any[]) {
+        const cr = ev.createdAt ? new Date(ev.createdAt).getTime() : Date.now();
+        items.push({
+          type: "user_activity",
+          at: new Date(cr).toISOString(),
+          title: String(ev.event_type || "activity"),
+          meta: { ...(ev.meta || {}), event_type: ev.event_type },
+        });
+      }
+
+      items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+      let filtered = items;
+      if (typeTokens.length) {
+        filtered = items.filter((it) =>
+          typeTokens.some(
+            (tok) =>
+              it.type.toLowerCase().includes(tok) ||
+              String((it.meta as any)?.event_type || "")
+                .toLowerCase()
+                .includes(tok)
+          )
+        );
+      }
+
+      const total = filtered.length;
+      const slice = filtered.slice((page - 1) * limit, page * limit);
+      return ResponseBuilder.data({ items: slice, pagination: { page, limit, total } }, "Timeline fetched");
+    } catch (error) {
+      return ResponseBuilder.error(error, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
+  public async getAdminClipPlayUrl(authUser: any, clipId: string): Promise<ResponseBuilder> {
+    try {
+      const guard = this.ensureAdmin(authUser);
+      if (guard) return guard;
+      if (!mongoose.isValidObjectId(clipId)) return ResponseBuilder.badRequest("Invalid clip id");
+
+      const c: any = await clip.findById(clipId).lean();
+      if (!c) return ResponseBuilder.badRequest("Clip not found");
+
+      const key =
+        (c.file_id && String(c.file_id).trim()) || (c.file_name && String(c.file_name).trim()) || "";
+      if (!key) return ResponseBuilder.badRequest("Clip has no file key");
+
+      const cdnVideo = `${this.resolveCdnBase()}${String(key).replace(/^\//, "")}`;
+      let videoUrl = cdnVideo;
+      let thumbnailUrl = "";
+
+      if (c.thumbnail) {
+        const thumbKey = String(c.thumbnail).trim();
+        thumbnailUrl = `${this.resolveCdnBase()}${thumbKey.replace(/^\//, "")}`;
+      }
+
+      if (S3_BUCKET) {
+        try {
+          videoUrl = await s3.getSignedUrlPromise("getObject", {
+            Bucket: S3_BUCKET,
+            Key: key,
+            Expires: 900,
+          });
+          if (c.thumbnail) {
+            thumbnailUrl = await s3.getSignedUrlPromise("getObject", {
+              Bucket: S3_BUCKET,
+              Key: String(c.thumbnail).trim(),
+              Expires: 900,
+            });
+          }
+        } catch (e) {
+          this.log.info("getAdminClipPlayUrl signed URL failed, using CDN fallback", e);
+        }
+      }
+
+      return ResponseBuilder.data({ videoUrl, thumbnailUrl, cdnFallbackVideo: cdnVideo }, "Clip URLs resolved");
     } catch (error) {
       return ResponseBuilder.error(error, l10n.t("ERR_INTERNAL_SERVER"));
     }

@@ -23,6 +23,7 @@ import { stripeHelperController } from "../stripe/stripeHelperController";
 import raise_concern from "../../model/raise_concern.schema";
 import { Constant, timeZoneAbbreviations } from "../../Utils/constant";
 import onlineUser from "../../model/online_user.schema";
+import { recordUserActivity, recordUserActivityMany, UserActivityEvent } from "../../helpers/userActivity";
 import SMSService from "../../services/sms-service";
 import user from "../../model/user.schema";
 import { DateTime } from "luxon";
@@ -73,7 +74,12 @@ export class UserService {
           { status: payload.booked_status },
           { new: true }
         );
-        
+        void recordUserActivityMany(
+          [String(bookedSessionDetail.trainee_id), String(bookedSessionDetail.trainer_id)],
+          UserActivityEvent.BOOKING_STATUS,
+          { sessionId: String(bookedSessionId), status: payload.booked_status }
+        );
+
         // Emit booking status updated event
         try {
           const { emitBookingStatusUpdated } = require("../socket/socket.service");
@@ -397,6 +403,7 @@ export class UserService {
         return ResponseBuilder.data([], "User not found");
       }
 
+      void recordUserActivity(String(userId), UserActivityEvent.PROFILE_UPDATE, { area: "isPrivate" });
       return ResponseBuilder.data(updatedUserInfo, "User privacy setting updated successfully");
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
@@ -417,6 +424,7 @@ export class UserService {
         return ResponseBuilder.data([], "User not found");
       }
 
+      void recordUserActivity(String(userInfo._id), UserActivityEvent.PROFILE_UPDATE, { area: "mobile_no" });
       return ResponseBuilder.data(updatedUserInfo, "User privacy setting updated successfully");
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
@@ -435,6 +443,7 @@ export class UserService {
         return ResponseBuilder.data([], "User not found");
       }
 
+      void recordUserActivity(String(userInfo._id), UserActivityEvent.PROFILE_UPDATE, { area: "notifications" });
       return ResponseBuilder.data(updatedUserInfo, "User Notification setting updated successfully");
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
@@ -722,6 +731,13 @@ export class UserService {
         { $set: { ...bookingInfo } },
         { new: true }
       );
+      if (bookingInfo.status === BOOKED_SESSIONS_STATUS.completed) {
+        void recordUserActivityMany(
+          [String(bookingInfo.trainee_id), String(bookingInfo.trainer_id)],
+          UserActivityEvent.SESSION_COMPLETED,
+          { sessionId: String(bookingInfo._id) }
+        );
+      }
       return ResponseBuilder.data({ bookingInfo }, l10n.t("RATING_SUBMITTED"));
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));

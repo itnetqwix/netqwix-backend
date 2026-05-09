@@ -15,4 +15,6 @@ export class Tables {
     public static readonly notifications = "notifications";
     public static readonly call_diagnostics = "call_diagnostics";
     public static readonly admin_audit = "admin_audit";
+    public static readonly user_activity = "user_activity";
+    public static readonly user_presence = "user_presence";
 }

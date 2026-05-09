@@ -15,6 +15,7 @@ import { NotificationType } from "../../enum/notification.enum";
 import mongoose from "mongoose";
 import booked_session from "../../model/booked_sessions.schema";
 import { s3, S3_BUCKET } from "../../Utils/s3Client";
+import { touchUserPresence } from "../../helpers/userActivity";
 const logoPath = path.resolve(__dirname, "../../assets/netqwix_logo.png");
 
 //NOTE -  Set VAPID details
@@ -258,9 +259,11 @@ async function updateUserActivity(socket) {
             last_activity_time: Date.now(),
           }).save();
         }
+        void touchUserPresence(trainerId);
       }
     } else if (socket?.user?._doc?.account_type === "Trainee") {
       activeUsers[userId] = { ...socket.user._doc };
+      void touchUserPresence(userId);
     }
 
     // Broadcast the updated active users list to all connected clients
@@ -368,6 +371,8 @@ export const handleSocketEvents = (socket, connections = {}) => {
   // Heartbeat handler: clients send this periodically to prove they're alive
   socket.on("HEARTBEAT", () => {
     socketHeartbeats.set(socketId, Date.now());
+    const uid = socket?.user?._doc?._id || socket?.user?._id;
+    if (uid) void touchUserPresence(String(uid));
   });
 
   socket.on(EVENTS.JOIN_ROOM, async (socketReq, request) => {
