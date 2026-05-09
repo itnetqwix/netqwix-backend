@@ -152,4 +152,124 @@ export class AdminController {
       });
     }
   };
+
+  public getUser360 = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const includeRaw = String(req.query.include || "")
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      const result: ResponseBuilder = await this.adminService.getUser360(req["authUser"], id, includeRaw);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json({
+        status: result.status,
+        error: result.error,
+        code: CONSTANCE.RES_CODE.error.badRequest,
+      });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getUserLessons = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result: ResponseBuilder = await this.adminService.getUserLessons(req["authUser"], id, req.query);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json({
+        status: result.status,
+        error: result.error,
+        code: CONSTANCE.RES_CODE.error.badRequest,
+      });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getUserReviews = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result: ResponseBuilder = await this.adminService.getUserReviews(req["authUser"], id, req.query);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json({
+        status: result.status,
+        error: result.error,
+        code: CONSTANCE.RES_CODE.error.badRequest,
+      });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getUserAssets = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result: ResponseBuilder = await this.adminService.getUserAssets(req["authUser"], id, req.query);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json({
+        status: result.status,
+        error: result.error,
+        code: CONSTANCE.RES_CODE.error.badRequest,
+      });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public deleteEntity = async (req: Request, res: Response) => {
+    try {
+      const { entityType, entityId } = req.params;
+      const mode = String(req.query.mode || "soft").toLowerCase() === "hard" ? "hard" : "soft";
+      const reason = String(req.query.reason || "");
+      const result: ResponseBuilder = await this.adminService.deleteEntity(
+        req["authUser"],
+        entityType,
+        entityId,
+        mode,
+        reason
+      );
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json({
+        status: result.status,
+        error: result.error,
+        code: CONSTANCE.RES_CODE.error.badRequest,
+      });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getAuditLogs = async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId ? String(req.query.userId) : undefined;
+      const result: ResponseBuilder = await this.adminService.getAdminAuditLogs(req["authUser"], userId, req.query);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json({
+        status: result.status,
+        error: result.error,
+        code: CONSTANCE.RES_CODE.error.badRequest,
+      });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
 }

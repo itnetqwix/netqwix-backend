@@ -965,6 +965,29 @@ export class userController {
     }
   };
 
+  public deleteUser = async (req, res) => {
+    try {
+      if (req["authUser"]) {
+        const { id } = req.params;
+        const result: ResponseBuilder = await this.userService.deleteUser(
+          req.authUser,
+          id
+        );
+        if (result.status !== CONSTANCE.FAIL) {
+          res.status(result.code).json(result);
+        } else {
+          res.status(result.code).json({
+            status: result.status,
+            error: result.error,
+            code: CONSTANCE.RES_CODE.error.badRequest,
+          });
+        }
+      }
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.error });
+    }
+  };
+
 
   public approveTrainer = async (req, res) => {
     try {

@@ -1485,6 +1485,40 @@ export class UserService {
     }
   }
 
+  public async deleteUser(authUser: any, userId: string): Promise<ResponseBuilder> {
+    try {
+      if (authUser?.account_type !== AccountType.ADMIN) {
+        return ResponseBuilder.badRequest("Only admin can delete users");
+      }
+
+      if (!userId) {
+        return ResponseBuilder.badRequest("User id is required");
+      }
+
+      if (String(authUser?._id) === String(userId)) {
+        return ResponseBuilder.badRequest("Admin cannot delete own account");
+      }
+
+      const targetUser = await user.findById(userId);
+      if (!targetUser) {
+        return ResponseBuilder.badRequest("User not found");
+      }
+
+      if (targetUser.account_type === AccountType.ADMIN) {
+        return ResponseBuilder.badRequest("Admin user cannot be deleted");
+      }
+
+      await user.findByIdAndDelete(userId);
+
+      return ResponseBuilder.data(
+        { deletedUserId: userId },
+        "User deleted successfully"
+      );
+    } catch (err) {
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
   public async approveTrainer(trainerId: string): Promise<any> {
     try {
       console.log("Updating trainer status:", { trainerId });
