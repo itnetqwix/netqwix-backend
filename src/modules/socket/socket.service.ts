@@ -1054,7 +1054,6 @@ const listenInstantLessonEvents = (socket) => {
         
         // Validate required fields
         if (!lessonId || !coachId || !traineeId) {
-          console.error("[INSTANT_LESSON] Missing required fields in request:", payload);
           return;
         }
 
@@ -1069,12 +1068,9 @@ const listenInstantLessonEvents = (socket) => {
             expiresAt,
             lessonType,
           });
-          console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Request sent to coach ${coachId} for lesson ${lessonId}, expires at ${expiresAt}`);
-        } else {
-          console.warn(`[INSTANT_LESSON] Coach ${coachId} not connected`);
         }
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling request:`, err);
+      } catch (_err) {
+        /* intentionally quiet — add app-level logging if needed */
       }
     });
 
@@ -1084,7 +1080,6 @@ const listenInstantLessonEvents = (socket) => {
         const { lessonId, coachId, traineeId } = payload;
         
         if (!lessonId || !coachId || !traineeId) {
-          console.error("[INSTANT_LESSON] Missing required fields in accept:", payload);
           return;
         }
 
@@ -1101,18 +1096,11 @@ const listenInstantLessonEvents = (socket) => {
             { $set: { status: BOOKED_SESSIONS_STATUS.confirm } },
             { new: true }
           );
-          if (!updatedBooking) {
-            const exists = await booked_session.findById(lessonId).lean();
-            if (exists && String(exists.trainer_id) === String(coachId) && exists.is_instant) {
-              console.warn(
-                `[INSTANT_LESSON] Accept for lesson ${lessonId}: booking not in "booked" state (current: ${exists.status}); skipping DB update`
-              );
-            }
-          } else if (emitBookingStatusUpdatedDelegate) {
+          if (updatedBooking && emitBookingStatusUpdatedDelegate) {
             void emitBookingStatusUpdatedDelegate(updatedBooking);
           }
-        } catch (dbErr) {
-          console.error("[INSTANT_LESSON] Error confirming instant booking:", dbErr);
+        } catch (_dbErr) {
+          /* intentionally quiet */
         }
 
         // Emit to both parties
@@ -1134,9 +1122,8 @@ const listenInstantLessonEvents = (socket) => {
           });
         }
 
-        console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Lesson ${lessonId} accepted by coach ${coachId} for trainee ${traineeId}`);
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling accept:`, err);
+      } catch (_err) {
+        /* intentionally quiet */
       }
     });
 
@@ -1146,7 +1133,6 @@ const listenInstantLessonEvents = (socket) => {
         const { lessonId, coachId, traineeId } = payload;
         
         if (!lessonId || !coachId || !traineeId) {
-          console.error("[INSTANT_LESSON] Missing required fields in decline:", payload);
           return;
         }
 
@@ -1157,10 +1143,9 @@ const listenInstantLessonEvents = (socket) => {
             coachId,
             traineeId,
           });
-          console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Lesson ${lessonId} declined by coach ${coachId} for trainee ${traineeId}`);
         }
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling decline:`, err);
+      } catch (_err) {
+        /* intentionally quiet */
       }
     });
 
@@ -1170,7 +1155,6 @@ const listenInstantLessonEvents = (socket) => {
         const { lessonId, coachId, traineeId } = payload;
         
         if (!lessonId) {
-          console.error("[INSTANT_LESSON] Missing lessonId in expire:", payload);
           return;
         }
 
@@ -1192,9 +1176,8 @@ const listenInstantLessonEvents = (socket) => {
           });
         }
 
-        console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Lesson ${lessonId} expired`);
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling expire:`, err);
+      } catch (_err) {
+        /* intentionally quiet */
       }
     });
 
@@ -1203,7 +1186,6 @@ const listenInstantLessonEvents = (socket) => {
       try {
         const { lessonId, coachId, traineeId } = payload;
         if (!lessonId || !coachId) {
-          console.error("[INSTANT_LESSON] Missing required fields in clips_selected:", payload);
           return;
         }
         const coachSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, coachId);
@@ -1213,10 +1195,9 @@ const listenInstantLessonEvents = (socket) => {
             coachId,
             traineeId,
           });
-          console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Clips selected for lesson ${lessonId}, coach ${coachId} notified`);
         }
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling clips_selected:`, err);
+      } catch (_err) {
+        /* intentionally quiet */
       }
     });
 
@@ -1228,14 +1209,13 @@ const listenInstantLessonEvents = (socket) => {
         const coachSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, coachId);
         if (coachSocketId) {
           socket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.TRAINEE_CANCELLED, { lessonId, coachId, traineeId });
-          console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Lesson ${lessonId} cancelled by trainee ${traineeId}`);
         }
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling trainee_cancelled:`, err);
+      } catch (_err) {
+        /* intentionally quiet */
       }
     });
-  } catch (err) {
-    console.error(`[INSTANT_LESSON] Error setting up instant lesson event listeners:`, err);
+  } catch (_err) {
+    /* intentionally quiet */
   }
 };
 
