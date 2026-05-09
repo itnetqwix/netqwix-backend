@@ -4,6 +4,7 @@ import { ResponseBuilder } from "./../../helpers/responseBuilder";
 import { Request, Response } from "express";
 import { AdminService } from "./adminService";
 import CallDiagnostics from "../../model/call_diagnostics.schema";
+import { AccountType } from "../auth/authEnum";
 
 const adminErrorBody = (result: ResponseBuilder) => ({
   status: result.status,
@@ -50,6 +51,10 @@ export class AdminController {
   // Get call diagnostics for a specific session or user
   public getCallDiagnostics = async (req: Request, res: Response) => {
     try {
+      const at = String(req["authUser"]?.account_type ?? "").trim().toLowerCase();
+      if (at !== String(AccountType.ADMIN).toLowerCase()) {
+        return res.status(403).json({ status: CONSTANCE.FAIL, error: "Only admin can access call diagnostics" });
+      }
       const { sessionId, userId, eventType, limit = 100, skip = 0 } = req.query;
 
       const query: any = {};
@@ -278,6 +283,20 @@ export class AdminController {
   public getDashboardMetrics = async (req: Request, res: Response) => {
     try {
       const result: ResponseBuilder = await this.adminService.getDashboardMetrics(req["authUser"]);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  /** Trainers & trainees with an active Socket.IO connection (same source as ADMIN_ONLINE_USERS). */
+  public getOnlineUsers = async (req: Request, res: Response) => {
+    try {
+      const result: ResponseBuilder = await this.adminService.getOnlineUsers(req["authUser"]);
       if (result.status !== CONSTANCE.FAIL) {
         return res.status(result.code).json(result);
       }

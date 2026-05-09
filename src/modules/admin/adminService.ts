@@ -17,7 +17,11 @@ import notification from "../../model/notifications.schema";
 import onlineUser from "../../model/online_user.schema";
 import user_presence from "../../model/user_presence.schema";
 import user_activity from "../../model/user_activity.schema";
+import raise_concern from "../../model/raise_concern.schema";
+import write_us from "../../model/write_us.schema";
 import { s3, S3_BUCKET } from "../../Utils/s3Client";
+import { getTrainerTraineePresenceSnapshot } from "../socket/socketPresenceRegistry";
+import { assertAdminPermission } from "./adminPermission";
 
 
 export class AdminService {
@@ -26,6 +30,8 @@ export class AdminService {
   public JWT = new JWT();
 
   public async updateGlobalCommission(reqBody: any, authUser: any): Promise<ResponseBuilder> {
+    const permErr = assertAdminPermission(authUser, "can_manage_commission");
+    if (permErr) return ResponseBuilder.badRequest(permErr);
     const { commission } = reqBody;
 
     try {
@@ -461,6 +467,18 @@ export class AdminService {
 
       if (!target) return ResponseBuilder.badRequest("Entity not found");
 
+      if (mode === "soft") {
+        const p = authUser?.extraInfo?.admin_permissions;
+        if (
+          p &&
+          typeof p === "object" &&
+          Object.keys(p).length > 0 &&
+          p.can_soft_delete_entities === false
+        ) {
+          return ResponseBuilder.badRequest("Soft delete is not allowed for this admin account");
+        }
+      }
+
       await admin_audit.create({
         admin_id: authUser?._id,
         target_user_id: (target?.user_id || target?.trainer || target?.trainee || target?.trainer_id || target?.trainee_id || null),
@@ -749,6 +767,20 @@ export class AdminService {
     }
   }
 
+  public async getOnlineUsers(authUser: any): Promise<ResponseBuilder> {
+    const guard = this.ensureAdmin(authUser);
+    if (guard) return guard;
+    try {
+      const users = getTrainerTraineePresenceSnapshot();
+      return ResponseBuilder.data(
+        { users, updatedAt: Date.now(), source: "socket" },
+        "Online users (active socket on this server)"
+      );
+    } catch (error) {
+      return ResponseBuilder.error(error, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
   /** Used by Socket.IO to push updates to admins (server-only). */
   public async getDashboardMetricsInternal(): Promise<any | null> {
     try {
@@ -768,6 +800,13 @@ export class AdminService {
       status: { $ne: BOOKED_SESSIONS_STATUS.cancel },
     };
 
+    const openTicketMatch = { ticket_status: { $in: ["open", "in_progress"] } };
+    const pendingRefundMatch = {
+      status: BOOKED_SESSIONS_STATUS.cancel,
+      refund_status: { $ne: "refunded" },
+      payment_intent_id: { $exists: true, $nin: [null, ""] },
+    };
+
     const [
       revenueAgg,
       totalOrders,
@@ -776,6 +815,10 @@ export class AdminService {
       completedSessions,
       trainersCount,
       traineesCount,
+      openSupportTickets,
+      openUserFeedback,
+      bookingsPendingRefund,
+      newUsersLast7Days,
     ] = await Promise.all([
       booked_session.aggregate([
         { $match: paidMatch },
@@ -796,6 +839,13 @@ export class AdminService {
       booked_session.countDocuments({ status: BOOKED_SESSIONS_STATUS.completed }),
       user.countDocuments({ account_type: AccountType.TRAINER }),
       user.countDocuments({ account_type: AccountType.TRAINEE }),
+      raise_concern.countDocuments(openTicketMatch),
+      write_us.countDocuments(openTicketMatch),
+      booked_session.countDocuments(pendingRefundMatch),
+      user.countDocuments({
+        createdAt: { $gte: new Date(Date.now() - 7 * 86400000) },
+        account_type: { $in: [AccountType.TRAINER, AccountType.TRAINEE] },
+      }),
     ]);
 
     const totalRevenue = revenueAgg[0]?.total || 0;
@@ -811,6 +861,10 @@ export class AdminService {
       trainersCount,
       traineesCount,
       bookingsCompleted: completedSessions,
+      openSupportTickets,
+      openUserFeedback,
+      bookingsPendingRefund,
+      newUsersLast7Days,
     };
   }
 

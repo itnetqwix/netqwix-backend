@@ -4,6 +4,17 @@ import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { UserService } from "../user/userService";
 import { AuthService } from "./authService";
 import { Request, Response } from "express";
+import { AccountType } from "./authEnum";
+
+const loginAttemptStore = new Map<string, { count: number; resetAt: number }>();
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILS = 12;
+
+function loginRateKey(req: Request, email: string) {
+  const fwd = (req.headers["x-forwarded-for"] as string) || "";
+  const ip = (fwd || req.socket?.remoteAddress || "").split(",")[0].trim() || "unknown";
+  return `${ip}:${String(email).toLowerCase()}`;
+}
 
 export class authController {
   public authService = new AuthService();
@@ -12,6 +23,16 @@ export class authController {
 
   public signup = async (req: Request, res: Response) => {
     try {
+      const at = String(req.body?.account_type ?? "").trim().toLowerCase();
+      if (at === String(AccountType.ADMIN).toLowerCase()) {
+        if (String(process.env.ADMIN_PUBLIC_SIGNUP_ENABLED || "").toLowerCase() !== "true") {
+          return res.status(403).json({
+            status: CONSTANCE.FAIL,
+            error: "Admin self-signup is disabled. Set ADMIN_PUBLIC_SIGNUP_ENABLED=true to allow (not recommended for production).",
+          });
+        }
+      }
+
       const result: ResponseBuilder = await this.authService.createNewUser(
         req.body
       );
@@ -31,12 +52,29 @@ export class authController {
 
   public login = async (req: Request, res: Response) => {
     try {
+      const email = String(req.body?.email || "").trim();
+      const key = loginRateKey(req, email || "unknown");
+      const now = Date.now();
+      const slot = loginAttemptStore.get(key);
+      if (slot && slot.resetAt > now && slot.count >= LOGIN_MAX_FAILS) {
+        return res.status(429).json({
+          status: CONSTANCE.FAIL,
+          error: "Too many login attempts. Try again later.",
+        });
+      }
+
       const fwd = (req.headers["x-forwarded-for"] as string) || "";
       const ip = fwd || req.socket?.remoteAddress || "";
       const result: ResponseBuilder = await this.authService.login(req.body, { ip });
       if (result.status !== CONSTANCE.FAIL) {
+        loginAttemptStore.delete(key);
         res.status(result.code).json(result);
       } else {
+        const next =
+          slot && slot.resetAt > now
+            ? { count: slot.count + 1, resetAt: slot.resetAt }
+            : { count: 1, resetAt: now + LOGIN_WINDOW_MS };
+        loginAttemptStore.set(key, next);
         res.status(result.code).json({
           status: result.status,
           error: result.error,
@@ -59,7 +97,8 @@ export class authController {
       const result: ResponseBuilder =
         await this.authService.forgotPasswordEmail(
           req.body.email,
-          req["authUser"]
+          req["authUser"],
+          String(req.body.portal || "")
         );
       if (result.status !== CONSTANCE.FAIL) {
         res.status(result.code).json(result);

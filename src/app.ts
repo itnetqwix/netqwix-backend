@@ -10,6 +10,7 @@ const { ExpressPeerServer } = require("peer");
 import * as bodyParser from "body-parser";
 import * as dotEnv from "dotenv";
 import { SocketInit } from "./modules/socket/init";
+import { registerTrainerTraineePresenceProvider } from "./modules/socket/socketPresenceRegistry";
 import { cronjobs } from "./cronjob";
 
 dotEnv.config();
@@ -81,6 +82,7 @@ export class App {
       pingInterval: 25000, // Increase ping interval
     });
     this.socketEvents.init(io, this.app);
+    registerTrainerTraineePresenceProvider(() => this.socketEvents.getTrainerTraineePresence());
 
   // Example route to get connected users
   this.app.get('/connected-users', (req, res) => {

@@ -58,6 +58,9 @@ export class SocketInit {
     });
   }
 
+  /** Same payload as ADMIN_ONLINE_USERS (trainers/trainees with an active socket on this server). */
+  public getTrainerTraineePresence = (): any[] => this.serializeTrainerTraineePresence();
+
   private async pushDashboardMetrics(io: Server) {
     try {
       const metrics = await this.adminService.getDashboardMetricsInternal();

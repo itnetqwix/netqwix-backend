@@ -155,7 +155,9 @@ export class AuthService {
     );
     const adminEmail = process.env.EMAIL_USER || "shubhamrakhecha5@gmail.com";
 
-    if (createUser.account_type === AccountType.TRAINER) {
+    if (createUser.account_type === AccountType.ADMIN) {
+      // Admin accounts do not go through trainer/trainee onboarding emails.
+    } else if (createUser.account_type === AccountType.TRAINER) {
       SendEmail.sendRawEmail(
         "new-trainer",
         {
@@ -257,12 +259,21 @@ export class AuthService {
 
   public forgotPasswordEmail = async (
     email,
-    authUser
+    authUser,
+    portal = ""
   ): Promise<ResponseBuilder> => {
     try {
       const userInfo = await user.findById(authUser["_id"]);
       if (!userInfo) {
         return ResponseBuilder.errorMessage("User not found.");
+      }
+      if (
+        String(portal).toLowerCase() === "admin" &&
+        String(userInfo.account_type) !== AccountType.ADMIN
+      ) {
+        return ResponseBuilder.badRequest(
+          "This portal can only reset passwords for administrator accounts."
+        );
       }
       const token = this.JWT.signJWT({
         user_id: authUser["_id"],

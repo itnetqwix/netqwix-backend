@@ -25,7 +25,7 @@ const adminAuditSchema: Schema = new Schema(
     action: {
       type: String,
       required: true,
-      enum: ["soft_delete", "hard_delete"],
+      enum: ["soft_delete", "hard_delete", "stripe_refund"],
     },
     reason: {
       type: String,
