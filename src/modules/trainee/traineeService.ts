@@ -495,10 +495,12 @@ export class TraineeService {
       const start_time = new Date(booked_date);
       const end_time = new Date(start_time.getTime() + duration * 60 * 1000);
 
+      // Instant lessons stay "booked" until the trainer accepts the socket request;
+      // socket handler promotes to "confirmed" so trainees cannot enter the meeting early.
       const userObj = new booked_session({
         trainer_id,
         trainee_id: _id,
-        status: BOOKED_SESSIONS_STATUS.confirm,
+        status: BOOKED_SESSIONS_STATUS.BOOKED,
         booked_date,
         session_start_time,
         session_end_time,

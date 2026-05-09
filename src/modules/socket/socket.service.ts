@@ -1,6 +1,6 @@
 import { Readable } from "stream";
 import { MemCache } from "../../Utils/memCache";
-import { EVENTS } from "../../config/constance";
+import { EVENTS, BOOKED_SESSIONS_STATUS } from "../../config/constance";
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
@@ -27,6 +27,8 @@ webpush.setVapidDetails(
 
 let activeUsers = {};
 let ioInstance: any = null; // Store io instance for emitting events from services
+/** Set once `emitBookingStatusUpdated` is defined (handlers above need a late binding). */
+let emitBookingStatusUpdatedDelegate: ((bookingData: any) => Promise<void>) | null = null;
 
 // Set the io instance (called from socket init)
 export const setIoInstance = (io: any) => {
@@ -1086,6 +1088,33 @@ const listenInstantLessonEvents = (socket) => {
           return;
         }
 
+        let updatedBooking: any = null;
+        try {
+          updatedBooking = await booked_session.findOneAndUpdate(
+            {
+              _id: lessonId,
+              is_instant: true,
+              trainer_id: coachId,
+              trainee_id: traineeId,
+              status: BOOKED_SESSIONS_STATUS.BOOKED,
+            },
+            { $set: { status: BOOKED_SESSIONS_STATUS.confirm } },
+            { new: true }
+          );
+          if (!updatedBooking) {
+            const exists = await booked_session.findById(lessonId).lean();
+            if (exists && String(exists.trainer_id) === String(coachId) && exists.is_instant) {
+              console.warn(
+                `[INSTANT_LESSON] Accept for lesson ${lessonId}: booking not in "booked" state (current: ${exists.status}); skipping DB update`
+              );
+            }
+          } else if (emitBookingStatusUpdatedDelegate) {
+            void emitBookingStatusUpdatedDelegate(updatedBooking);
+          }
+        } catch (dbErr) {
+          console.error("[INSTANT_LESSON] Error confirming instant booking:", dbErr);
+        }
+
         // Emit to both parties
         const coachSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, coachId);
         const traineeSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId);
@@ -1317,6 +1346,8 @@ export const emitBookingStatusUpdated = async (bookingData: any) => {
     console.error(`[BOOKING] Error emitting BOOKING_STATUS_UPDATED event:`, err);
   }
 };
+
+emitBookingStatusUpdatedDelegate = emitBookingStatusUpdated;
 
 const listenDrawEvent = (socket) => {
   try {
