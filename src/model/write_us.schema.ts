@@ -5,7 +5,7 @@ const writeUSSchema: Schema = new Schema(
     {
         user_id: {
             type: Schema.Types.ObjectId,
-            ref: "users",
+            ref: "user",
             required: true,
         },
         name: {

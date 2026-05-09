@@ -5,7 +5,7 @@ const raiseConcernSchema: Schema = new Schema(
     {
         user_id: {
             type: Schema.Types.ObjectId,
-            ref: "users",
+            ref: "user",
             required: true,
         },
         booking_id: {

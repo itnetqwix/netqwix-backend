@@ -25,11 +25,11 @@ const savedSessionsSchema: Schema = new Schema(
     },
     trainer: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "user",
     },
     trainee: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "user",
     },
     trainee_name: {
       type: String,

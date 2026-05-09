@@ -5,7 +5,7 @@ const scheduleInventorySchema: Schema = new Schema(
   {
     trainer_id: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "user",
     },
     available_slots: [
       {
