@@ -272,4 +272,21 @@ export class AdminController {
       return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
     }
   };
+
+  public getDashboardMetrics = async (req: Request, res: Response) => {
+    try {
+      const result: ResponseBuilder = await this.adminService.getDashboardMetrics(req["authUser"]);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json({
+        status: result.status,
+        error: result.error,
+        code: CONSTANCE.RES_CODE.error.badRequest,
+      });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
 }

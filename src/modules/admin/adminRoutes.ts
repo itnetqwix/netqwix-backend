@@ -24,5 +24,6 @@ route.get("/user-reviews/:id", adminController.getUserReviews);
 route.get("/user-assets/:id", adminController.getUserAssets);
 route.delete("/entity/:entityType/:entityId", adminController.deleteEntity);
 route.get("/audit-logs", adminController.getAuditLogs);
+route.get("/dashboard-metrics", adminController.getDashboardMetrics);
 
 export const adminRoute: Router = route;

@@ -198,8 +198,10 @@ export class userController {
   public getAllTrainee = async (req, res) => {
     try {
       if (req["authUser"]) {
+        const searchTerm = req?.query?.search ? String(req.query.search) : undefined;
         const result: ResponseBuilder = await this.userService.getAllTrainee(
-          req.authUser
+          req.authUser,
+          searchTerm
         );
         if (result.status !== CONSTANCE.FAIL) {
           res.status(result.code).json(result);
@@ -219,8 +221,10 @@ export class userController {
   public getAllTrainers = async (req, res) => {
     try {
       if (req["authUser"]) {
+        const searchTerm = req?.query?.search ? String(req.query.search) : undefined;
         const result: ResponseBuilder = await this.userService.getAllTrainers(
-          req.authUser
+          req.authUser,
+          searchTerm
         );
         if (result.status !== CONSTANCE.FAIL) {
           res.status(result.code).json(result);

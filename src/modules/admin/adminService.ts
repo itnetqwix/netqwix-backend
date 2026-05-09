@@ -5,6 +5,7 @@ import * as l10n from "jm-ez-l10n";
 import JWT from "../../Utils/jwt";
 import admin_setting from "../../model/default_admin_setting.schema";
 import { AccountType } from "../auth/authEnum";
+import { BOOKED_SESSIONS_STATUS } from "../../config/constance";
 import user from "../../model/user.schema";
 import booked_session from "../../model/booked_sessions.schema";
 import clip from "../../model/clip.schema";
@@ -169,16 +170,21 @@ export class AdminService {
       if (!mongoose.isValidObjectId(userId)) return ResponseBuilder.badRequest("Invalid user id");
 
       const { page, limit, skip, sortBy, sortOrder, search, status } = this.getQueryOptions(query);
-      const lessonQuery: any = { $or: [{ trainer_id: userId }, { trainee_id: userId }] };
-      if (status) lessonQuery.status = status;
-      if (search) {
-        lessonQuery.$or = [
-          { trainer_id: userId },
-          { trainee_id: userId },
-          { session_start_time: { $regex: search, $options: "i" } },
-          { session_end_time: { $regex: search, $options: "i" } },
-        ];
+      const userScope = { $or: [{ trainer_id: userId }, { trainee_id: userId }] };
+      const filters: any[] = [userScope];
+      if (status) filters.push({ status });
+      if (search && String(search).trim()) {
+        const s = String(search).trim();
+        filters.push({
+          $or: [
+            { session_start_time: { $regex: s, $options: "i" } },
+            { session_end_time: { $regex: s, $options: "i" } },
+            { status: { $regex: s, $options: "i" } },
+            { payment_intent_id: { $regex: s, $options: "i" } },
+          ],
+        });
       }
+      const lessonQuery: any = filters.length === 1 ? filters[0] : { $and: filters };
       const lessons = await booked_session
         .find(lessonQuery)
         .populate("trainer_id", "fullname email account_type")
@@ -201,12 +207,16 @@ export class AdminService {
       if (guard) return guard;
       if (!mongoose.isValidObjectId(userId)) return ResponseBuilder.badRequest("Invalid user id");
 
-      const { page, limit, skip, sortBy, sortOrder, status } = this.getQueryOptions(query);
-      const reviewQuery: any = {
-        $or: [{ trainer_id: userId }, { trainee_id: userId }],
-        ratings: { $ne: null },
-      };
-      if (status) reviewQuery.status = status;
+      const { page, limit, skip, sortBy, sortOrder, status, search } = this.getQueryOptions(query);
+      const filters: any[] = [{ $or: [{ trainer_id: userId }, { trainee_id: userId }] }, { ratings: { $ne: null } }];
+      if (status) filters.push({ status });
+      if (search && String(search).trim()) {
+        const s = String(search).trim();
+        filters.push({
+          $or: [{ status: { $regex: s, $options: "i" } }],
+        });
+      }
+      const reviewQuery: any = filters.length === 1 ? filters[0] : { $and: filters };
       const lessons = await booked_session
         .find(reviewQuery)
         .populate("trainer_id", "fullname email account_type")
@@ -239,33 +249,50 @@ export class AdminService {
       if (!mongoose.isValidObjectId(userId)) return ResponseBuilder.badRequest("Invalid user id");
 
       const { page, limit, skip, sortBy, sortOrder, search } = this.getQueryOptions(query);
+      const section = String(query?.section || "all").toLowerCase();
+      const wantClips = section === "all" || section === "clips";
+      const wantPlans = section === "all" || section === "plans";
+
       const clipsQuery: any = { user_id: userId, status: true };
-      if (search) clipsQuery.title = { $regex: search, $options: "i" };
+      if (search && String(search).trim()) clipsQuery.title = { $regex: String(search).trim(), $options: "i" };
       const reportsQuery: any = {
         $or: [{ trainer: userId }, { trainee: userId }],
         status: true,
       };
-      if (search) reportsQuery.title = { $regex: search, $options: "i" };
+      if (search && String(search).trim()) reportsQuery.title = { $regex: String(search).trim(), $options: "i" };
       const savedQuery: any = {
         $or: [{ trainer: userId }, { trainee: userId }],
         status: true,
       };
-      if (search) savedQuery.file_name = { $regex: search, $options: "i" };
+      if (search && String(search).trim()) savedQuery.file_name = { $regex: String(search).trim(), $options: "i" };
+
+      const clipPromise = wantClips
+        ? clip.find(clipsQuery).sort(this.getSortSpec(sortBy, sortOrder)).skip(skip).limit(limit).lean()
+        : Promise.resolve([]);
+      const reportsPromise = wantPlans
+        ? Report.find(reportsQuery)
+            .populate("trainer", "fullname email account_type")
+            .populate("trainee", "fullname email account_type")
+            .populate("sessions", "booked_date status session_start_time session_end_time")
+            .sort(this.getSortSpec(sortBy, sortOrder))
+            .skip(skip)
+            .limit(limit)
+            .lean()
+        : Promise.resolve([]);
+      const savedPromise = wantPlans
+        ? saved_session.find(savedQuery).sort(this.getSortSpec(sortBy, sortOrder)).skip(skip).limit(limit).lean()
+        : Promise.resolve([]);
+      const clipsCountPromise = wantClips ? clip.countDocuments(clipsQuery) : Promise.resolve(0);
+      const reportsCountPromise = wantPlans ? Report.countDocuments(reportsQuery) : Promise.resolve(0);
+      const savedCountPromise = wantPlans ? saved_session.countDocuments(savedQuery) : Promise.resolve(0);
 
       const [clips, reports, savedSessions, clipsTotal, reportsTotal, savedTotal] = await Promise.all([
-        clip.find(clipsQuery).sort(this.getSortSpec(sortBy, sortOrder)).skip(skip).limit(limit).lean(),
-        Report.find(reportsQuery)
-        .populate("trainer", "fullname email account_type")
-        .populate("trainee", "fullname email account_type")
-        .populate("sessions", "booked_date status session_start_time session_end_time")
-        .sort(this.getSortSpec(sortBy, sortOrder))
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-        saved_session.find(savedQuery).sort(this.getSortSpec(sortBy, sortOrder)).skip(skip).limit(limit).lean(),
-        clip.countDocuments(clipsQuery),
-        Report.countDocuments(reportsQuery),
-        saved_session.countDocuments(savedQuery),
+        clipPromise,
+        reportsPromise,
+        savedPromise,
+        clipsCountPromise,
+        reportsCountPromise,
+        savedCountPromise,
       ]);
 
       return ResponseBuilder.data(
@@ -359,12 +386,23 @@ export class AdminService {
       const guard = this.ensureAdmin(authUser);
       if (guard) return guard;
 
-      const query: any = {};
+      const { page, limit, skip, sortBy, sortOrder, search } = this.getQueryOptions(queryOptions);
+      const filters: any[] = [];
       if (userId && mongoose.isValidObjectId(userId)) {
-        query.target_user_id = userId;
+        filters.push({ target_user_id: userId });
       }
-
-      const { page, limit, skip, sortBy, sortOrder } = this.getQueryOptions(queryOptions);
+      if (search && String(search).trim()) {
+        const s = String(search).trim();
+        filters.push({
+          $or: [
+            { reason: { $regex: s, $options: "i" } },
+            { entity_id: { $regex: s, $options: "i" } },
+            { action: { $regex: s, $options: "i" } },
+            { entity_type: { $regex: s, $options: "i" } },
+          ],
+        });
+      }
+      const query: any = filters.length === 0 ? {} : filters.length === 1 ? filters[0] : { $and: filters };
       const logs = await admin_audit
         .find(query)
         .populate("admin_id", "fullname email account_type")
@@ -379,6 +417,82 @@ export class AdminService {
     } catch (error) {
       return ResponseBuilder.error(error, l10n.t("ERR_INTERNAL_SERVER"));
     }
+  }
+
+  public async getDashboardMetrics(authUser: any): Promise<ResponseBuilder> {
+    const guard = this.ensureAdmin(authUser);
+    if (guard) return guard;
+    try {
+      const data = await this.buildDashboardMetrics();
+      return ResponseBuilder.data(data, "Dashboard metrics fetched");
+    } catch (error) {
+      return ResponseBuilder.error(error, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
+  /** Used by Socket.IO to push updates to admins (server-only). */
+  public async getDashboardMetricsInternal(): Promise<any | null> {
+    try {
+      return await this.buildDashboardMetrics();
+    } catch (error) {
+      this.log.error("getDashboardMetricsInternal", error);
+      return null;
+    }
+  }
+
+  private async buildDashboardMetrics() {
+    const paidMatch: Record<string, unknown> = {
+      payment_intent_id: { $exists: true, $nin: [null, ""] },
+      status: { $ne: BOOKED_SESSIONS_STATUS.cancel },
+    };
+    const sessionMatch: Record<string, unknown> = {
+      status: { $ne: BOOKED_SESSIONS_STATUS.cancel },
+    };
+
+    const [
+      revenueAgg,
+      totalOrders,
+      totalSessions,
+      totalImpressions,
+      completedSessions,
+      trainersCount,
+      traineesCount,
+    ] = await Promise.all([
+      booked_session.aggregate([
+        { $match: paidMatch },
+        {
+          $group: {
+            _id: null,
+            total: {
+              $sum: {
+                $convert: { input: "$amount", to: "double", onError: 0, onNull: 0 },
+              },
+            },
+          },
+        },
+      ]),
+      booked_session.countDocuments(paidMatch),
+      booked_session.countDocuments(sessionMatch),
+      clip.countDocuments({ status: true }),
+      booked_session.countDocuments({ status: BOOKED_SESSIONS_STATUS.completed }),
+      user.countDocuments({ account_type: AccountType.TRAINER }),
+      user.countDocuments({ account_type: AccountType.TRAINEE }),
+    ]);
+
+    const totalRevenue = revenueAgg[0]?.total || 0;
+    const overviewCompletionPercent =
+      totalSessions > 0 ? Math.min(100, Math.round((completedSessions / totalSessions) * 100)) : 0;
+
+    return {
+      totalRevenue,
+      totalOrders,
+      totalSessions,
+      totalImpressions,
+      overviewCompletionPercent,
+      trainersCount,
+      traineesCount,
+      bookingsCompleted: completedSessions,
+    };
   }
 
 }

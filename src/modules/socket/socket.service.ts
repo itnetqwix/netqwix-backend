@@ -247,23 +247,20 @@ async function updateUserActivity(socket) {
           trainer_id: trainerId,
         });
 
-        // console.log(
-        //   "checkIfUserIsAlreadyAdded=========",
-        //   checkIfUserIsAlreadyAdded
-        // );
-
         if (checkIfUserIsAlreadyAdded) {
           await onlineUser.updateOne(
             { trainer_id: trainerId },
             { $set: { last_activity_time: Date.now() } }
           );
         } else {
-          const createNewOnlineUser = await new onlineUser({
+          await new onlineUser({
             trainer_id: trainerId,
             last_activity_time: Date.now(),
           }).save();
         }
       }
+    } else if (socket?.user?._doc?.account_type === "Trainee") {
+      activeUsers[userId] = { ...socket.user._doc };
     }
 
     // Broadcast the updated active users list to all connected clients
@@ -282,6 +279,8 @@ async function updateUserActivity(socket) {
     socket.on("disconnect", async () => {
       if (!activeUsers[userId]) return;
 
+      const wasTrainer = activeUsers[userId]?.account_type === "Trainer";
+
       // Remove the user from the active users list
       delete activeUsers[userId];
 
@@ -292,15 +291,16 @@ async function updateUserActivity(socket) {
         userId,
       });
 
-      // Update the user's last_activity_time instead of deleting them
-      try {
-        await onlineUser.updateOne(
-          { trainer_id: userId },
-          { $set: { last_activity_time: Date.now() } },
-          { upsert: true } // Ensures the document exists or creates it
-        );
-      } catch (error) {
-        console.error("Error updating last_activity_time on disconnect:", error);
+      if (wasTrainer) {
+        try {
+          await onlineUser.updateOne(
+            { trainer_id: userId },
+            { $set: { last_activity_time: Date.now() } },
+            { upsert: true }
+          );
+        } catch (error) {
+          console.error("Error updating last_activity_time on disconnect:", error);
+        }
       }
 
       // Lesson leave / timer pause / PARTICIPANT_LEFT are handled in handleSocketEvents

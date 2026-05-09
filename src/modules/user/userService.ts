@@ -752,10 +752,18 @@ export class UserService {
     }
   }
 
-  public async getAllTrainee(userInfo: any) {
+  public async getAllTrainee(userInfo: any, searchTerm?: string) {
     try {
-      const { _id } = userInfo;
-      var trainee = await user.find({ account_type: AccountType.TRAINEE });
+      const filter: any = { account_type: AccountType.TRAINEE };
+      if (searchTerm && String(searchTerm).trim()) {
+        const s = String(searchTerm).trim();
+        filter.$or = [
+          { fullname: { $regex: s, $options: "i" } },
+          { email: { $regex: s, $options: "i" } },
+          { mobile_no: { $regex: s, $options: "i" } },
+        ];
+      }
+      const trainee = await user.find(filter);
       if (!trainee) {
         return ResponseBuilder.data(trainee, "Trainee not found");
       }
@@ -765,10 +773,18 @@ export class UserService {
     }
   }
 
-  public async getAllTrainers(userInfo: any) {
+  public async getAllTrainers(userInfo: any, searchTerm?: string) {
     try {
-      const { _id } = userInfo;
-      var trainer = await user.find({ account_type: AccountType.TRAINER });
+      const filter: any = { account_type: AccountType.TRAINER };
+      if (searchTerm && String(searchTerm).trim()) {
+        const s = String(searchTerm).trim();
+        filter.$or = [
+          { fullname: { $regex: s, $options: "i" } },
+          { email: { $regex: s, $options: "i" } },
+          { mobile_no: { $regex: s, $options: "i" } },
+        ];
+      }
+      const trainer = await user.find(filter);
       if (!trainer) {
         return ResponseBuilder.data(trainer, "Trainer not found");
       }
