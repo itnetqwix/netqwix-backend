@@ -37,10 +37,27 @@ export class AuthService {
       hashPassword = await this.bcrypt.getHashedPassword(createUser.password);
     }
 
-    if (createUser.account_type === AccountType.TRAINER) {
-      account = await stripeHelperController.createAccount(createUser);
-    } else if (createUser.account_type === AccountType.TRAINEE) {
-      account = await stripeHelperController.createCustomer(createUser);
+    // Stripe customer/account creation is best-effort during signup.
+    // If Stripe is unreachable or the API key is IP-restricted, the user
+    // can complete onboarding later via the is_registered_with_stript flag.
+    try {
+      if (createUser.account_type === AccountType.TRAINER) {
+        account = await stripeHelperController.createAccount(createUser);
+      } else if (createUser.account_type === AccountType.TRAINEE) {
+        account = await stripeHelperController.createCustomer(createUser);
+      }
+      if (account && !account.id) {
+        // createAccount returns the raw error object on failure rather than throwing
+        this.log.warn(
+          `Stripe ${createUser.account_type} creation failed for ${createUser.email}: ${account?.message || JSON.stringify(account)}`
+        );
+        account = undefined;
+      }
+    } catch (stripeErr) {
+      this.log.error(
+        `Stripe ${createUser.account_type} creation threw for ${createUser.email}: ${stripeErr?.message || stripeErr}`
+      );
+      account = undefined;
     }
 
     const global_commission = await admin_setting.findOne();
