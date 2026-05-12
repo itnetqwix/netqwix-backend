@@ -213,9 +213,18 @@ export class ReportService {
       const reportData = report.toObject ? report.toObject() : report;
       reportData.addLogoToImages = false;
       return ResponseBuilder.data(reportData, l10n.t("REPORT_GET"));
-    } else {
-      return ResponseBuilder.errorMessage(l10n.t("ERR_INTERNAL_SERVER"));
     }
+    // No row yet (common at session start / instant lesson) — same shape as a real report, 200 OK
+    return ResponseBuilder.data(
+      {
+        reportData: [],
+        sessions: data?.sessions,
+        trainee: data?.trainee,
+        trainer: data?.trainer,
+        addLogoToImages: false,
+      },
+      l10n.t("REPORT_GET")
+    );
   }
 
   // public async getAllReport(data: any): Promise<ResponseBuilder> {
