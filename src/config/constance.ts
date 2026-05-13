@@ -123,6 +123,13 @@ export class EVENTS {
     TRAINEE_CANCELLED: 'INSTANT_LESSON_TRAINEE_CANCELLED',
     SESSION_RECORDING: 'INSTANT_LESSON_SESSION_RECORDING',
   }
+
+  /** Chat — must match `nq-mobile` ChatRoomScreen socket events. */
+  public static readonly CHAT = {
+    MESSAGE: "CHAT_MESSAGE",
+    JOIN: "JOIN_CHAT",
+    LEAVE: "LEAVE_CHAT",
+  } as const;
   public static readonly LESSON_TIMER = {
     WARNING: 'LESSON_TIME_WARNING',
     ENDED: 'LESSON_TIME_ENDED',

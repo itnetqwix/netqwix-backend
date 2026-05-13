@@ -9,6 +9,7 @@ import { transactionRoute } from "./src/modules/transaction/transactionRoutes";
 import { commonRoute } from "./src/modules/common/commonRoutes";
 import { adminRoute } from "./src/modules/admin/adminRoutes";
 import { notificationRoute } from "./src/modules/notifications/notificationsRoutes";
+import chatRoute from "./src/modules/chat/chatRoutes";
 export class Routes {
   protected app: express.Application;
   constructor() {}
@@ -25,6 +26,7 @@ export class Routes {
     router.use("/report", reportRoute);
     router.use("/admin", adminRoute);
     router.use("/notifications", notificationRoute);
+    router.use("/chat", chatRoute);
     router.get("/", (req, res) => {
       res.send("Welcome to NetQwix :) ");
     });

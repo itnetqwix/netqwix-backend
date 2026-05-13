@@ -989,6 +989,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
   listenNotificationEvents(socket);
   listenInstantLessonEvents(socket);
   listenBookingEvents(socket);
+  listenChatEvents(socket);
 };
 
 const listenNotificationEvents = (socket) => {
@@ -1233,6 +1234,53 @@ const listenBookingEvents = (socket) => {
     });
   } catch (err) {
     console.error(`[BOOKING] Error setting up booking event listeners:`, err);
+  }
+};
+
+// Chat Event Handlers
+const listenChatEvents = (socket) => {
+  try {
+    socket.on(EVENTS.CHAT.JOIN, (payload: any) => {
+      try {
+        const { conversationId } = payload || {};
+        if (!conversationId) return;
+        socket.join(`chat:${conversationId}`);
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.LEAVE, (payload: any) => {
+      try {
+        const { conversationId } = payload || {};
+        if (!conversationId) return;
+        socket.leave(`chat:${conversationId}`);
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.MESSAGE, (payload: any) => {
+      try {
+        const { conversationId, receiverId } = payload || {};
+        if (!conversationId) return;
+
+        // Broadcast to the conversation room (excluding sender)
+        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.MESSAGE, payload);
+
+        // Also send directly to receiver's socket in case they haven't joined the room
+        if (receiverId) {
+          const receiverSid = MemCache.getDetail(process.env.SOCKET_CONFIG, String(receiverId));
+          if (receiverSid) {
+            socket.to(String(receiverSid)).emit(EVENTS.CHAT.MESSAGE, payload);
+          }
+        }
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+  } catch (err) {
+    console.error(`[CHAT] Error setting up chat event listeners:`, err);
   }
 };
 

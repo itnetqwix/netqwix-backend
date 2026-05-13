@@ -98,13 +98,22 @@ export class bookInstantMeetingModal extends model {
   @IsString()
   public coupon_code?: string;
 
+  @IsOptional()
+  @IsString()
+  public payment_intent_id?: string;
+
+  @IsOptional()
+  public charging_price?: number;
+
   constructor(body) {
     super();
-    const { trainer_id, booked_date, duration, coupon_code } = body;
+    const { trainer_id, booked_date, duration, coupon_code, payment_intent_id, charging_price } = body;
     this.trainer_id = trainer_id;
     this.booked_date = booked_date;
     this.duration = duration;
     this.coupon_code = coupon_code;
+    this.payment_intent_id = payment_intent_id;
+    this.charging_price = charging_price;
   }
 }
 

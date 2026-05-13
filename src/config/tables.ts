@@ -17,4 +17,6 @@ export class Tables {
     public static readonly admin_audit = "admin_audit";
     public static readonly user_activity = "user_activity";
     public static readonly user_presence = "user_presence";
+    public static readonly chat_message = "chat_message";
+    public static readonly chat_conversation = "chat_conversation";
 }

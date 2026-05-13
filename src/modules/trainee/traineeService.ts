@@ -497,7 +497,7 @@ export class TraineeService {
 
       // Instant lessons stay "booked" until the trainer accepts the socket request;
       // socket handler promotes to "confirmed" so trainees cannot enter the meeting early.
-      const userObj = new booked_session({
+      const bookingFields: Record<string, any> = {
         trainer_id,
         trainee_id: _id,
         status: BOOKED_SESSIONS_STATUS.BOOKED,
@@ -507,7 +507,11 @@ export class TraineeService {
         start_time,
         end_time,
         is_instant: true,
-      });
+      };
+      if (payload.payment_intent_id) bookingFields.payment_intent_id = payload.payment_intent_id;
+      if (payload.charging_price != null && payload.charging_price > 0) bookingFields.amount = String(payload.charging_price);
+
+      const userObj = new booked_session(bookingFields);
 
       const bookingData = await userObj.save();
       void recordUserActivityMany(
