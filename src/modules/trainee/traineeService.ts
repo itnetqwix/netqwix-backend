@@ -469,6 +469,10 @@ export class TraineeService {
   ): Promise<ResponseBuilder> {
     const { trainer_id, duration: durationMinutes } = payload;
     try {
+      // Look up the trainer to verify hourly rate and enforce payment
+      const trainerDoc = await user.findById(trainer_id).select("extraInfo.hourly_rate stripe_account_id commission").lean();
+      const hourlyRate = Number(trainerDoc?.extraInfo?.hourly_rate ?? 0);
+
       // Use server UTC "now" so instant lesson works for any trainee/trainer timezone
       const nowUtc = new Date();
       const booked_date = payload.booked_date ? new Date(payload.booked_date) : nowUtc;
@@ -477,6 +481,14 @@ export class TraineeService {
       const duration = durationMinutes && [15, 30, 60, 120].includes(Number(durationMinutes))
         ? Number(durationMinutes)
         : 30;
+
+      const expectedPrice = Number(((hourlyRate / 60) * duration).toFixed(2));
+
+      if (hourlyRate > 0 && expectedPrice > 0 && !payload.payment_intent_id) {
+        return ResponseBuilder.badRequest(
+          `This trainer charges $${hourlyRate}/hr. Please complete payment ($${expectedPrice.toFixed(2)}) before booking.`
+        );
+      }
 
       const session_start_time = DateFormat.addMinutes(
         booked_date,
@@ -495,6 +507,10 @@ export class TraineeService {
       const start_time = new Date(booked_date);
       const end_time = new Date(start_time.getTime() + duration * 60 * 1000);
 
+      const chargingPrice = payload.charging_price != null && payload.charging_price > 0
+        ? payload.charging_price
+        : expectedPrice;
+
       // Instant lessons stay "booked" until the trainer accepts the socket request;
       // socket handler promotes to "confirmed" so trainees cannot enter the meeting early.
       const bookingFields: Record<string, any> = {
@@ -509,7 +525,7 @@ export class TraineeService {
         is_instant: true,
       };
       if (payload.payment_intent_id) bookingFields.payment_intent_id = payload.payment_intent_id;
-      if (payload.charging_price != null && payload.charging_price > 0) bookingFields.amount = String(payload.charging_price);
+      if (chargingPrice > 0) bookingFields.amount = String(chargingPrice);
 
       const userObj = new booked_session(bookingFields);
 
