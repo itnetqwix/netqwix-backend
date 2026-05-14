@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { commonController } from "./commonController";
 import { ChatController } from "../chat/chatController";
+import { PromoCodeController } from "../promo-code/promoCodeController";
 import multer = require("multer");
 import fs = require("fs");
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
@@ -62,5 +63,9 @@ route.post("/chat-create-group", chatC.createGroup);
 route.get("/chat-policy", chatC.getChatPolicy);
 route.get("/chat-flagged", chatC.getFlaggedChats);
 route.post("/chat-flag-update", chatC.updateFlagStatus);
+
+const promoC = new PromoCodeController();
+route.post("/validate-promo", promoC.validate);
+route.get("/visible-promos", promoC.visiblePromos);
 
 export const commonRoute: Router = route;

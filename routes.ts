@@ -10,6 +10,8 @@ import { commonRoute } from "./src/modules/common/commonRoutes";
 import { adminRoute } from "./src/modules/admin/adminRoutes";
 import { notificationRoute } from "./src/modules/notifications/notificationsRoutes";
 import chatRoute from "./src/modules/chat/chatRoutes";
+import { promoCodeRoute } from "./src/modules/promo-code/promoCodeRoutes";
+import { broadcastRoute } from "./src/modules/broadcast/broadcastRoutes";
 export class Routes {
   protected app: express.Application;
   constructor() {}
@@ -27,6 +29,8 @@ export class Routes {
     router.use("/admin", adminRoute);
     router.use("/notifications", notificationRoute);
     router.use("/chat", chatRoute);
+    router.use("/admin/promo-codes", promoCodeRoute);
+    router.use("/admin/broadcasts", broadcastRoute);
     router.get("/", (req, res) => {
       res.send("Welcome to NetQwix :) ");
     });

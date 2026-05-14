@@ -27,6 +27,7 @@ import availability from "../../model/availability.schema";
 import { DateTime } from "luxon";
 import SMSService from "../../services/sms-service";
 import { timeZoneAbbreviations } from "../../Utils/constant";
+import { PromoCodeService } from "../promo-code/promoCodeService";
 
 export class TraineeService {
   public log = log.getLogger();
@@ -294,7 +295,7 @@ export class TraineeService {
         !payload.booked_date ||
         !payload.session_start_time ||
         !payload.session_end_time ||
-        !payload.charging_price ||
+        (payload.charging_price == null) ||
         !payload.time_zone
       ) {
         const validationError: Failure = {
@@ -356,10 +357,35 @@ export class TraineeService {
         if (conflictMsg) return ResponseBuilder.badRequest(conflictMsg);
       }
 
+      let promoDiscountAmount = 0;
+      let appliedPromoCode: string | null = null;
+      const originalPrice = Number(payload.charging_price);
+
+      if (payload.coupon_code && typeof payload.coupon_code === "string" && payload.coupon_code.trim()) {
+        const promoService = new PromoCodeService();
+        const promoResult = await promoService.validatePromoCode(
+          payload.coupon_code,
+          _id,
+          "Trainee",
+          "scheduled",
+          originalPrice
+        );
+        if (promoResult.valid) {
+          promoDiscountAmount = promoResult.discount_amount!;
+          appliedPromoCode = payload.coupon_code.trim().toUpperCase();
+        }
+      }
+
+      const finalPrice = Number(Math.max(originalPrice - promoDiscountAmount, 0).toFixed(2));
+
       const sessionObj = new booked_session({
         ...payload,
         trainee_id: _id,
         time_zone: payload.time_zone,
+        charging_price: finalPrice,
+        amount: String(finalPrice),
+        original_amount: String(originalPrice),
+        ...(appliedPromoCode && { coupon_code: appliedPromoCode, discount_applied: promoDiscountAmount }),
         ...(start_time && { start_time }),
         ...(end_time && { end_time }),
       });
@@ -447,6 +473,17 @@ export class TraineeService {
         }
       }
       var bookingData = await sessionObj.save();
+
+      if (appliedPromoCode && promoDiscountAmount > 0) {
+        const promoService = new PromoCodeService();
+        void promoService.applyPromoCode(
+          appliedPromoCode,
+          _id,
+          String(bookingData._id),
+          promoDiscountAmount
+        );
+      }
+
       void recordUserActivityMany(
         [String(bookingData.trainee_id), String(bookingData.trainer_id)],
         UserActivityEvent.BOOKING_CREATED,
@@ -454,7 +491,7 @@ export class TraineeService {
       );
       await user.updateOne(
         { _id: payload.trainer_id },
-        { $inc: { wallet_amount: +payload.charging_price || 0 } }
+        { $inc: { wallet_amount: finalPrice || 0 } }
       );
       
       // Emit booking created event
@@ -507,12 +544,23 @@ export class TraineeService {
 
       const expectedPrice = Number(((hourlyRate / 60) * duration).toFixed(2));
 
-      const couponIsFree = typeof payload.coupon_code === "string" && payload.coupon_code.trim().toLowerCase() === "free";
-      const promoMadeFree = couponIsFree || (payload.charging_price != null && Number(payload.charging_price) === 0);
-      if (hourlyRate > 0 && expectedPrice > 0 && !payload.payment_intent_id && !promoMadeFree) {
-        return ResponseBuilder.badRequest(
-          `This trainer charges $${hourlyRate}/hr. Please complete payment ($${expectedPrice.toFixed(2)}) before booking.`
+      let promoDiscountAmount = 0;
+      let appliedPromoCode: string | null = null;
+      const promoMadeFree = payload.charging_price != null && Number(payload.charging_price) === 0;
+
+      if (payload.coupon_code && typeof payload.coupon_code === "string" && payload.coupon_code.trim()) {
+        const promoService = new PromoCodeService();
+        const promoResult = await promoService.validatePromoCode(
+          payload.coupon_code,
+          _id,
+          "Trainee",
+          "instant",
+          expectedPrice
         );
+        if (promoResult.valid) {
+          promoDiscountAmount = promoResult.discount_amount!;
+          appliedPromoCode = payload.coupon_code.trim().toUpperCase();
+        }
       }
 
       const session_start_time = DateFormat.addMinutes(
@@ -535,12 +583,11 @@ export class TraineeService {
       const conflictMsg = await this.checkBookingConflict(trainer_id, start_time, end_time);
       if (conflictMsg) return ResponseBuilder.badRequest(conflictMsg);
 
-      const chargingPrice = payload.charging_price != null && payload.charging_price > 0
+      const basePrice = payload.charging_price != null && payload.charging_price > 0
         ? payload.charging_price
         : expectedPrice;
+      const chargingPrice = Number(Math.max(basePrice - promoDiscountAmount, 0).toFixed(2));
 
-      // Instant lessons stay "booked" until the trainer accepts the socket request;
-      // socket handler promotes to "confirmed" so trainees cannot enter the meeting early.
       const bookingFields: Record<string, any> = {
         trainer_id,
         trainee_id: _id,
@@ -553,11 +600,27 @@ export class TraineeService {
         is_instant: true,
       };
       if (payload.payment_intent_id) bookingFields.payment_intent_id = payload.payment_intent_id;
-      if (chargingPrice > 0) bookingFields.amount = String(chargingPrice);
+      if (basePrice > 0) bookingFields.original_amount = String(basePrice);
+      bookingFields.amount = String(chargingPrice);
+      if (appliedPromoCode) {
+        bookingFields.coupon_code = appliedPromoCode;
+        bookingFields.discount_applied = promoDiscountAmount;
+      }
 
       const userObj = new booked_session(bookingFields);
 
       const bookingData = await userObj.save();
+
+      if (appliedPromoCode && promoDiscountAmount > 0) {
+        const promoService = new PromoCodeService();
+        void promoService.applyPromoCode(
+          appliedPromoCode,
+          _id,
+          String(bookingData._id),
+          promoDiscountAmount
+        );
+      }
+
       void recordUserActivityMany(
         [String(bookingData.trainee_id), String(bookingData.trainer_id)],
         UserActivityEvent.BOOKING_CREATED,

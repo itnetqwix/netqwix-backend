@@ -67,6 +67,43 @@ export class SendEmail {
     }
   };
 
+  public static sendRawEmailAsync = (
+    emails: string[],
+    subject: string,
+    html: string,
+    text: string = null
+  ): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      try {
+        const mailOptions = {
+          from: process.env.EMAIL_FROM,
+          html,
+          subject,
+          text,
+          to: emails,
+        };
+        const transportObj: any = {
+          auth: {
+            pass: process.env.EMAIL_PASSWORD,
+            user: process.env.EMAIL_USERNAME,
+          },
+          host: process.env.EMAIL_HOST,
+          port: +process.env.EMAIL_PORT,
+        };
+        const transporter = nodemailer.createTransport(transportObj);
+        transporter.sendMail(mailOptions, (err: any, info: any) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(info);
+          }
+        });
+      } catch (err) {
+        reject(err);
+      }
+    });
+  };
+
   private static getHtmlContent = (filePath: string, replaceData: any) => {
     const data = fs.readFileSync(filePath);
     let html = data.toString();

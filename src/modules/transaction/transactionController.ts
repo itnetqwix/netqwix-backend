@@ -22,8 +22,13 @@ export class transactionController {
           msg: "Invalid amount provided amount should be a positive number",
         });
       }
+      const payloadWithUser = {
+        ...req.body,
+        _userId: req["authUser"]?._id,
+        _userType: req["authUser"]?.account_type,
+      };
       const result: ResponseBuilder =
-        await this.transactionService.createPaymentIntent(req.body);
+        await this.transactionService.createPaymentIntent(payloadWithUser);
       switch (result.code) {
         case 200:
           return res

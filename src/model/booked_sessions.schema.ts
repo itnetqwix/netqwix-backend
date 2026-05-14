@@ -92,7 +92,18 @@ const bookedSessionsSchema: Schema = new Schema(
             type: Boolean,
             default: false,
         },
-
+        coupon_code: {
+            type: String,
+            default: null,
+        },
+        discount_applied: {
+            type: Number,
+            default: 0,
+        },
+        original_amount: {
+            type: String,
+            default: null,
+        },
     },
     { timestamps: true }
 );

@@ -34,6 +34,8 @@ let ioInstance: any = null; // Store io instance for emitting events from servic
 let emitBookingStatusUpdatedDelegate: ((bookingData: any) => Promise<void>) | null = null;
 
 // Set the io instance (called from socket init)
+export const getIo = () => ioInstance;
+
 export const setIoInstance = (io: any) => {
   ioInstance = io;
   
