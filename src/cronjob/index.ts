@@ -10,6 +10,9 @@ import booked_session from "../model/booked_sessions.schema";
 import { Utils } from "../Utils/Utils";
 import { SendEmail } from "../Utils/sendEmail";
 import onlineUser from "../model/online_user.schema";
+import { NotificationsService } from "../modules/notifications/notificationsService";
+
+const pushService = new NotificationsService();
 
   export const cronjobs = async () => {
     const job = cron.schedule("* * * * *", () => {
@@ -75,7 +78,8 @@ const processBookedSessions = async (
     },
   ];
   const matchedSessions = await booked_session.aggregate(pipeline);
-  // sendSessionReminderEmails(matchedSessions);
+  sendSessionReminderEmails(matchedSessions);
+  sendSessionPushReminders(matchedSessions);
 };
 
 const sendSessionReminderEmails = (matchedSessions: any[]) => {
@@ -118,6 +122,22 @@ const sendSessionReminderEmails = (matchedSessions: any[]) => {
   });
   return sessionReminders;
 };
+
+function sendSessionPushReminders(matchedSessions: any[]) {
+  for (const session of matchedSessions) {
+    const { userDetails } = session;
+    if (!userDetails?.length) continue;
+    const startTime = Utils.convertToAmPm(session.session_start_time);
+    for (const u of userDetails) {
+      void pushService.sendPushNotification(
+        String(u._id),
+        "Session Reminder",
+        `Your session starts at ${startTime}. Get ready!`,
+        { kind: "session_reminder", sessionId: String(session._id) }
+      );
+    }
+  }
+}
 
 async function cleanupInactiveUsers() {
  // Define the inactivity threshold (2 hours in milliseconds)

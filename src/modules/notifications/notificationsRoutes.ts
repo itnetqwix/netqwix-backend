@@ -20,5 +20,7 @@ route.get('/', notificationsController.getNotifications);
 route.get("/get-public-key", notificationsController.getPublicKey);
 route.post("/subscription", notificationsController.getSubscription);
 route.patch('/update', notificationsController.updateNotificationsStatus);
+route.post("/register-push-token", notificationsController.registerPushToken);
+route.delete("/unregister-push-token/:deviceId", notificationsController.unregisterPushToken);
 
 export const notificationRoute: Router = route;

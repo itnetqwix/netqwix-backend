@@ -23,6 +23,7 @@ import user from "../../model/user.schema";
 import { CovertTimeAccordingToTimeZone, isOverlap, Utils } from "../../Utils/Utils";
 import * as mongoose from "mongoose";
 import { Failure } from "../../helpers/error";
+import availability from "../../model/availability.schema";
 import { DateTime } from "luxon";
 import SMSService from "../../services/sms-service";
 import { timeZoneAbbreviations } from "../../Utils/constant";
@@ -265,6 +266,23 @@ export class TraineeService {
     }
   };
 
+  private async checkBookingConflict(
+    trainer_id: string,
+    start: Date,
+    end: Date
+  ): Promise<string | null> {
+    const conflict = await booked_session.findOne({
+      trainer_id,
+      status: { $nin: [BOOKED_SESSIONS_STATUS.cancel] },
+      start_time: { $lt: end },
+      end_time: { $gt: start },
+    }).lean();
+    if (conflict) {
+      return "This trainer already has a booking during this time slot. Please choose a different time.";
+    }
+    return null;
+  }
+
   public async bookSession(
     payload: bookSessionModal,
     _id: string
@@ -331,6 +349,11 @@ export class TraineeService {
         }
       } catch (_e) {
         // Non-fatal: fall back to null so existing behaviour is preserved
+      }
+
+      if (start_time && end_time) {
+        const conflictMsg = await this.checkBookingConflict(payload.trainer_id, start_time, end_time);
+        if (conflictMsg) return ResponseBuilder.badRequest(conflictMsg);
       }
 
       const sessionObj = new booked_session({
@@ -507,6 +530,9 @@ export class TraineeService {
       const start_time = new Date(booked_date);
       const end_time = new Date(start_time.getTime() + duration * 60 * 1000);
 
+      const conflictMsg = await this.checkBookingConflict(trainer_id, start_time, end_time);
+      if (conflictMsg) return ResponseBuilder.badRequest(conflictMsg);
+
       const chargingPrice = payload.charging_price != null && payload.charging_price > 0
         ? payload.charging_price
         : expectedPrice;
@@ -535,6 +561,16 @@ export class TraineeService {
         UserActivityEvent.BOOKING_CREATED,
         { sessionId: String(bookingData._id), kind: "instant" }
       );
+
+      void availability.updateMany(
+        {
+          trainer_id,
+          status: false,
+          start_time: { $lt: end_time },
+          end_time: { $gt: start_time },
+        },
+        { $set: { status: true } }
+      ).catch((e) => console.error("[BOOKING] Error marking availability:", e));
 
       // Emit booking created event for instant lesson (trainer sees in upcoming / gets popup)
       try {

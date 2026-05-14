@@ -16,6 +16,9 @@ import mongoose from "mongoose";
 import booked_session from "../../model/booked_sessions.schema";
 import { s3, S3_BUCKET } from "../../Utils/s3Client";
 import { touchUserPresence } from "../../helpers/userActivity";
+import { NotificationsService } from "../notifications/notificationsService";
+
+const pushService = new NotificationsService();
 const logoPath = path.resolve(__dirname, "../../assets/netqwix_logo.png");
 
 //NOTE -  Set VAPID details
@@ -1038,6 +1041,15 @@ const listenNotificationEvents = (socket) => {
           console.error("Error sending push notification:", error);
         }
       }
+
+      if (!toUserSocketId && receiverId) {
+        void pushService.sendPushNotification(
+          receiverId,
+          title || "NetQwix",
+          description || "You have a new notification",
+          { kind: "notification", bookingInfo }
+        );
+      }
     });
   } catch (err) {
     console.error(`Error while listening to notification event:`, err);
@@ -1069,6 +1081,13 @@ const listenInstantLessonEvents = (socket) => {
             expiresAt,
             lessonType,
           });
+        } else {
+          void pushService.sendPushNotification(
+            coachId,
+            "Instant Lesson Request",
+            `${traineeInfo?.fullname || "A trainee"} wants to start a ${duration || 30}-min lesson now!`,
+            { kind: "instant_lesson_request", lessonId, traineeId }
+          );
         }
       } catch (_err) {
         /* intentionally quiet — add app-level logging if needed */
@@ -1121,6 +1140,13 @@ const listenInstantLessonEvents = (socket) => {
             coachId,
             traineeId,
           });
+        } else {
+          void pushService.sendPushNotification(
+            traineeId,
+            "Lesson Accepted",
+            "Your trainer accepted the instant lesson. Tap to join!",
+            { kind: "instant_lesson_accept", lessonId, coachId }
+          );
         }
 
       } catch (_err) {
@@ -1144,6 +1170,13 @@ const listenInstantLessonEvents = (socket) => {
             coachId,
             traineeId,
           });
+        } else {
+          void pushService.sendPushNotification(
+            traineeId,
+            "Lesson Declined",
+            "The trainer declined your instant lesson request.",
+            { kind: "instant_lesson_decline", lessonId }
+          );
         }
       } catch (_err) {
         /* intentionally quiet */
@@ -1158,6 +1191,13 @@ const listenInstantLessonEvents = (socket) => {
         if (!lessonId) {
           return;
         }
+
+        try {
+          await booked_session.findOneAndUpdate(
+            { _id: lessonId, is_instant: true, status: BOOKED_SESSIONS_STATUS.BOOKED },
+            { $set: { status: BOOKED_SESSIONS_STATUS.cancel } }
+          );
+        } catch (_dbErr) { /* non-fatal */ }
 
         const coachSocketId = coachId ? MemCache.getDetail(process.env.SOCKET_CONFIG, coachId) : null;
         const traineeSocketId = traineeId ? MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId) : null;
@@ -1175,6 +1215,13 @@ const listenInstantLessonEvents = (socket) => {
             coachId,
             traineeId,
           });
+        } else if (traineeId) {
+          void pushService.sendPushNotification(
+            traineeId,
+            "Lesson Expired",
+            "Your instant lesson request expired. The trainer didn't respond in time.",
+            { kind: "instant_lesson_expire", lessonId }
+          );
         }
 
       } catch (_err) {

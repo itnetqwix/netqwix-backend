@@ -38,20 +38,78 @@ export class TrainerService {
         { trainer_id: user_id },
         schedulingSlots
       );
-      return ResponseBuilder.data(
-        schedulingSlots,
-        l10n.t("SCHEDULE_SLOTS_UPDATED")
-      );
     } else {
       const schedulingSlotsObj = new schedule_inventory({
         ...schedulingSlots,
         trainer_id: user_id,
       });
       await schedulingSlotsObj.save();
-      return ResponseBuilder.data(
-        schedulingSlots,
-        l10n.t("SCHEDULE_SLOTS_UPDATED")
-      );
+    }
+
+    void this.generateAvailabilityFromSchedule(user_id);
+
+    return ResponseBuilder.data(
+      schedulingSlots,
+      l10n.t("SCHEDULE_SLOTS_UPDATED")
+    );
+  }
+
+  public async generateAvailabilityFromSchedule(trainer_id: string): Promise<void> {
+    try {
+      const schedule = await schedule_inventory.findOne({ trainer_id }).lean();
+      if (!schedule?.available_slots) return;
+
+      const dayMap: Record<string, number> = {
+        sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
+        thursday: 4, friday: 5, saturday: 6,
+      };
+
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      await availability.deleteMany({
+        trainer_id,
+        start_time: { $gte: todayStart },
+        status: false,
+      });
+
+      const docs: any[] = [];
+      for (let weekOffset = 0; weekOffset < 4; weekOffset++) {
+        for (const dayEntry of schedule.available_slots) {
+          const dayIdx = dayMap[(dayEntry.day || "").toLowerCase()];
+          if (dayIdx == null || !dayEntry.slots?.length) continue;
+
+          const todayDayIdx = todayStart.getDay();
+          let daysAhead = dayIdx - todayDayIdx + weekOffset * 7;
+          if (weekOffset === 0 && daysAhead < 0) continue;
+
+          const targetDate = new Date(todayStart);
+          targetDate.setDate(targetDate.getDate() + daysAhead);
+
+          for (const slot of dayEntry.slots) {
+            if (!slot.start_time || !slot.end_time) continue;
+            const [sh, sm] = slot.start_time.split(":").map(Number);
+            const [eh, em] = slot.end_time.split(":").map(Number);
+            if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) continue;
+
+            const start = new Date(targetDate);
+            start.setHours(sh, sm, 0, 0);
+            const end = new Date(targetDate);
+            end.setHours(eh, em, 0, 0);
+
+            if (end <= start) continue;
+            if (start <= now) continue;
+
+            docs.push({ trainer_id, start_time: start, end_time: end, status: false });
+          }
+        }
+      }
+
+      if (docs.length > 0) {
+        await availability.insertMany(docs);
+      }
+    } catch (err) {
+      console.error("[generateAvailabilityFromSchedule] Error:", err);
     }
   }
 
@@ -100,20 +158,18 @@ export class TrainerService {
     var start_time = data?.start_time ? data?.start_time : firstDayOfMonth;
     var end_time = data?.end_time ? data?.end_time : lastDayOfMonth;
 
+    const trainerId = typeof data?.trainer_id === "string"
+      ? new mongoose.Types.ObjectId(data.trainer_id)
+      : data?.trainer_id;
+
     var availabilities = await availability.aggregate([
       {
         '$match': {
           '$and': [
-            {
-              'start_time': {
-                '$gte': new Date(start_time)
-              }
-            }, {
-              'end_time': {
-                '$lte': new Date(end_time)
-              }
-            },
-            { "trainer_id": data?.trainer_id }
+            { 'start_time': { '$gte': new Date(start_time) } },
+            { 'end_time': { '$lte': new Date(end_time) } },
+            { "trainer_id": trainerId },
+            { "status": false },
           ]
         }
       },

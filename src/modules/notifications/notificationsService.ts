@@ -4,6 +4,7 @@ import * as webpush from 'web-push';
 import notification from "../../model/notifications.schema";
 import mongoose from "mongoose";
 import user from "../../model/user.schema";
+import push_token from "../../model/push_token.schema";
 
 
 
@@ -94,6 +95,74 @@ export class NotificationsService {
     catch(error){
         console.error("Error updating notification status:", error);
         return ResponseBuilder.errorMessage(l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
+  public async registerPushToken(userId: string, token: string, platform: string, deviceId: string, kind: string): Promise<ResponseBuilder> {
+    try {
+      if (!token || !deviceId) {
+        return ResponseBuilder.badRequest("token and deviceId are required");
+      }
+      await push_token.findOneAndUpdate(
+        { deviceId },
+        { userId, token, platform: platform || "android", kind: kind || "expo", updatedAt: new Date() },
+        { upsert: true, new: true }
+      );
+      return ResponseBuilder.successMessage("Push token registered");
+    } catch (error) {
+      console.error("Error registering push token:", error);
+      return ResponseBuilder.errorMessage(l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
+  public async unregisterPushToken(deviceId: string): Promise<ResponseBuilder> {
+    try {
+      if (!deviceId) return ResponseBuilder.badRequest("deviceId is required");
+      await push_token.deleteMany({ deviceId });
+      return ResponseBuilder.successMessage("Push token unregistered");
+    } catch (error) {
+      console.error("Error unregistering push token:", error);
+      return ResponseBuilder.errorMessage(l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
+  public async sendPushNotification(
+    userId: string,
+    title: string,
+    body: string,
+    data?: Record<string, unknown>
+  ): Promise<void> {
+    try {
+      const tokens = await push_token.find({ userId }).lean();
+      if (!tokens.length) return;
+
+      const messages = tokens.map((t: any) => ({
+        to: t.token,
+        sound: "default" as const,
+        title,
+        body,
+        data: data || {},
+        channelId: "lessons",
+      }));
+
+      const batchSize = 100;
+      for (let i = 0; i < messages.length; i += batchSize) {
+        const batch = messages.slice(i, i + batchSize);
+        try {
+          const res = await fetch("https://exp.host/--/api/v2/push/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(batch),
+          });
+          if (!res.ok) {
+            console.error("[PushNotification] Expo API error:", res.status, await res.text());
+          }
+        } catch (fetchErr) {
+          console.error("[PushNotification] Fetch error:", fetchErr);
+        }
+      }
+    } catch (err) {
+      console.error("[PushNotification] Error:", err);
     }
   }
 }

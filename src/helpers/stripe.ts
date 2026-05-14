@@ -45,7 +45,7 @@ export class StripeHelper {
 
       // Step 4: Create the payment intent parameters
       const stripe_config: any = {
-        amount: Utils.roundedAmount(finalAmount * 100),  // Amount in cents after applying discount
+        amount: Utils.roundedAmount(finalAmount * 100),
         currency: currency.toLowerCase(),
         description: "netquix - trainer fees",
         shipping: {
@@ -58,13 +58,17 @@ export class StripeHelper {
             country: "US",
           },
         },
-        payment_method_types: ['card', 'amazon_pay', 'cashapp', 'link'],  // Add or modify as needed
-        customer: customer ?? "",  // Optional customer ID
-        application_fee_amount: Math.round(finalAmount * Number(commission)),  // Application fee for the platform
-        transfer_data: {
-          destination: destination,  // The recipient of the transfer
-        },
+        automatic_payment_methods: { enabled: true },
       };
+
+      if (customer) {
+        stripe_config.customer = customer;
+      }
+
+      if (destination) {
+        stripe_config.application_fee_amount = Math.round(finalAmount * Number(commission));
+        stripe_config.transfer_data = { destination };
+      }
 
       console.log("=====> stripe_config", stripe_config);
       

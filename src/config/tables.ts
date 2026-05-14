@@ -19,4 +19,5 @@ export class Tables {
     public static readonly user_presence = "user_presence";
     public static readonly chat_message = "chat_message";
     public static readonly chat_conversation = "chat_conversation";
+    public static readonly push_token = "push_token";
 }
