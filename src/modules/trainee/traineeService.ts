@@ -507,7 +507,8 @@ export class TraineeService {
 
       const expectedPrice = Number(((hourlyRate / 60) * duration).toFixed(2));
 
-      const promoMadeFree = payload.charging_price != null && Number(payload.charging_price) === 0;
+      const couponIsFree = typeof payload.coupon_code === "string" && payload.coupon_code.trim().toLowerCase() === "free";
+      const promoMadeFree = couponIsFree || (payload.charging_price != null && Number(payload.charging_price) === 0);
       if (hourlyRate > 0 && expectedPrice > 0 && !payload.payment_intent_id && !promoMadeFree) {
         return ResponseBuilder.badRequest(
           `This trainer charges $${hourlyRate}/hr. Please complete payment ($${expectedPrice.toFixed(2)}) before booking.`
