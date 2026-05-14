@@ -59,5 +59,8 @@ route.get("/chat-messages/:conversationId", chatC.getMessages);
 route.post("/chat-send", chatC.sendMessage);
 route.post("/chat-conversation", chatC.getOrCreateConversation);
 route.post("/chat-create-group", chatC.createGroup);
+route.get("/chat-policy", chatC.getChatPolicy);
+route.get("/chat-flagged", chatC.getFlaggedChats);
+route.post("/chat-flag-update", chatC.updateFlagStatus);
 
 export const commonRoute: Router = route;

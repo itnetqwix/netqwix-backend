@@ -63,6 +63,7 @@ const userSchema: Schema = new Schema(
     },
     friends: [{ type: ObjectId, ref: 'user' }],
     blockedUsers: [{ type: ObjectId, ref: 'user' }],
+    lastSeen: { type: Date, default: null },
     friendRequests: [
       {
         senderId: { type: Schema.Types.ObjectId, ref: 'user' },

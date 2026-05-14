@@ -289,10 +289,10 @@ async function updateUserActivity(socket) {
 
       const wasTrainer = activeUsers[userId]?.account_type === "Trainer";
 
-      // Remove the user from the active users list
       delete activeUsers[userId];
 
-      // Broadcast the updated active users list to all connected clients
+      user.findByIdAndUpdate(userId, { lastSeen: new Date() }).catch(() => {});
+
       socket.broadcast.emit("userStatus", {
         user: activeUsers,
         status: "offline",
@@ -1286,6 +1286,8 @@ const listenBookingEvents = (socket) => {
 
 // Chat Event Handlers
 const listenChatEvents = (socket) => {
+  const ChatMessage = require("../../model/chat_message.schema").default;
+
   try {
     socket.on(EVENTS.CHAT.JOIN, (payload: any) => {
       try {
@@ -1307,21 +1309,93 @@ const listenChatEvents = (socket) => {
       }
     });
 
-    socket.on(EVENTS.CHAT.MESSAGE, (payload: any) => {
+    socket.on(EVENTS.CHAT.MESSAGE, async (payload: any) => {
       try {
-        const { conversationId, receiverId } = payload || {};
+        const { conversationId, receiverId, senderId, _id } = payload || {};
         if (!conversationId) return;
 
-        // Broadcast to the conversation room (excluding sender)
         socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.MESSAGE, payload);
 
-        // Also send directly to receiver's socket in case they haven't joined the room
         if (receiverId) {
           const receiverSid = MemCache.getDetail(process.env.SOCKET_CONFIG, String(receiverId));
           if (receiverSid) {
             socket.to(String(receiverSid)).emit(EVENTS.CHAT.MESSAGE, payload);
+            if (_id && mongoose.isValidObjectId(_id)) {
+              await ChatMessage.findByIdAndUpdate(_id, { status: "delivered", deliveredAt: new Date() });
+              socket.emit(EVENTS.CHAT.DELIVERED, { messageId: _id, conversationId });
+            }
+          } else {
+            const senderDoc = await user.findById(senderId).select("fullname").lean();
+            const senderName = (senderDoc as any)?.fullname ?? "Someone";
+            const content = payload.content ?? "Sent you a message";
+            const preview = content.length > 60 ? content.slice(0, 57) + "..." : content;
+            void pushService.sendPushNotification(
+              String(receiverId),
+              senderName,
+              preview,
+              { kind: "chat_message", conversationId, senderId: String(senderId) }
+            );
           }
         }
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.DELIVERED, async (payload: any) => {
+      try {
+        const { messageIds, conversationId } = payload || {};
+        if (!messageIds?.length || !conversationId) return;
+        const validIds = messageIds.filter((id: string) => mongoose.isValidObjectId(id));
+        if (validIds.length) {
+          await ChatMessage.updateMany(
+            { _id: { $in: validIds }, status: "sent" },
+            { status: "delivered", deliveredAt: new Date() }
+          );
+        }
+        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.DELIVERED, {
+          messageIds: validIds,
+          conversationId,
+        });
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.READ, async (payload: any) => {
+      try {
+        const { conversationId, readerId } = payload || {};
+        if (!conversationId) return;
+        const now = new Date();
+        await ChatMessage.updateMany(
+          { conversationId, receiverId: readerId || socket?.user?._doc?._id, isRead: false },
+          { isRead: true, status: "read", readAt: now }
+        );
+        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.READ, {
+          conversationId,
+          readerId: readerId || String(socket?.user?._doc?._id),
+          readAt: now.toISOString(),
+        });
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.TYPING, (payload: any) => {
+      try {
+        const { conversationId, userId } = payload || {};
+        if (!conversationId) return;
+        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.TYPING, { conversationId, userId });
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.STOP_TYPING, (payload: any) => {
+      try {
+        const { conversationId, userId } = payload || {};
+        if (!conversationId) return;
+        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.STOP_TYPING, { conversationId, userId });
       } catch (_err) {
         /* intentionally quiet */
       }

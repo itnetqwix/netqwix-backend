@@ -1,6 +1,7 @@
 import ChatConversation from "../../model/chat_conversation.schema";
 import ChatMessage from "../../model/chat_message.schema";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
+import { checkChatPolicy, getChatPolicyInfo } from "./chatPolicy";
 
 export class ChatService {
   public async getConversations(userId: string): Promise<ResponseBuilder> {
@@ -98,14 +99,38 @@ export class ChatService {
       }
       const isGroup = conversation.isGroup;
       const actualReceiverId = isGroup ? null : receiverId;
+      const finalReceiverId = actualReceiverId ?? receiverId;
+      if (!isGroup && type === "text" && finalReceiverId) {
+        const policy = await checkChatPolicy(senderId, finalReceiverId, content, String(conversation._id), null);
+        if (!policy.allowed) {
+          const rb = new ResponseBuilder();
+          rb.code = 429;
+          rb.result = {
+            error: policy.reason,
+            policy: {
+              hasPaidSession: policy.hasPaidSession,
+              dailyCount: policy.dailyCount,
+              dailyLimit: policy.dailyLimit,
+              remainingToday: policy.remainingToday,
+            },
+          };
+          return rb;
+        }
+      }
+
       const message = await ChatMessage.create({
         conversationId: conversation._id,
         senderId,
-        receiverId: actualReceiverId ?? receiverId,
+        receiverId: finalReceiverId,
         content,
         type,
         mediaUrl,
       });
+
+      if (!isGroup && type === "text" && content && finalReceiverId) {
+        checkChatPolicy(senderId, finalReceiverId, content, String(conversation._id), String(message._id)).catch(() => {});
+      }
+
       await ChatConversation.findByIdAndUpdate(conversation._id, {
         lastMessage: type === "text" ? content : `[${type}]`,
         lastMessageAt: new Date(),
@@ -141,6 +166,18 @@ export class ChatService {
       const rb = new ResponseBuilder();
       rb.code = 200;
       rb.result = populated;
+      return rb;
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  public async getChatPolicy(userId: string, otherUserId: string): Promise<ResponseBuilder> {
+    try {
+      const info = await getChatPolicyInfo(userId, otherUserId);
+      const rb = new ResponseBuilder();
+      rb.code = 200;
+      rb.result = info;
       return rb;
     } catch (err) {
       return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");

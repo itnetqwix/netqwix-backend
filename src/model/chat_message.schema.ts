@@ -27,6 +27,13 @@ const chatMessageSchema: Schema = new Schema(
     },
     mediaUrl: { type: String, default: null },
     isRead: { type: Boolean, default: false },
+    status: {
+      type: String,
+      enum: ["sent", "delivered", "read"],
+      default: "sent",
+    },
+    deliveredAt: { type: Date, default: null },
+    readAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

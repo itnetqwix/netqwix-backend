@@ -129,6 +129,10 @@ export class EVENTS {
     MESSAGE: "CHAT_MESSAGE",
     JOIN: "JOIN_CHAT",
     LEAVE: "LEAVE_CHAT",
+    DELIVERED: "CHAT_DELIVERED",
+    READ: "CHAT_READ",
+    TYPING: "CHAT_TYPING",
+    STOP_TYPING: "CHAT_STOP_TYPING",
   } as const;
   public static readonly LESSON_TIMER = {
     WARNING: 'LESSON_TIME_WARNING',
