@@ -87,6 +87,7 @@ route.post("/accept-friend-request", userC.acceptFriendRequest);
 route.post("/cancel-friend-request", userC.cancelFriendRequest);
 route.post("/reject-friend-request", userC.rejectFriendRequest);
 route.get("/friend-requests", userC.getFriendRequests);
+route.get("/sent-friend-requests", userC.getSentFriendRequests);
 route.get("/friends", userC.getFriends);
 route.post("/remove-friend", userC.removeFriend);
 route.post("/update-account-privacy",userC.updateIsPrivate);

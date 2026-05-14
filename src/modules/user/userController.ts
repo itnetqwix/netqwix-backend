@@ -597,6 +597,42 @@ export class userController {
     }
   };
 
+  public getSentFriendRequests = async (req, res) => {
+    try {
+      const senderId = req.authUser._id.toString();
+
+      const receivers = await user
+        .find(
+          { "friendRequests.senderId": senderId },
+          "fullname email profile_picture account_type friendRequests"
+        )
+        .lean();
+
+      const sentRequests = receivers.map((receiver: any) => {
+        const matchingReq = (receiver.friendRequests ?? []).find(
+          (fr: any) => fr.senderId?.toString() === senderId
+        );
+        return {
+          _id: matchingReq?._id ?? receiver._id,
+          receiverId: {
+            _id: receiver._id,
+            fullname: receiver.fullname,
+            email: receiver.email,
+            profile_picture: receiver.profile_picture,
+            account_type: receiver.account_type,
+          },
+          status: "pending",
+          createdAt: matchingReq?.createdAt ?? null,
+        };
+      });
+
+      res.status(200).json({ sentRequests });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Server error." });
+    }
+  };
+
   public removeFriend = async (req, res) => {
     const { friendId } = req.body;
     const userId = req.authUser._id;
