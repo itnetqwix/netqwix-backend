@@ -12,6 +12,7 @@ import { notificationRoute } from "./src/modules/notifications/notificationsRout
 import chatRoute from "./src/modules/chat/chatRoutes";
 import { promoCodeRoute } from "./src/modules/promo-code/promoCodeRoutes";
 import { broadcastRoute } from "./src/modules/broadcast/broadcastRoutes";
+import { aiRoute } from "./src/modules/ai/aiRoutes";
 export class Routes {
   protected app: express.Application;
   constructor() {}
@@ -31,6 +32,7 @@ export class Routes {
     router.use("/chat", chatRoute);
     router.use("/admin/promo-codes", promoCodeRoute);
     router.use("/admin/broadcasts", broadcastRoute);
+    router.use("/ai", aiRoute);
     router.get("/", (req, res) => {
       res.send("Welcome to NetQwix :) ");
     });

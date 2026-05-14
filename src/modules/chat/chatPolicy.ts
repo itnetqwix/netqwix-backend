@@ -1,6 +1,9 @@
 import booked_session from "../../model/booked_sessions.schema";
 import ChatMessage from "../../model/chat_message.schema";
 import ChatFlag from "../../model/chat_flag.schema";
+import { AIService } from "../../services/ai-service";
+
+const aiModeration = new AIService();
 
 const DAILY_MESSAGE_LIMIT_UNPAID = 10;
 
@@ -123,6 +126,29 @@ async function scanAndFlag(
       }
     }
   }
+
+  if (!flagged && content.length > 5) {
+    try {
+      const aiResult = await aiModeration.moderateContent(content);
+      if (aiResult.flagged) {
+        flagged = true;
+        try {
+          await ChatFlag.create({
+            conversationId,
+            messageId,
+            senderId,
+            flagType: "keyword_match",
+            matchedContent: `AI moderation: ${aiResult.categories.join(", ")}`,
+          });
+        } catch {
+          /* non-fatal */
+        }
+      }
+    } catch {
+      /* AI moderation failure is non-fatal — regex rules still apply */
+    }
+  }
+
   return flagged;
 }
 

@@ -36,7 +36,20 @@ const clipSchema: Schema = new Schema(
     status: {                    
       type : Boolean,
       default : true,
-    }
+    },
+    tags: {
+      type: [String],
+      default: [],
+    },
+    ai_description: {
+      type: String,
+      default: null,
+    },
+    skill_level: {
+      type: String,
+      enum: ["beginner", "intermediate", "advanced", null],
+      default: null,
+    },
   },
   { timestamps: true }
 );

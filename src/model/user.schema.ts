@@ -80,7 +80,15 @@ const userSchema: Schema = new Schema(
         sms: { type: Boolean, default: true },
       },
     },
-    status: { // Added new field
+    interests: {
+      type: [String],
+      default: [],
+    },
+    ai_profile_summary: {
+      type: String,
+      default: null,
+    },
+    status: {
       type: String,
       enum: ["pending", "approved", "rejected"],
       default: "pending",
