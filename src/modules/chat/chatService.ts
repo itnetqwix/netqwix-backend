@@ -71,21 +71,37 @@ export class ChatService {
     receiverId: string,
     content: string,
     type = "text",
-    mediaUrl: string | null = null
+    mediaUrl: string | null = null,
+    conversationId: string | null = null
   ): Promise<ResponseBuilder> {
     try {
-      let conversation: any = await ChatConversation.findOne({
-        participants: { $all: [senderId, receiverId], $size: 2 },
-      });
-      if (!conversation) {
+      let conversation: any = null;
+      if (conversationId) {
+        conversation = await ChatConversation.findOne({
+          _id: conversationId,
+          participants: senderId,
+        });
+      }
+      if (!conversation && receiverId) {
+        conversation = await ChatConversation.findOne({
+          participants: { $all: [senderId, receiverId], $size: 2 },
+          isGroup: { $ne: true },
+        });
+      }
+      if (!conversation && receiverId) {
         conversation = await ChatConversation.create({
           participants: [senderId, receiverId],
         });
       }
+      if (!conversation) {
+        return ResponseBuilder.badRequest("Conversation not found.");
+      }
+      const isGroup = conversation.isGroup;
+      const actualReceiverId = isGroup ? null : receiverId;
       const message = await ChatMessage.create({
         conversationId: conversation._id,
         senderId,
-        receiverId,
+        receiverId: actualReceiverId ?? receiverId,
         content,
         type,
         mediaUrl,
@@ -98,6 +114,33 @@ export class ChatService {
       const rb = new ResponseBuilder();
       rb.code = 200;
       rb.result = { message: message, conversationId: conversation._id };
+      return rb;
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  public async createGroupConversation(
+    creatorId: string,
+    participantIds: string[],
+    groupName: string
+  ): Promise<ResponseBuilder> {
+    try {
+      const allParticipants = Array.from(new Set([creatorId, ...participantIds]));
+      if (allParticipants.length < 3) {
+        return ResponseBuilder.badRequest("A group must have at least 3 participants.");
+      }
+      const conversation = await ChatConversation.create({
+        participants: allParticipants,
+        isGroup: true,
+        groupName,
+        groupAdmin: creatorId,
+      });
+      const populated = await ChatConversation.findById(conversation._id)
+        .populate("participants", "fullname profile_picture email account_type");
+      const rb = new ResponseBuilder();
+      rb.code = 200;
+      rb.result = populated;
       return rb;
     } catch (err) {
       return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");

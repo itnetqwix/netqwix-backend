@@ -65,6 +65,34 @@ export class commonService {
     }
   }
 
+  public async chatMediaUploadUrl(req: any, res: Response) {
+    try {
+      const userId = req?.authUser?._id;
+      if (!userId) {
+        return res.status(401).json({ success: 0, message: "Unauthorized" });
+      }
+      const { fileName, fileType } = req.body;
+      if (!fileName || !fileType) {
+        return res.status(400).json({ success: 0, message: "fileName and fileType are required" });
+      }
+      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+      const allowed = ["jpg", "jpeg", "png", "gif", "webp", "mp4", "mov", "m4a", "aac", "wav", "mp3", "webm"];
+      if (!allowed.includes(ext)) {
+        return res.status(400).json({ success: 0, message: `File type .${ext} is not allowed` });
+      }
+      const key = `chat-media/${userId}/${Date.now()}-${fileName}`;
+      const url = await this.generatePreSignedPutUrl(key, fileType);
+      if (!url) {
+        return res.status(500).json({ success: 0, message: "Failed to generate upload URL" });
+      }
+      const publicUrl = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+      return res.status(200).json({ success: 1, uploadUrl: url, mediaUrl: publicUrl, key });
+    } catch (error) {
+      console.error("Error generating chat media upload URL:", error);
+      return res.status(500).json({ success: 0, message: "Internal server error" });
+    }
+  }
+
   generatePreSignedPutUrl = async (fileName, fileType) => {
     const params = {
       Bucket: S3_BUCKET,

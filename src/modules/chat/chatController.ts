@@ -42,9 +42,9 @@ export class ChatController {
 
   public sendMessage = async (req: Request, res: Response) => {
     try {
-      const { receiverId, content, type, mediaUrl } = req.body;
-      if (!receiverId) {
-        return res.status(400).send({ status: CONSTANCE.FAIL, error: "receiverId is required" });
+      const { receiverId, content, type, mediaUrl, conversationId } = req.body;
+      if (!receiverId && !conversationId) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "receiverId or conversationId is required" });
       }
       if (!content && type === "text") {
         return res.status(400).send({ status: CONSTANCE.FAIL, error: "content is required for text messages" });
@@ -54,7 +54,30 @@ export class ChatController {
         receiverId,
         content,
         type || "text",
-        mediaUrl
+        mediaUrl,
+        conversationId
+      );
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public createGroup = async (req: Request, res: Response) => {
+    try {
+      const { participantIds, groupName } = req.body;
+      if (!participantIds || !Array.isArray(participantIds) || participantIds.length < 2) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "At least 2 other participants are required" });
+      }
+      if (!groupName || !groupName.trim()) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "Group name is required" });
+      }
+      const result = await this.chatService.createGroupConversation(
+        req["authUser"]["_id"],
+        participantIds,
+        groupName.trim()
       );
       return res
         .status(result.code)

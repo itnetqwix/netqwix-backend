@@ -6,6 +6,10 @@ const chatConversationSchema: Schema = new Schema(
     participants: [
       { type: Schema.Types.ObjectId, ref: Tables.user, required: true },
     ],
+    isGroup: { type: Boolean, default: false },
+    groupName: { type: String, default: null },
+    groupAvatar: { type: String, default: null },
+    groupAdmin: { type: Schema.Types.ObjectId, ref: Tables.user, default: null },
     lastMessage: { type: String, default: "" },
     lastMessageAt: { type: Date, default: null },
     lastMessageSenderId: {
