@@ -11,7 +11,12 @@ const raiseConcernSchema: Schema = new Schema(
         booking_id: {
             type: Schema.Types.ObjectId,
             ref: "booked_sessions",
-            required: true,
+            default: null,
+        },
+        reported_user_id: {
+            type: Schema.Types.ObjectId,
+            ref: "user",
+            default: null,
         },
         name: {
             type: String,

@@ -664,6 +664,57 @@ export class userController {
     }
   };
 
+  public blockUser = async (req, res) => {
+    const { userId: blockedUserId, reason } = req.body;
+    const userId = req.authUser._id;
+    try {
+      if (!blockedUserId) {
+        return res.status(400).json({ error: "userId is required." });
+      }
+      await user.findByIdAndUpdate(userId, {
+        $addToSet: { blockedUsers: blockedUserId },
+        $pull: { friends: blockedUserId },
+      });
+      await user.findByIdAndUpdate(blockedUserId, {
+        $pull: { friends: userId },
+      });
+      const FriendRequest = require("../../model/friend_request.schema").default;
+      await FriendRequest.deleteMany({
+        $or: [
+          { senderId: userId, receiverId: blockedUserId },
+          { senderId: blockedUserId, receiverId: userId },
+        ],
+      });
+      res.status(200).json({ message: "User blocked successfully." });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Server error." });
+    }
+  };
+
+  public reportUser = async (req, res) => {
+    const { userId: reportedUserId, reason, description } = req.body;
+    const userId = req.authUser._id;
+    try {
+      if (!reportedUserId || !reason) {
+        return res.status(400).json({ error: "userId and reason are required." });
+      }
+      const raise_concern = require("../../model/raise_concern.schema").default;
+      await raise_concern.create({
+        user_id: userId,
+        reported_user_id: reportedUserId,
+        reason,
+        description: description || "",
+        subject: `User Report: ${reason}`,
+        ticket_status: "submitted",
+      });
+      res.status(200).json({ message: "Report submitted successfully." });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Server error." });
+    }
+  };
+
   public getFriends = async (req, res) => {
     try {
       const userId = req.authUser._id;

@@ -90,6 +90,8 @@ route.get("/friend-requests", userC.getFriendRequests);
 route.get("/sent-friend-requests", userC.getSentFriendRequests);
 route.get("/friends", userC.getFriends);
 route.post("/remove-friend", userC.removeFriend);
+route.post("/block-user", userC.blockUser);
+route.post("/report-user", userC.reportUser);
 route.post("/update-account-privacy",userC.updateIsPrivate);
 route.get("/get-all-trainee",userC.getAllTrainee);
 route.get("/get-all-users",userC.getAllUsers);

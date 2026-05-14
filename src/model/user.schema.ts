@@ -61,7 +61,8 @@ const userSchema: Schema = new Schema(
       type: Boolean,
       default: false, // Default to false so users appear in search by default
     },
-    friends: [{ type: ObjectId, ref: 'user' }], // List of friends
+    friends: [{ type: ObjectId, ref: 'user' }],
+    blockedUsers: [{ type: ObjectId, ref: 'user' }],
     friendRequests: [
       {
         senderId: { type: Schema.Types.ObjectId, ref: 'user' },
