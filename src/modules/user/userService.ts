@@ -1374,6 +1374,62 @@ export class UserService {
     }
   }
 
+  public async getMyRaiseConcerns(userId: string) {
+    try {
+      const mongoose = require("mongoose");
+      const pipeline: PipelineStage[] = [
+        { $match: { user_id: new mongoose.Types.ObjectId(userId) } },
+        {
+          $lookup: {
+            from: "booked_sessions",
+            localField: "booking_id",
+            foreignField: "_id",
+            as: "booking_details",
+          },
+        },
+        {
+          $addFields: {
+            booking_details: { $arrayElemAt: ["$booking_details", 0] },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            ticket_status: 1,
+            reason: 1,
+            subject: 1,
+            description: 1,
+            is_releted_to_refund: 1,
+            createdAt: 1,
+            updatedAt: 1,
+            "booking_details.booked_date": 1,
+            "booking_details.start_time": 1,
+            "booking_details.end_time": 1,
+            "booking_details.status": 1,
+            "booking_details.category": 1,
+          },
+        },
+        { $sort: { createdAt: -1 } },
+      ];
+      const list = await raise_concern.aggregate(pipeline);
+      return ResponseBuilder.data(list ?? [], "Fetched successfully");
+    } catch (err) {
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
+  public async getMyReferrals(userId: string) {
+    try {
+      const mongoose = require("mongoose");
+      const list = await ReferredUser.find({ referrerId: new mongoose.Types.ObjectId(userId) })
+        .sort({ createdAt: -1 })
+        .lean();
+      return ResponseBuilder.data(list ?? [], "Fetched successfully");
+    } catch (err) {
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
   public async updateWriteUsTicketStatus(body) {
     try {
       const { id, ticket_status } = body;
