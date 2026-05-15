@@ -92,6 +92,11 @@ const bookedSessionsSchema: Schema = new Schema(
             type: Boolean,
             default: false,
         },
+        /** When the trainer confirmed an instant lesson (join window starts here). */
+        accepted_at: {
+            type: Date,
+            default: null,
+        },
         coupon_code: {
             type: String,
             default: null,

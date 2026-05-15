@@ -28,6 +28,8 @@ import { DateTime } from "luxon";
 import SMSService from "../../services/sms-service";
 import { timeZoneAbbreviations } from "../../Utils/constant";
 import { PromoCodeService } from "../promo-code/promoCodeService";
+import { checkTrainerBookingConflict } from "../../utils/bookingConflict";
+import { scheduleInstantLessonAcceptExpiry } from "../../helpers/instantLessonExpiry";
 
 export class TraineeService {
   public log = log.getLogger();
@@ -35,24 +37,37 @@ export class TraineeService {
   public async getSlotsOfAllTrainers(query): Promise<any> {
     try {
       const {
-        search,
-        day = null,
-        time = JSON.stringify({ from: "00:00", to: "23:59" }),
+        search = "",
+        category = "",
+        sortBy = "name",
+        onlineOnly = "",
+        page = "1",
+        limit = "50",
       } = query;
-      if (
-        typeof search !== "string" ||
-        search.trim() === "" ||
-        !isNaN(Number(search))
-      ) {
+
+      const trimmedSearch = typeof search === "string" ? search.trim() : "";
+      if (trimmedSearch.length >= 2 && !isNaN(Number(trimmedSearch))) {
         return ResponseBuilder.badRequest(
-          "Search parameter must be a non-empty string",
+          "Search must be a name or category, not a number",
           400
         );
       }
-      let searchQuery = getSearchRegexQuery(
-        search,
-        CONSTANCE.USERS_SEARCH_KEYS
-      );
+
+      const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
+      const limitNum = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 50));
+      const skip = (pageNum - 1) * limitNum;
+
+      const matchStage: Record<string, unknown> = { account_type: "Trainer" };
+      if (trimmedSearch.length >= 2) {
+        const searchQuery = getSearchRegexQuery(
+          trimmedSearch,
+          CONSTANCE.USERS_SEARCH_KEYS
+        );
+        matchStage.$or = searchQuery.$or;
+      }
+      if (category && String(category).trim()) {
+        matchStage.category = { $regex: String(category).trim(), $options: "i" };
+      }
 
       // const filteredTrainer =
       //   (day && day.length) || (time && time.length)
@@ -150,10 +165,7 @@ export class TraineeService {
       // ]);
       const pipeline: PipelineStage[] = [
         {
-          $match: {
-            $and: [{ account_type: "Trainer" }],
-            $or: searchQuery.$or,
-          },
+          $match: matchStage,
         },
         {
           $lookup: {
@@ -192,11 +204,40 @@ export class TraineeService {
           },
         },
         {
+          $addFields: {
+            avgRating: {
+              $cond: [
+                { $gt: [{ $size: "$trainer_ratings" }, 0] },
+                {
+                  $avg: {
+                    $map: {
+                      input: "$trainer_ratings",
+                      as: "r",
+                      in: { $ifNull: ["$$r.ratings.trainee.sessionRating", 0] },
+                    },
+                  },
+                },
+                null,
+              ],
+            },
+            hourly_rate: {
+              $convert: {
+                input: { $ifNull: ["$extraInfo.hourly_rate", 0] },
+                to: "double",
+                onError: 0,
+                onNull: 0,
+              },
+            },
+          },
+        },
+        {
           $project: {
             _id: 1,
             available_slots: CONSTANCE.SCHEDULING_SLOTS.available_slots,
             trainer_id: "$_id",
             trainer_ratings: 1,
+            avgRating: 1,
+            hourly_rate: 1,
             extraInfo: 1,
             fullname: 1,
             email: 1,
@@ -205,11 +246,31 @@ export class TraineeService {
             stripe_account_id: 1,
             is_kyc_completed: 1,
             commission: 1,
-            status:1
+            status: 1,
           },
         },
       ];
-      const result = await user.aggregate(pipeline);
+
+      const sortKey = String(sortBy || "name").toLowerCase();
+      if (sortKey === "rating") {
+        pipeline.push({ $sort: { avgRating: -1, fullname: 1 } });
+      } else if (sortKey === "hourly_rate" || sortKey === "rate") {
+        pipeline.push({ $sort: { hourly_rate: 1, fullname: 1 } });
+      } else if (sortKey === "hourly_rate_desc" || sortKey === "rate_desc") {
+        pipeline.push({ $sort: { hourly_rate: -1, fullname: 1 } });
+      } else {
+        pipeline.push({ $sort: { fullname: 1 } });
+      }
+
+      pipeline.push({ $skip: skip }, { $limit: limitNum });
+
+      let result = await user.aggregate(pipeline);
+
+      if (onlineOnly === "true" || onlineOnly === "1") {
+        const { isUserOnline } = require("../socket/socket.service");
+        result = result.filter((row) => isUserOnline(String(row._id)));
+      }
+
       return ResponseBuilder.data(result, l10n.t("GET_ALL_SLOTS"));
     } catch (err) {
       console.error(`Error getting slots of all trainers:`, err);
@@ -266,23 +327,6 @@ export class TraineeService {
       throw err;
     }
   };
-
-  private async checkBookingConflict(
-    trainer_id: string,
-    start: Date,
-    end: Date
-  ): Promise<string | null> {
-    const conflict = await booked_session.findOne({
-      trainer_id,
-      status: { $nin: [BOOKED_SESSIONS_STATUS.cancel] },
-      start_time: { $lt: end },
-      end_time: { $gt: start },
-    }).lean();
-    if (conflict) {
-      return "This trainer already has a booking during this time slot. Please choose a different time.";
-    }
-    return null;
-  }
 
   public async bookSession(
     payload: bookSessionModal,
@@ -353,7 +397,7 @@ export class TraineeService {
       }
 
       if (start_time && end_time) {
-        const conflictMsg = await this.checkBookingConflict(payload.trainer_id, start_time, end_time);
+        const conflictMsg = await checkTrainerBookingConflict(payload.trainer_id, start_time, end_time);
         if (conflictMsg) return ResponseBuilder.badRequest(conflictMsg);
       }
 
@@ -580,7 +624,7 @@ export class TraineeService {
       const start_time = new Date(booked_date);
       const end_time = new Date(start_time.getTime() + duration * 60 * 1000);
 
-      const conflictMsg = await this.checkBookingConflict(trainer_id, start_time, end_time);
+      const conflictMsg = await checkTrainerBookingConflict(trainer_id, start_time, end_time);
       if (conflictMsg) return ResponseBuilder.badRequest(conflictMsg);
 
       const basePrice = payload.charging_price != null && payload.charging_price > 0
@@ -636,6 +680,13 @@ export class TraineeService {
         },
         { $set: { status: true } }
       ).catch((e) => console.error("[BOOKING] Error marking availability:", e));
+
+      scheduleInstantLessonAcceptExpiry(
+        String(bookingData._id),
+        String(trainer_id),
+        String(_id),
+        bookingData.createdAt ? new Date(bookingData.createdAt) : new Date()
+      );
 
       // Emit booking created event for instant lesson (trainer sees in upcoming / gets popup)
       try {

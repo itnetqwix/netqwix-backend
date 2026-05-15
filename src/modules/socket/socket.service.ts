@@ -14,6 +14,13 @@ import user from "../../model/user.schema";
 import { NotificationType } from "../../enum/notification.enum";
 import mongoose from "mongoose";
 import booked_session from "../../model/booked_sessions.schema";
+import { INSTANT_ACCEPT_WINDOW_MS } from "../../config/instantLesson";
+import { checkTrainerBookingConflict } from "../../utils/bookingConflict";
+import {
+  clearInstantLessonAcceptExpiry,
+  registerInstantLessonExpireHandler,
+  scheduleInstantLessonAcceptExpiry,
+} from "../../helpers/instantLessonExpiry";
 import { s3, S3_BUCKET } from "../../Utils/s3Client";
 import { touchUserPresence } from "../../helpers/userActivity";
 import { NotificationsService } from "../notifications/notificationsService";
@@ -1122,6 +1129,64 @@ const listenNotificationEvents = (socket) => {
   }
 };
 
+async function emitInstantLessonExpire(
+  lessonId: string,
+  coachId: string,
+  traineeId: string,
+  originatingSocket?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } }
+) {
+  const coachSocketId = coachId ? MemCache.getDetail(process.env.SOCKET_CONFIG, coachId) : null;
+  const traineeSocketId = traineeId ? MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId) : null;
+  const payload = { lessonId, coachId, traineeId };
+
+  if (coachSocketId) {
+    if (originatingSocket) originatingSocket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.EXPIRE, payload);
+    else if (ioInstance) ioInstance.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.EXPIRE, payload);
+  }
+  if (traineeSocketId) {
+    if (originatingSocket) originatingSocket.to(traineeSocketId).emit(EVENTS.INSTANT_LESSON.EXPIRE, payload);
+    else if (ioInstance) ioInstance.to(traineeSocketId).emit(EVENTS.INSTANT_LESSON.EXPIRE, payload);
+  } else if (traineeId) {
+    void pushService.sendPushNotification(
+      traineeId,
+      "Lesson Expired",
+      "Your instant lesson request expired. The trainer didn't respond in time.",
+      { kind: "instant_lesson_expire", lessonId }
+    );
+  }
+}
+
+export async function runInstantLessonExpire(
+  lessonId: string,
+  coachId?: string,
+  traineeId?: string,
+  originatingSocket?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } }
+) {
+  try {
+    const booking = await booked_session.findById(lessonId).lean();
+    if (!booking?.is_instant) return;
+
+    const resolvedCoachId = coachId || String(booking.trainer_id);
+    const resolvedTraineeId = traineeId || String(booking.trainee_id);
+
+    if (booking.status === BOOKED_SESSIONS_STATUS.BOOKED) {
+      await booked_session.findOneAndUpdate(
+        { _id: lessonId, is_instant: true, status: BOOKED_SESSIONS_STATUS.BOOKED },
+        { $set: { status: BOOKED_SESSIONS_STATUS.cancel } }
+      );
+      await emitInstantLessonExpire(lessonId, resolvedCoachId, resolvedTraineeId, originatingSocket);
+    }
+  } catch (_err) {
+    /* non-fatal */
+  } finally {
+    clearInstantLessonAcceptExpiry(lessonId);
+  }
+}
+
+registerInstantLessonExpireHandler((lessonId, coachId, traineeId) =>
+  runInstantLessonExpire(lessonId, coachId, traineeId)
+);
+
 // Instant Lesson Event Handlers
 const listenInstantLessonEvents = (socket) => {
   try {
@@ -1135,6 +1200,20 @@ const listenInstantLessonEvents = (socket) => {
           return;
         }
 
+        let resolvedExpiresAt = expiresAt;
+        const booking = await booked_session.findById(lessonId).lean();
+        const requestedAt = booking?.createdAt
+          ? new Date(booking.createdAt)
+          : booking?.booked_date
+            ? new Date(booking.booked_date)
+            : new Date();
+        if (!resolvedExpiresAt) {
+          resolvedExpiresAt = new Date(
+            requestedAt.getTime() + INSTANT_ACCEPT_WINDOW_MS
+          ).toISOString();
+        }
+        scheduleInstantLessonAcceptExpiry(lessonId, coachId, traineeId, requestedAt);
+
         const coachSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, coachId);
         if (coachSocketId) {
           socket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.REQUEST, {
@@ -1143,7 +1222,7 @@ const listenInstantLessonEvents = (socket) => {
             traineeId,
             traineeInfo,
             duration,
-            expiresAt,
+            expiresAt: resolvedExpiresAt,
             lessonType,
           });
         } else {
@@ -1160,51 +1239,89 @@ const listenInstantLessonEvents = (socket) => {
     });
 
     // Handle instant lesson accept
-    socket.on(EVENTS.INSTANT_LESSON.ACCEPT, async (payload: any) => {
+    socket.on(EVENTS.INSTANT_LESSON.ACCEPT, async (payload: any, callback?: (res: unknown) => void) => {
       try {
         const { lessonId, coachId, traineeId } = payload;
         
         if (!lessonId || !coachId || !traineeId) {
+          callback?.({ ok: false, error: "missing_fields" });
           return;
         }
 
-        let updatedBooking: any = null;
-        try {
-          updatedBooking = await booked_session.findOneAndUpdate(
-            {
-              _id: lessonId,
-              is_instant: true,
-              trainer_id: coachId,
-              trainee_id: traineeId,
-              status: BOOKED_SESSIONS_STATUS.BOOKED,
-            },
-            { $set: { status: BOOKED_SESSIONS_STATUS.confirm } },
-            { new: true }
-          );
-          if (updatedBooking && emitBookingStatusUpdatedDelegate) {
-            void emitBookingStatusUpdatedDelegate(updatedBooking);
-          }
-        } catch (_dbErr) {
-          /* intentionally quiet */
+        const booking = await booked_session.findById(lessonId).lean();
+        if (
+          !booking?.is_instant ||
+          String(booking.trainer_id) !== String(coachId) ||
+          String(booking.trainee_id) !== String(traineeId) ||
+          booking.status !== BOOKED_SESSIONS_STATUS.BOOKED
+        ) {
+          callback?.({ ok: false, error: "invalid_booking" });
+          return;
         }
 
-        // Emit to both parties
+        const requestedAt = booking.createdAt
+          ? new Date(booking.createdAt)
+          : new Date(booking.booked_date);
+        if (Date.now() - requestedAt.getTime() > INSTANT_ACCEPT_WINDOW_MS) {
+          await runInstantLessonExpire(lessonId, coachId, traineeId, socket);
+          callback?.({ ok: false, error: "expired" });
+          return;
+        }
+
+        const start = booking.start_time ? new Date(booking.start_time) : null;
+        const end = booking.end_time ? new Date(booking.end_time) : null;
+        if (start && end) {
+          const conflictMsg = await checkTrainerBookingConflict(
+            coachId,
+            start,
+            end,
+            String(lessonId)
+          );
+          if (conflictMsg) {
+            callback?.({ ok: false, error: "conflict", message: conflictMsg });
+            return;
+          }
+        }
+
+        const acceptedAt = new Date();
+        const updatedBooking = await booked_session.findOneAndUpdate(
+          {
+            _id: lessonId,
+            is_instant: true,
+            trainer_id: coachId,
+            trainee_id: traineeId,
+            status: BOOKED_SESSIONS_STATUS.BOOKED,
+          },
+          { $set: { status: BOOKED_SESSIONS_STATUS.confirm, accepted_at: acceptedAt } },
+          { new: true }
+        );
+
+        if (!updatedBooking) {
+          callback?.({ ok: false, error: "not_updated" });
+          return;
+        }
+
+        clearInstantLessonAcceptExpiry(lessonId);
+
+        if (emitBookingStatusUpdatedDelegate) {
+          void emitBookingStatusUpdatedDelegate(updatedBooking);
+        }
+
+        const acceptPayload = {
+          lessonId,
+          coachId,
+          traineeId,
+          acceptedAt: acceptedAt.toISOString(),
+        };
+
         const coachSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, coachId);
         const traineeSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId);
 
         if (coachSocketId) {
-          socket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.ACCEPT, {
-            lessonId,
-            coachId,
-            traineeId,
-          });
+          socket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.ACCEPT, acceptPayload);
         }
         if (traineeSocketId) {
-          socket.to(traineeSocketId).emit(EVENTS.INSTANT_LESSON.ACCEPT, {
-            lessonId,
-            coachId,
-            traineeId,
-          });
+          socket.to(traineeSocketId).emit(EVENTS.INSTANT_LESSON.ACCEPT, acceptPayload);
         } else {
           void pushService.sendPushNotification(
             traineeId,
@@ -1214,8 +1331,9 @@ const listenInstantLessonEvents = (socket) => {
           );
         }
 
+        callback?.({ ok: true, acceptedAt: acceptedAt.toISOString() });
       } catch (_err) {
-        /* intentionally quiet */
+        callback?.({ ok: false, error: "server_error" });
       }
     });
 
@@ -1252,43 +1370,8 @@ const listenInstantLessonEvents = (socket) => {
     socket.on(EVENTS.INSTANT_LESSON.EXPIRE, async (payload: any) => {
       try {
         const { lessonId, coachId, traineeId } = payload;
-        
-        if (!lessonId) {
-          return;
-        }
-
-        try {
-          await booked_session.findOneAndUpdate(
-            { _id: lessonId, is_instant: true, status: BOOKED_SESSIONS_STATUS.BOOKED },
-            { $set: { status: BOOKED_SESSIONS_STATUS.cancel } }
-          );
-        } catch (_dbErr) { /* non-fatal */ }
-
-        const coachSocketId = coachId ? MemCache.getDetail(process.env.SOCKET_CONFIG, coachId) : null;
-        const traineeSocketId = traineeId ? MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId) : null;
-
-        if (coachSocketId) {
-          socket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.EXPIRE, {
-            lessonId,
-            coachId,
-            traineeId,
-          });
-        }
-        if (traineeSocketId) {
-          socket.to(traineeSocketId).emit(EVENTS.INSTANT_LESSON.EXPIRE, {
-            lessonId,
-            coachId,
-            traineeId,
-          });
-        } else if (traineeId) {
-          void pushService.sendPushNotification(
-            traineeId,
-            "Lesson Expired",
-            "Your instant lesson request expired. The trainer didn't respond in time.",
-            { kind: "instant_lesson_expire", lessonId }
-          );
-        }
-
+        if (!lessonId) return;
+        await runInstantLessonExpire(lessonId, coachId, traineeId, socket);
       } catch (_err) {
         /* intentionally quiet */
       }

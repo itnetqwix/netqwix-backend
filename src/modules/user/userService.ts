@@ -70,9 +70,17 @@ export class UserService {
             l10n.t("SESSION_STATUS_CAN_NOT_REVERT")
           );
         }
+        const updateFields: Record<string, unknown> = { status: payload.booked_status };
+        if (
+          payload.booked_status === BOOKED_SESSIONS_STATUS.confirm &&
+          bookedSessionDetail.is_instant &&
+          !bookedSessionDetail.accepted_at
+        ) {
+          updateFields.accepted_at = new Date();
+        }
         const result = await booked_session.findByIdAndUpdate(
           { _id: bookedSessionId },
-          { status: payload.booked_status },
+          { $set: updateFields },
           { new: true }
         );
         void recordUserActivityMany(
