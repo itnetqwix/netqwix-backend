@@ -25,6 +25,8 @@
     // Poll files for updates more frequently
     // when they're updated a lot.
     "allowJs": true,
+    // Catch import path casing mismatches on macOS before Linux deploy (e.g. Utils vs utils).
+    "forceConsistentCasingInFileNames": true,
   },
   "include": [
     "src/**/*.ts"
