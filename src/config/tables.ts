@@ -31,4 +31,5 @@ export class Tables {
     public static readonly wallet_security_events = "wallet_security_events";
     public static readonly financial_audit_log = "financial_audit_log";
     public static readonly stripe_webhook_events = "stripe_webhook_events";
+    public static readonly ops_events = "ops_events";
 }

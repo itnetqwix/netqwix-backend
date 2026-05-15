@@ -645,7 +645,21 @@ export class TraineeService {
       const end_time = new Date(start_time.getTime() + duration * 60 * 1000);
 
       const conflictMsg = await checkTrainerBookingConflict(trainer_id, start_time, end_time);
-      if (conflictMsg) return ResponseBuilder.badRequest(conflictMsg);
+      if (conflictMsg) {
+        const { recordOpsEvent } = require("../ops/opsEventService");
+        recordOpsEvent({
+          category: "instant_lesson",
+          severity: "warning",
+          event_type: "INSTANT_LESSON_BOOKING_FAILED",
+          user_id: _id,
+          related_user_id: trainer_id,
+          title: "Instant lesson booking failed",
+          summary: conflictMsg,
+          payload: { reason: "trainer_conflict", trainer_id },
+          source: "server",
+        });
+        return ResponseBuilder.badRequest(conflictMsg);
+      }
 
       const basePrice = payload.charging_price != null && payload.charging_price > 0
         ? payload.charging_price
@@ -757,6 +771,18 @@ export class TraineeService {
         l10n.t("INSTANT_MEETING_BOOKED")
       );
     } catch (err) {
+      const { recordOpsEvent } = require("../ops/opsEventService");
+      recordOpsEvent({
+        category: "instant_lesson",
+        severity: "error",
+        event_type: "INSTANT_LESSON_BOOKING_FAILED",
+        user_id: _id,
+        related_user_id: trainer_id,
+        title: "Instant lesson booking error",
+        summary: err?.message || String(err),
+        payload: { trainer_id },
+        source: "server",
+      });
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
     }
   }

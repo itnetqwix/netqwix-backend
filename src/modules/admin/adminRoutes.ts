@@ -2,6 +2,7 @@ import { Router } from "express";
 import { AdminController } from "./adminController";
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
 import { adminFinanceController } from "../wallet/adminFinanceController";
+import { opsAdminController } from "../ops/opsAdminController";
 
 const route: Router = Router();
 const authorizeMiddleware = new AuthorizeMiddleware();
@@ -27,6 +28,15 @@ route.get("/user-reviews/:id", adminController.getUserReviews);
 route.get("/user-assets/:id", adminController.getUserAssets);
 route.delete("/entity/:entityType/:entityId", adminController.deleteEntity);
 route.get("/audit-logs", adminController.getAuditLogs);
+
+route.get("/ops-events", opsAdminController.list);
+route.get("/ops-events/stats", opsAdminController.stats);
+route.get("/ops-events/playbook", opsAdminController.playbook);
+route.post("/ops-events/backfill", opsAdminController.backfill);
+route.get("/ops-events/user/:userId", opsAdminController.listByUser);
+route.get("/ops-events/session/:sessionId", opsAdminController.listBySession);
+route.get("/ops-events/:eventId", opsAdminController.detail);
+route.patch("/ops-events/:eventId", opsAdminController.resolve);
 route.get("/dashboard-metrics", adminController.getDashboardMetrics);
 route.get("/online-users", adminController.getOnlineUsers);
 

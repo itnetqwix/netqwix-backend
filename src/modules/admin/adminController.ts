@@ -55,12 +55,17 @@ export class AdminController {
       if (at !== String(AccountType.ADMIN).toLowerCase()) {
         return res.status(403).json({ status: CONSTANCE.FAIL, error: "Only admin can access call diagnostics" });
       }
-      const { sessionId, userId, eventType, limit = 100, skip = 0 } = req.query;
+      const { sessionId, userId, eventType, from, to, limit = 100, skip = 0 } = req.query;
 
       const query: any = {};
       if (sessionId) query.sessionId = sessionId;
       if (userId) query.userId = userId;
       if (eventType) query.eventType = eventType;
+      if (from || to) {
+        query.createdAt = {};
+        if (from) query.createdAt.$gte = new Date(String(from));
+        if (to) query.createdAt.$lte = new Date(String(to));
+      }
 
       const diagnostics = await CallDiagnostics.find(query)
         .populate("sessionId", "start_time end_time session_start_time session_end_time")

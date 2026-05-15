@@ -146,7 +146,7 @@ export class transactionController {
         refund_application_fee: true,
       });
 
-      await admin_audit.create({
+      const auditRow = await admin_audit.create({
         admin_id: req["authUser"]?._id,
         target_user_id: booking.trainee_id || booking.trainer_id || undefined,
         entity_type: "booked_session",
@@ -154,6 +154,21 @@ export class transactionController {
         action: "stripe_refund",
         reason: reasonStr,
         meta: { payment_intent_id, stripe_refund_id: refund.id },
+      });
+
+      const { recordOpsEvent } = require("../ops/opsEventService");
+      recordOpsEvent({
+        category: "payment",
+        severity: "info",
+        event_type: "STRIPE_REFUND",
+        user_id: booking.trainee_id,
+        related_user_id: booking.trainer_id,
+        session_id: booking_id,
+        title: "Stripe refund processed",
+        summary: reasonStr,
+        payload: auditRow.meta,
+        source: "admin",
+        idempotency_key: `admin_audit:${auditRow._id}`,
       });
 
       return res.status(200).send({ status: CONSTANCE.SUCCESS, data: refund });

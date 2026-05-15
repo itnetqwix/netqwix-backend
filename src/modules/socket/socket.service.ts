@@ -23,6 +23,8 @@ import {
 } from "../../helpers/instantLessonExpiry";
 import { s3, S3_BUCKET } from "../../Utils/s3Client";
 import { touchUserPresence } from "../../helpers/userActivity";
+import { logInstantLessonOps } from "../ops/opsInstantLogger";
+import { logPrecallCheckOps, logCallQualityOps } from "../ops/opsCallLogger";
 import { NotificationsService } from "../notifications/notificationsService";
 
 const pushService = new NotificationsService();
@@ -630,6 +632,14 @@ export const handleSocketEvents = (socket, connections = {}) => {
               reason,
             },
           });
+          logPrecallCheckOps({
+            sessionId: String(sessionId),
+            userId: String(userId),
+            passed,
+            reason,
+            role,
+            accountType,
+          });
         } catch (dbErr) {
           console.error("[PreCallCheck] Failed to save to DB:", dbErr);
         }
@@ -680,6 +690,14 @@ export const handleSocketEvents = (socket, connections = {}) => {
           } catch (dbErr) {
             console.error("[CallQuality] Failed to save to DB:", dbErr);
           }
+        }
+        if (sessionId && userId) {
+          logCallQualityOps({
+            sessionId: String(sessionId),
+            userId: String(userId),
+            stats,
+            role,
+          });
         }
       }
     } catch (err) {
@@ -1273,6 +1291,14 @@ export async function runInstantLessonExpire(
         { $set: { status: BOOKED_SESSIONS_STATUS.cancel } }
       );
       await emitInstantLessonExpire(lessonId, resolvedCoachId, resolvedTraineeId, originatingSocket);
+      logInstantLessonOps("INSTANT_LESSON_EXPIRED", {
+        lessonId,
+        coachId: resolvedCoachId,
+        traineeId: resolvedTraineeId,
+        severity: "warning",
+        title: "Instant lesson expired",
+        summary: "Trainer did not respond in time; booking cancelled.",
+      });
     }
   } catch (_err) {
     /* non-fatal */
@@ -1331,6 +1357,13 @@ const listenInstantLessonEvents = (socket) => {
             { kind: "instant_lesson_request", lessonId, traineeId }
           );
         }
+        logInstantLessonOps("INSTANT_LESSON_REQUEST", {
+          lessonId,
+          coachId,
+          traineeId,
+          title: "Instant lesson requested",
+          payload: { duration, lessonType, expiresAt: resolvedExpiresAt },
+        });
       } catch (_err) {
         /* intentionally quiet — add app-level logging if needed */
       }
@@ -1429,6 +1462,14 @@ const listenInstantLessonEvents = (socket) => {
           );
         }
 
+        logInstantLessonOps("INSTANT_LESSON_ACCEPT", {
+          lessonId,
+          coachId,
+          traineeId,
+          title: "Instant lesson accepted",
+          payload: { acceptedAt: acceptedAt.toISOString() },
+        });
+
         callback?.({ ok: true, acceptedAt: acceptedAt.toISOString() });
       } catch (_err) {
         callback?.({ ok: false, error: "server_error" });
@@ -1459,6 +1500,13 @@ const listenInstantLessonEvents = (socket) => {
             { kind: "instant_lesson_decline", lessonId }
           );
         }
+        logInstantLessonOps("INSTANT_LESSON_DECLINE", {
+          lessonId,
+          coachId,
+          traineeId,
+          severity: "warning",
+          title: "Instant lesson declined",
+        });
       } catch (_err) {
         /* intentionally quiet */
       }
@@ -1490,6 +1538,12 @@ const listenInstantLessonEvents = (socket) => {
             traineeId,
           });
         }
+        logInstantLessonOps("INSTANT_LESSON_CLIPS_SELECTED", {
+          lessonId,
+          coachId,
+          traineeId,
+          title: "Trainee selected clips and joining",
+        });
       } catch (_err) {
         /* intentionally quiet */
       }
@@ -1504,6 +1558,13 @@ const listenInstantLessonEvents = (socket) => {
         if (coachSocketId) {
           socket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.TRAINEE_CANCELLED, { lessonId, coachId, traineeId });
         }
+        logInstantLessonOps("INSTANT_LESSON_TRAINEE_CANCELLED", {
+          lessonId,
+          coachId,
+          traineeId,
+          severity: "info",
+          title: "Trainee cancelled instant lesson request",
+        });
       } catch (_err) {
         /* intentionally quiet */
       }

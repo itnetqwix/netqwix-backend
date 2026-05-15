@@ -479,7 +479,7 @@ export class AdminService {
         }
       }
 
-      await admin_audit.create({
+      const auditRow = await admin_audit.create({
         admin_id: authUser?._id,
         target_user_id: (target?.user_id || target?.trainer || target?.trainee || target?.trainer_id || target?.trainee_id || null),
         entity_type: normalizedType,
@@ -490,6 +490,20 @@ export class AdminService {
           mode,
           entityType: normalizedType,
         },
+      });
+      const { recordOpsEvent } = require("../ops/opsEventService");
+      recordOpsEvent({
+        category: "admin",
+        severity: "info",
+        event_type: auditRow.action,
+        user_id: auditRow.target_user_id,
+        title: `Admin ${auditRow.action}`,
+        summary: auditRow.reason,
+        payload: auditRow.meta,
+        source: "admin",
+        idempotency_key: `admin_audit:${auditRow._id}`,
+        source_ref: String(auditRow._id),
+        source_collection: "admin_audit",
       });
 
       return ResponseBuilder.data(
@@ -852,6 +866,9 @@ export class AdminService {
     const overviewCompletionPercent =
       totalSessions > 0 ? Math.min(100, Math.round((completedSessions / totalSessions) * 100)) : 0;
 
+    const { opsBackfillService } = require("../ops/opsBackfillService");
+    const opsStats = await opsBackfillService.dashboardStats();
+
     return {
       totalRevenue,
       totalOrders,
@@ -865,6 +882,9 @@ export class AdminService {
       openUserFeedback,
       bookingsPendingRefund,
       newUsersLast7Days,
+      opsCriticalOpen24h: opsStats.criticalOpen,
+      opsInstantFailures24h: opsStats.instantFailures,
+      opsCallPreflightFailures24h: opsStats.callPreflightFailures,
     };
   }
 

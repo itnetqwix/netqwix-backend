@@ -1248,6 +1248,23 @@ export class UserService {
       const raiseConcern = new raise_concern({ ...body, user_id: id });
       await raiseConcern.save();
 
+      const { recordOpsEvent } = require("../ops/opsEventService");
+      recordOpsEvent({
+        category: "support",
+        severity: body.is_releted_to_refund === "yes" ? "warning" : "info",
+        event_type: "SUPPORT_TICKET_CREATED",
+        user_id: id,
+        booking_id: body.booking_id,
+        title: `Support ticket: ${body.subject || body.reason || "Concern"}`,
+        summary: body.description?.slice?.(0, 300),
+        payload: { ticket_id: raiseConcern._id, ...body },
+        source: "server",
+        idempotency_key: `support:create:${raiseConcern._id}`,
+        suggested_actions: [
+          { action: "view_ticket", label: "View tickets", href: "/apps/concern-by-user" },
+        ],
+      });
+
       return ResponseBuilder.data(raiseConcern, "Complain has been captured");
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
@@ -1480,13 +1497,44 @@ export class UserService {
         return ResponseBuilder.badRequest("ticket_status id is required");
       }
 
-      var raiseConcernResponse = await raise_concern.findByIdAndUpdate(id, {
-        ticket_status,
-      });
+      const prev = await raise_concern.findById(id).lean();
+      var raiseConcernResponse = await raise_concern.findByIdAndUpdate(
+        id,
+        {
+          $set: { ticket_status },
+          $push: {
+            ticket_history: {
+              status: ticket_status,
+              changed_by: body.admin_id || null,
+              note: body.note || "",
+              changed_at: new Date(),
+            },
+          },
+        },
+        { new: true }
+      );
 
       if (!raiseConcernResponse) {
         return ResponseBuilder.badRequest("Booking not found");
       }
+
+      const { recordOpsEvent } = require("../ops/opsEventService");
+      recordOpsEvent({
+        category: "support",
+        severity: "info",
+        event_type: "TICKET_STATUS_CHANGED",
+        user_id: prev?.user_id,
+        booking_id: prev?.booking_id,
+        title: `Ticket status: ${prev?.ticket_status || "?"} → ${ticket_status}`,
+        payload: {
+          ticket_id: id,
+          from: prev?.ticket_status,
+          to: ticket_status,
+          admin_id: body.admin_id,
+        },
+        source: "admin",
+        idempotency_key: `support:status:${id}:${ticket_status}:${Date.now()}`,
+      });
 
       return ResponseBuilder.data(
         {

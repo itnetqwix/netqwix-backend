@@ -43,6 +43,14 @@ const raiseConcernSchema: Schema = new Schema(
             type: String,
             default : "open"
         },
+        ticket_history: [
+            {
+                status: String,
+                changed_by: { type: Schema.Types.ObjectId, ref: "user" },
+                note: String,
+                changed_at: { type: Date, default: Date.now },
+            },
+        ],
     },
     { timestamps: true }
 );
