@@ -52,11 +52,21 @@ export class sessionExtensionConfirmModal extends model {
   @IsString()
   public payment_intent_id?: string;
 
+  @IsOptional()
+  @IsString()
+  public payment_method?: string;
+
+  @IsOptional()
+  @IsString()
+  public pin_session_token?: string;
+
   constructor(body: Record<string, unknown>) {
     super();
     this.sessionId = String(body.sessionId ?? "");
     this.minutes = Number(body.minutes);
     this.payment_intent_id = body.payment_intent_id as string | undefined;
+    this.payment_method = body.payment_method as string | undefined;
+    this.pin_session_token = body.pin_session_token as string | undefined;
   }
 }
 

@@ -239,6 +239,8 @@ export class SessionExtensionService {
         _userId: body._userId,
         _userType: body._userType || "Trainee",
         _bookingType: "session_extension",
+        sessionId: body.sessionId,
+        trainer_id: String(booking?.trainer_id),
       });
     } catch (err) {
       return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
@@ -250,11 +252,14 @@ export class SessionExtensionService {
       sessionId: string;
       minutes: number;
       payment_intent_id?: string;
+      payment_method?: string;
+      pin_session_token?: string;
       _userId: string;
     }
   ) {
     try {
-      const { sessionId, minutes, payment_intent_id, _userId } = body;
+      const { sessionId, minutes, payment_intent_id, payment_method, pin_session_token, _userId } =
+        body;
       const booking = await booked_session.findById(sessionId);
       if (!booking || String(booking.trainee_id) !== String(_userId)) {
         return ResponseBuilder.badRequest("Session not found.", 404);
@@ -286,7 +291,27 @@ export class SessionExtensionService {
       }
 
       let extensionAmount = 0;
-      if (payment_intent_id) {
+
+      if (payment_method === "wallet") {
+        const { walletPaymentService } = require("../wallet/walletPaymentService");
+        const trainer = await user
+          .findById(booking.trainer_id)
+          .select("extraInfo.hourly_rate")
+          .lean();
+        const hourlyRate = Number(trainer?.extraInfo?.hourly_rate ?? 0);
+        extensionAmount = Number(((hourlyRate / 60) * minutes).toFixed(2));
+        if (extensionAmount > 0) {
+          await walletPaymentService.payFromWallet({
+            traineeId: _userId,
+            sessionId,
+            trainerId: String(booking.trainer_id),
+            amountDollars: extensionAmount,
+            pinSessionToken: pin_session_token,
+            kind: "extension",
+            idempotencyKey: `ext:wallet:${sessionId}:${minutes}:${_userId}`,
+          });
+        }
+      } else if (payment_intent_id) {
         const intent = await stripe.paymentIntents.retrieve(payment_intent_id);
         if (intent.status !== "succeeded") {
           return ResponseBuilder.badRequest("Payment has not completed.", 400);

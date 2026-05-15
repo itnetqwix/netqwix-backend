@@ -451,6 +451,8 @@ export class traineeController {
         sessionId: req.body.sessionId,
         minutes: Number(req.body.minutes),
         payment_intent_id: req.body.payment_intent_id,
+        payment_method: req.body.payment_method,
+        pin_session_token: req.body.pin_session_token,
         _userId: String(req["authUser"]?._id),
       });
       if (result.code === 400 || result.code === 409) {

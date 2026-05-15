@@ -23,4 +23,12 @@ export class Tables {
     public static readonly chat_flag = "chat_flag";
     public static readonly promo_code = "promo_code";
     public static readonly broadcast = "broadcast";
+    public static readonly wallet_accounts = "wallet_accounts";
+    public static readonly wallet_ledger_entries = "wallet_ledger_entries";
+    public static readonly escrow_holds = "escrow_holds";
+    public static readonly wallet_topups = "wallet_topups";
+    public static readonly payout_requests = "payout_requests";
+    public static readonly wallet_security_events = "wallet_security_events";
+    public static readonly financial_audit_log = "financial_audit_log";
+    public static readonly stripe_webhook_events = "stripe_webhook_events";
 }

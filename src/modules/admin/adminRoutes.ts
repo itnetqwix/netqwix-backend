@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { AdminController } from "./adminController";
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
+import { adminFinanceController } from "../wallet/adminFinanceController";
 
 const route: Router = Router();
 const authorizeMiddleware = new AuthorizeMiddleware();
@@ -28,5 +29,20 @@ route.delete("/entity/:entityType/:entityId", adminController.deleteEntity);
 route.get("/audit-logs", adminController.getAuditLogs);
 route.get("/dashboard-metrics", adminController.getDashboardMetrics);
 route.get("/online-users", adminController.getOnlineUsers);
+
+route.get("/finance/ledger", adminFinanceController.getLedger);
+route.get("/finance/escrow", adminFinanceController.getEscrowHolds);
+route.post("/finance/escrow/:holdId/release", adminFinanceController.releaseEscrow);
+route.post("/finance/escrow/:holdId/refund", adminFinanceController.refundEscrow);
+route.get("/finance/payouts", adminFinanceController.getPayoutQueue);
+route.post("/finance/payouts/:payoutId/approve", adminFinanceController.approvePayout);
+route.post("/finance/wallet/adjust", adminFinanceController.adjustWallet);
+route.get("/finance/audit-log", adminFinanceController.getFinancialAuditLog);
+route.post("/finance/migrate-legacy-balances", async (req, res) => {
+  const { walletMigrationService } = require("../wallet/migrationService");
+  const dryRun = req.body?.dry_run !== false;
+  const result = await walletMigrationService.migrateLegacyTrainerBalances(dryRun);
+  return res.status(200).send({ status: "SUCCESS", data: result });
+});
 
 export const adminRoute: Router = route;

@@ -12,6 +12,7 @@ import * as dotEnv from "dotenv";
 import { SocketInit } from "./modules/socket/init";
 import { registerTrainerTraineePresenceProvider } from "./modules/socket/socketPresenceRegistry";
 import { cronjobs } from "./cronjob";
+import { webhookRoute } from "./modules/wallet/webhookRoutes";
 
 dotEnv.config();
 export class App {
@@ -22,6 +23,7 @@ export class App {
   constructor() {
     this.app = express();
     this.app.use("/public/assets", express.static("uploads"));
+    this.app.use("/webhooks", webhookRoute);
     const route = new Routes();
     this.app.use(bodyParser.json());
     // Global CORS configuration for REST API

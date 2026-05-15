@@ -537,6 +537,26 @@ export class TraineeService {
         { _id: payload.trainer_id },
         { $inc: { wallet_amount: finalPrice || 0 } }
       );
+
+      try {
+        const { WALLET_CONFIG } = require("../../config/wallet");
+        if (WALLET_CONFIG.escrowEnabled && finalPrice > 0) {
+          const { escrowService } = require("../wallet/escrowService");
+          await escrowService.createCardEscrowRecord({
+            sessionId: String(bookingData._id),
+            traineeId: String(bookingData.trainee_id),
+            trainerId: String(payload.trainer_id),
+            grossMinor: Math.round(finalPrice * 100),
+            platformFeeMinor: 0,
+            fundingSource: payload.payment_intent_id ? "card" : "wallet",
+            stripePaymentIntentId: payload.payment_intent_id,
+            kind: "booking",
+            idempotencyKey: `book:escrow:${bookingData._id}`,
+          });
+        }
+      } catch (walletErr) {
+        console.error("[BOOKING] Escrow record error:", walletErr);
+      }
       
       // Emit booking created event
       try {
@@ -654,6 +674,26 @@ export class TraineeService {
       const userObj = new booked_session(bookingFields);
 
       const bookingData = await userObj.save();
+
+      try {
+        const { WALLET_CONFIG } = require("../../config/wallet");
+        if (WALLET_CONFIG.escrowEnabled && chargingPrice > 0) {
+          const { escrowService } = require("../wallet/escrowService");
+          await escrowService.createCardEscrowRecord({
+            sessionId: String(bookingData._id),
+            traineeId: String(_id),
+            trainerId: String(trainer_id),
+            grossMinor: Math.round(chargingPrice * 100),
+            platformFeeMinor: 0,
+            fundingSource: payload.payment_intent_id ? "card" : "wallet",
+            stripePaymentIntentId: payload.payment_intent_id,
+            kind: "booking",
+            idempotencyKey: `instant:escrow:${bookingData._id}`,
+          });
+        }
+      } catch (walletErr) {
+        console.error("[INSTANT BOOKING] Escrow record error:", walletErr);
+      }
 
       if (appliedPromoCode && promoDiscountAmount > 0) {
         const promoService = new PromoCodeService();

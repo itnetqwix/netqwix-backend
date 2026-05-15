@@ -39,6 +39,16 @@ const aiService = new AIService();
       }
     });
     await reEngagementJob.start();
+
+    const escrowReleaseJob = cron.schedule("*/15 * * * *", () => {
+      try {
+        const { releaseService } = require("../modules/wallet/releaseService");
+        void releaseService.processEligibleHolds();
+      } catch (err) {
+        console.log("err on escrow release job:", err);
+      }
+    });
+    void escrowReleaseJob.start();
   };
 
 const meetingConfirmationJob = async () => {

@@ -3,6 +3,7 @@ import { CONSTANCE } from "../config/constance";
 import { ResponseBuilder } from "./responseBuilder";
 import * as l10n from "jm-ez-l10n";
 import { PromoCodeService } from "../modules/promo-code/promoCodeService";
+import { WALLET_CONFIG } from "../config/wallet";
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
@@ -65,9 +66,18 @@ export class StripeHelper {
         stripe_config.customer = customer;
       }
 
-      if (destination) {
+      const useEscrowHold = WALLET_CONFIG.escrowEnabled && body._bookingType !== "wallet_topup";
+      if (destination && !useEscrowHold) {
         stripe_config.application_fee_amount = Math.round(finalAmount * Number(commission));
         stripe_config.transfer_data = { destination };
+      } else if (useEscrowHold && body.sessionId) {
+        stripe_config.metadata = {
+          ...(stripe_config.metadata || {}),
+          kind: body._bookingType || "session_booking",
+          sessionId: body.sessionId,
+          trainee_id: body._userId,
+          trainer_id: body.trainer_id,
+        };
       }
 
       if (stripe_config.amount <= 0) {
