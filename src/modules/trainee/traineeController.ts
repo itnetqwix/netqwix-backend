@@ -8,6 +8,7 @@ import {
 } from "../../config/constance";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { TraineeService } from "./traineeService";
+import { SessionExtensionService } from "./sessionExtensionService";
 import { bookSessionModal } from "./traineeValidator";
 import * as _ from "lodash";
 import { TrainerService } from "../trainer/trainerService";
@@ -26,6 +27,7 @@ export class traineeController {
   public logger = log.getLogger();
   public traineeService = new TraineeService();
   public trainerService = new TrainerService();
+  public sessionExtensionService = new SessionExtensionService();
 
   public getSlotsOfAllTrainers = async (req: any, res: Response) => {
     try {
@@ -394,6 +396,75 @@ export class traineeController {
         status: CONSTANCE.FAIL,
         error: err.message || "Internal Server Error",
       });
+    }
+  };
+
+  public getSessionExtensionQuote = async (req: any, res: Response) => {
+    try {
+      const sessionId = String(req.query.sessionId ?? "");
+      const minutes = Number(req.query.minutes);
+      if (!sessionId || !Number.isFinite(minutes)) {
+        return res.status(400).send({
+          status: CONSTANCE.FAIL,
+          error: "sessionId and minutes are required",
+        });
+      }
+      const result = await this.sessionExtensionService.getQuote(
+        sessionId,
+        minutes,
+        String(req.authUser._id)
+      );
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ message: result.error });
+      }
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public createSessionExtensionPaymentIntent = async (req: Request, res: Response) => {
+    try {
+      const result = await this.sessionExtensionService.createPaymentIntent({
+        ...req.body,
+        _userId: String(req["authUser"]?._id),
+        _userType: req["authUser"]?.account_type,
+      });
+      if (result.code === 400) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: result.error });
+      }
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public confirmSessionExtension = async (req: Request, res: Response) => {
+    try {
+      const result = await this.sessionExtensionService.confirmExtension({
+        sessionId: req.body.sessionId,
+        minutes: Number(req.body.minutes),
+        payment_intent_id: req.body.payment_intent_id,
+        _userId: String(req["authUser"]?._id),
+      });
+      if (result.code === 400 || result.code === 409) {
+        return res.status(result.code).send({
+          status: CONSTANCE.FAIL,
+          error: result.error || result.result,
+        });
+      }
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
     }
   };
 }

@@ -182,6 +182,15 @@ export class commonController {
             });
         }
 
+        const existing = await booked_session.findById(sessionId).select("is_instant").lean();
+        if (existing?.is_instant) {
+            return res.status(403).json({
+                success: false,
+                message:
+                    "Instant lessons must use paid in-session extension. Call POST /trainee/session-extension/confirm instead.",
+            });
+        }
+
         const updatedSession = await booked_session.findByIdAndUpdate(
             sessionId,
             { extended_session_end_time,extended_end_time:extendedEndTime },

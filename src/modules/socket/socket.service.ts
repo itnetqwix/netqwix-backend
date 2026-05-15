@@ -271,6 +271,104 @@ const clearLessonTimeouts = (session: LessonSessionState) => {
   session.endTimeoutId = null;
 };
 
+export function getLessonTimerSnapshot(sessionId: string): {
+  remainingSeconds: number;
+  status: string;
+  duration: number;
+} | null {
+  const session = lessonSessions.get(String(sessionId));
+  if (!session) return null;
+
+  if (session.status === "running" && session.startedAt != null) {
+    const elapsed = Math.floor((Date.now() - session.startedAt) / 1000);
+    return {
+      remainingSeconds: Math.max(0, session.remainingSeconds - elapsed),
+      status: session.status,
+      duration: session.duration,
+    };
+  }
+
+  return {
+    remainingSeconds: session.remainingSeconds,
+    status: session.status,
+    duration: session.duration,
+  };
+}
+
+/** Add paid extension time and notify everyone in the lesson room. */
+export function extendLessonTimer(
+  sessionId: string,
+  addedMinutes: number,
+  meta?: { extensionId?: string; endTimeUtc?: string }
+) {
+  if (!ioInstance) return;
+
+  const addedSeconds = addedMinutes * 60;
+  const sid = String(sessionId);
+  const roomName = `session:${sid}`;
+  let session = lessonSessions.get(sid);
+
+  if (!session) {
+    session = {
+      sessionId: sid,
+      coachJoined: true,
+      userJoined: true,
+      startedAt: Date.now(),
+      duration: addedSeconds,
+      remainingSeconds: addedSeconds,
+      status: "running",
+    };
+    lessonSessions.set(sid, session);
+  } else {
+    if (session.status === "running" && session.startedAt != null) {
+      const elapsed = Math.floor((Date.now() - session.startedAt) / 1000);
+      session.remainingSeconds = Math.max(0, session.remainingSeconds - elapsed);
+      session.startedAt = Date.now();
+    }
+    session.duration += addedSeconds;
+    session.remainingSeconds += addedSeconds;
+    if (session.status === "ended" || session.status === "paused") {
+      session.status = "running";
+      if (session.startedAt == null) session.startedAt = Date.now();
+      session.trainerLeftPaused = false;
+    }
+  }
+
+  clearLessonTimeouts(session);
+
+  const extendedPayload = {
+    sessionId: sid,
+    addedSeconds,
+    remainingSeconds: session.remainingSeconds,
+    duration: session.duration,
+    endTimeUtc: meta?.endTimeUtc,
+    extensionId: meta?.extensionId,
+  };
+  ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.EXTENDED, extendedPayload);
+
+  const timerPayload = {
+    sessionId: session.sessionId,
+    startedAt: session.startedAt,
+    duration: session.duration,
+    remainingSeconds: session.remainingSeconds,
+  };
+  ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
+
+  const statePayload = {
+    sessionId: session.sessionId,
+    status: session.status,
+    startedAt: session.startedAt,
+    duration: session.duration,
+    remainingSeconds: session.remainingSeconds,
+    trainerConnected: session.coachJoined,
+    traineeConnected: session.userJoined,
+  };
+  ioInstance.to(roomName).emit("LESSON_STATE_SYNC", statePayload);
+
+  const stubSocket = { nsp: ioInstance.to(roomName) };
+  scheduleLessonEnd(stubSocket, roomName, session);
+}
+
 const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSessionState) => {
   clearLessonTimeouts(session);
 

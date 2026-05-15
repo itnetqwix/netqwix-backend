@@ -8,6 +8,10 @@ import {
   bookInstantMeetingModal,
   checkSlotExistModal,
 } from "./traineeValidator";
+import {
+  sessionExtensionConfirmModal,
+  sessionExtensionPaymentIntentModal,
+} from "./sessionExtensionValidator";
 import { TraineeMiddleware } from "./traineeMiddleware";
 
 const route: Router = Router();
@@ -44,4 +48,23 @@ route.post(
   traineeC.checkSlotExist
 );
 route.get('/recent-trainers' , traineeC.recentTrainers)
+
+route.get(
+  "/session-extension/quote",
+  traineeMiddleware.isTrainee,
+  traineeC.getSessionExtensionQuote
+);
+route.post(
+  "/session-extension/create-payment-intent",
+  traineeMiddleware.isTrainee,
+  V.validate(sessionExtensionPaymentIntentModal),
+  traineeC.createSessionExtensionPaymentIntent
+);
+route.post(
+  "/session-extension/confirm",
+  traineeMiddleware.isTrainee,
+  V.validate(sessionExtensionConfirmModal),
+  traineeC.confirmSessionExtension
+);
+
 export const traineeRoute: Router = route;

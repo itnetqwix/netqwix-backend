@@ -137,7 +137,8 @@ export class EVENTS {
   public static readonly LESSON_TIMER = {
     WARNING: 'LESSON_TIME_WARNING',
     ENDED: 'LESSON_TIME_ENDED',
-    STARTED: 'TIMER_STARTED'
+    STARTED: 'TIMER_STARTED',
+    EXTENDED: 'LESSON_TIMER_EXTENDED',
   }
 }
 export const MONGO_DATE_FORMAT = {

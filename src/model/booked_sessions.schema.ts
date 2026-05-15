@@ -109,8 +109,32 @@ const bookedSessionsSchema: Schema = new Schema(
             type: String,
             default: null,
         },
+        total_extended_minutes: {
+            type: Number,
+            default: 0,
+        },
+        extensions: [
+            {
+                minutes: { type: Number, required: true },
+                amount: { type: Number, required: true },
+                payment_intent_id: { type: String, default: null },
+                status: {
+                    type: String,
+                    enum: ["pending", "applied", "failed", "refunded"],
+                    default: "pending",
+                },
+                requested_at: { type: Date, default: Date.now },
+                applied_at: { type: Date, default: null },
+                requested_by: { type: Schema.Types.ObjectId, ref: "user" },
+            },
+        ],
     },
     { timestamps: true }
+);
+
+bookedSessionsSchema.index(
+    { "extensions.payment_intent_id": 1 },
+    { sparse: true }
 );
 
 // Add indexes for performance optimization
