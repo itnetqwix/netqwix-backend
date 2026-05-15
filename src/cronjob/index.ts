@@ -49,6 +49,16 @@ const aiService = new AIService();
       }
     });
     void escrowReleaseJob.start();
+
+    const verificationSlaJob = cron.schedule("0 * * * *", () => {
+      try {
+        const { trainerReviewService } = require("../modules/verification/trainerReviewService");
+        void trainerReviewService.processSlaEscalations();
+      } catch (err) {
+        console.log("err on verification SLA job:", err);
+      }
+    });
+    void verificationSlaJob.start();
   };
 
 const meetingConfirmationJob = async () => {

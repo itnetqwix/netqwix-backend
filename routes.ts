@@ -15,6 +15,7 @@ import { broadcastRoute } from "./src/modules/broadcast/broadcastRoutes";
 import { aiRoute } from "./src/modules/ai/aiRoutes";
 import { walletRoute } from "./src/modules/wallet/walletRoutes";
 import { opsRoute } from "./src/modules/ops/opsRoutes";
+import { verificationRoute } from "./src/modules/verification/verificationRoutes";
 export class Routes {
   protected app: express.Application;
   constructor() {}
@@ -37,6 +38,7 @@ export class Routes {
     router.use("/ai", aiRoute);
     router.use("/wallet", walletRoute);
     router.use("/ops", opsRoute);
+    router.use("/verification", verificationRoute);
     router.get("/", (req, res) => {
       res.send("Welcome to NetQwix :) ");
     });

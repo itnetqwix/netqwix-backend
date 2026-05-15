@@ -3,6 +3,11 @@ import { CONSTANCE } from "../config/constance";
 import * as l10n from "jm-ez-l10n";
 import JWT from "../Utils/jwt";
 import user from "../model/user.schema";
+import {
+  buildOnboardingStatus,
+  isOnboardingRequired,
+  isOnboardingWhitelistedPath,
+} from "../modules/verification/onboardingHelpers";
 
 export class AuthorizeMiddleware {
   public authorizeUser = async (req, res, next) => {
@@ -33,6 +38,19 @@ export class AuthorizeMiddleware {
             });
             if (result) {
               req.authUser = result;
+              const path = req.path || req.url || "";
+              const originalUrl = req.originalUrl || "";
+              if (
+                isOnboardingRequired(result) &&
+                !isOnboardingWhitelistedPath(path, originalUrl)
+              ) {
+                return res.status(403).json({
+                  status: CONSTANCE.FAIL,
+                  error: "Trainer onboarding required",
+                  code: "TRAINER_ONBOARDING_REQUIRED",
+                  onboarding: buildOnboardingStatus(result),
+                });
+              }
               next();
             } else {
               res

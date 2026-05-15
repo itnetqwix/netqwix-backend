@@ -3,6 +3,7 @@ import { AdminController } from "./adminController";
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
 import { adminFinanceController } from "../wallet/adminFinanceController";
 import { opsAdminController } from "../ops/opsAdminController";
+import { trainerReviewAdminController } from "../verification/trainerReviewAdminController";
 
 const route: Router = Router();
 const authorizeMiddleware = new AuthorizeMiddleware();
@@ -37,6 +38,13 @@ route.get("/ops-events/user/:userId", opsAdminController.listByUser);
 route.get("/ops-events/session/:sessionId", opsAdminController.listBySession);
 route.get("/ops-events/:eventId", opsAdminController.detail);
 route.patch("/ops-events/:eventId", opsAdminController.resolve);
+route.get("/trainer-verifications", trainerReviewAdminController.list);
+route.get("/trainer-verifications/pending-count", trainerReviewAdminController.pendingCount);
+route.post("/trainer-verifications/migrate", trainerReviewAdminController.migrate);
+route.get("/trainer-verifications/:userId", trainerReviewAdminController.detail);
+route.post("/trainer-verifications/:userId/approve", trainerReviewAdminController.approve);
+route.post("/trainer-verifications/:userId/reject", trainerReviewAdminController.reject);
+
 route.get("/dashboard-metrics", adminController.getDashboardMetrics);
 route.get("/online-users", adminController.getOnlineUsers);
 

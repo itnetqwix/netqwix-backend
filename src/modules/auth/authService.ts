@@ -16,6 +16,10 @@ import { stripeHelperController } from "../stripe/stripeHelperController";
 import admin_setting from "../../model/default_admin_setting.schema";
 import ReferredUser from "../../model/referred.user.schema";
 import { recordUserActivity, UserActivityEvent } from "../../helpers/userActivity";
+import {
+  buildOnboardingStatus,
+  initTrainerVerificationOnSignup,
+} from "../verification/onboardingHelpers";
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
 
@@ -95,6 +99,10 @@ export class AuthService {
     };
 
     if (createUser.account_type === AccountType.TRAINER) {
+      (updateduserObj as any).trainer_verification = initTrainerVerificationOnSignup(
+        Boolean(createUser.isGoogleRegister)
+      );
+      (updateduserObj as any).status = "pending";
       updateduserObj = {
         ...updateduserObj,
         extraInfo: {
@@ -245,8 +253,15 @@ export class AuthService {
           };
           const access_token = this.JWT.signJWT(payload);
           //TODO: Store access_token in DB
+          const onboarding = buildOnboardingStatus(userDetails);
           return ResponseBuilder.data(
-            { data: { access_token, account_type: userDetails.account_type } },
+            {
+              data: {
+                access_token,
+                account_type: userDetails.account_type,
+                onboarding,
+              },
+            },
             l10n.t("LOGIN_SUCCESSFULL")
           );
         } else {
@@ -374,8 +389,15 @@ export class AuthService {
       };
       const access_token = this.JWT.signJWT(payload);
       //TODO: Store access_token in DB
+      const onboarding = buildOnboardingStatus(user);
       return ResponseBuilder.data(
-        { data: { access_token, account_type: user.account_type } },
+        {
+          data: {
+            access_token,
+            account_type: user.account_type,
+            onboarding,
+          },
+        },
         l10n.t("LOGIN_SUCCESSFULL")
       );
     } catch (error) {

@@ -95,6 +95,34 @@ const userSchema: Schema = new Schema(
       enum: ["pending", "approved", "rejected"],
       default: "pending",
     },
+    trainer_verification: {
+      onboarding_step: {
+        type: String,
+        enum: [
+          "account_created",
+          "contact_verified",
+          "profile_face_complete",
+          "under_review",
+          "completed",
+        ],
+        default: "account_created",
+      },
+      email_verified_at: { type: Date },
+      phone_verified_at: { type: Date },
+      profile_completed_at: { type: Date },
+      face: {
+        rekognition_session_id: String,
+        confidence: Number,
+        liveness_status: String,
+        reference_image_s3_key: String,
+        submitted_at: Date,
+      },
+      submitted_for_review_at: { type: Date },
+      review_escalated_at: { type: Date },
+      rejection_reason: { type: String },
+      grace_deadline: { type: Date },
+      version: { type: Number, default: 1 },
+    },
   },
   { timestamps: true }
 );
