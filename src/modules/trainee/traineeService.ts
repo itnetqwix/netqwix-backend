@@ -28,7 +28,7 @@ import { DateTime } from "luxon";
 import SMSService from "../../services/sms-service";
 import { timeZoneAbbreviations } from "../../Utils/constant";
 import { PromoCodeService } from "../promo-code/promoCodeService";
-import { checkTrainerBookingConflict } from "../../utils/bookingConflict";
+import { checkTrainerBookingConflict } from "../../Utils/bookingConflict";
 import { scheduleInstantLessonAcceptExpiry } from "../../helpers/instantLessonExpiry";
 
 export class TraineeService {

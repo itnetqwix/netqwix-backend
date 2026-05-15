@@ -3,7 +3,7 @@ import { BOOKED_SESSIONS_STATUS, CONSTANCE } from "../../config/constance";
 import { SESSION_EXTENSION } from "../../config/sessionExtension";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { StripeHelper } from "../../helpers/stripe";
-import { checkTrainerBookingConflict } from "../../utils/bookingConflict";
+import { checkTrainerBookingConflict } from "../../Utils/bookingConflict";
 import booked_session from "../../model/booked_sessions.schema";
 import user from "../../model/user.schema";
 import { DateFormat } from "../../Utils/dateFormat";

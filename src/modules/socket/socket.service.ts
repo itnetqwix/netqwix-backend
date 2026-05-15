@@ -15,7 +15,7 @@ import { NotificationType } from "../../enum/notification.enum";
 import mongoose from "mongoose";
 import booked_session from "../../model/booked_sessions.schema";
 import { INSTANT_ACCEPT_WINDOW_MS } from "../../config/instantLesson";
-import { checkTrainerBookingConflict } from "../../utils/bookingConflict";
+import { checkTrainerBookingConflict } from "../../Utils/bookingConflict";
 import {
   clearInstantLessonAcceptExpiry,
   registerInstantLessonExpireHandler,
