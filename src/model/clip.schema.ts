@@ -27,7 +27,7 @@ const clipSchema: Schema = new Schema(
     },
     user_id: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "user",
     },
     user_type: {
       type: String,
@@ -36,7 +36,20 @@ const clipSchema: Schema = new Schema(
     status: {                    
       type : Boolean,
       default : true,
-    }
+    },
+    tags: {
+      type: [String],
+      default: [],
+    },
+    ai_description: {
+      type: String,
+      default: null,
+    },
+    skill_level: {
+      type: String,
+      enum: ["beginner", "intermediate", "advanced", null],
+      default: null,
+    },
   },
   { timestamps: true }
 );

@@ -16,7 +16,6 @@ import clip from "../../model/clip.schema";
 import savedSession from "../../model/saved_sessions.schema";
 import book from "../../model/booked_sessions.schema";
 
-import * as AWS from "aws-sdk";
 import mongoose from "mongoose";
 import booked_session from "../../model/booked_sessions.schema";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
@@ -25,17 +24,9 @@ import sharp = require("sharp");
 import ReferredUser from "../../model/referred.user.schema";
 import { SendEmail } from "../../Utils/sendEmail";
 import user from "../../model/user.schema";
-const bucketName = process.env.AWS_BUCKET_NAME;
-const region = process.env.AWS_REGION;
-const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-const s3 = new AWS.S3({
-  endpoint: `https://${process.env.CLOUDFLARE_R2}.r2.cloudflarestorage.com`,
-  region,
-  accessKeyId,
-  secretAccessKey,
-  signatureVersion: "v4",
-});
+import { AccountType } from "../auth/authEnum";
+import { s3, S3_BUCKET } from "../../Utils/s3Client";
+import { recordUserActivity, UserActivityEvent } from "../../helpers/userActivity";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -74,9 +65,37 @@ export class commonService {
     }
   }
 
+  public async chatMediaUploadUrl(req: any, res: Response) {
+    try {
+      const userId = req?.authUser?._id;
+      if (!userId) {
+        return res.status(401).json({ success: 0, message: "Unauthorized" });
+      }
+      const { fileName, fileType } = req.body;
+      if (!fileName || !fileType) {
+        return res.status(400).json({ success: 0, message: "fileName and fileType are required" });
+      }
+      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+      const allowed = ["jpg", "jpeg", "png", "gif", "webp", "mp4", "mov", "m4a", "aac", "wav", "mp3", "webm"];
+      if (!allowed.includes(ext)) {
+        return res.status(400).json({ success: 0, message: `File type .${ext} is not allowed` });
+      }
+      const key = `chat-media/${userId}/${Date.now()}-${fileName}`;
+      const url = await this.generatePreSignedPutUrl(key, fileType);
+      if (!url) {
+        return res.status(500).json({ success: 0, message: "Failed to generate upload URL" });
+      }
+      const publicUrl = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+      return res.status(200).json({ success: 1, uploadUrl: url, mediaUrl: publicUrl, key });
+    } catch (error) {
+      console.error("Error generating chat media upload URL:", error);
+      return res.status(500).json({ success: 0, message: "Internal server error" });
+    }
+  }
+
   generatePreSignedPutUrl = async (fileName, fileType) => {
     const params = {
-      Bucket: bucketName,
+      Bucket: S3_BUCKET,
       Key: fileName,
       Expires: 600,
       // ACL: "public-read",
@@ -192,6 +211,42 @@ export class commonService {
         // Object to track users who need emails and their thumbnails with titles
         const usersToEmail: Record<string, { thumbnails: { url: string, title: string }[], isNewUser: boolean }> = {};
 
+        // Enforce role-based restrictions for uploads-to-others (friends sharing flow):
+        // - Trainee can upload only to trainee
+        // - Trainer can upload only to trainee
+        if (shareOptions?.type === shareWithConstants.myFriends) {
+          const uploaderType = req?.authUser?.account_type;
+          if (![AccountType.TRAINER, AccountType.TRAINEE].includes(uploaderType)) {
+            return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
+              success: 0,
+              message: "Only trainer or trainee accounts can share clips to friends.",
+            });
+          }
+
+          const targetUsers = await user.find(
+            { _id: { $in: processedUserIds } },
+            { _id: 1, account_type: 1 }
+          );
+
+          if (targetUsers.length !== processedUserIds.length) {
+            return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
+              success: 0,
+              message: "One or more selected users were not found.",
+            });
+          }
+
+          const hasInvalidTarget = targetUsers.some(
+            (targetUser: any) => targetUser?.account_type !== AccountType.TRAINEE
+          );
+
+          if (hasInvalidTarget) {
+            return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
+              success: 0,
+              message: "You can upload clips only to trainee accounts.",
+            });
+          }
+        }
+
         // Process each clip in the bulk upload
         for (const clipData of req.body.clips) {
           const fileName = `${new Date().getTime()}_${Math.random().toString(36).substring(2, 9)}.${clipData.fileType.split("/")[1]}`;
@@ -211,6 +266,10 @@ export class commonService {
           for (const userId of processedUserIds) {
             const clipObj = new clip({ ...clipPayload, user_id: userId });
             await clipObj.save();
+            void recordUserActivity(String(userId), UserActivityEvent.CLIP_CREATED, {
+              clipId: String(clipObj._id),
+              title: clipObj.title,
+            });
             savedClips.push(clipObj);
 
             // Track users who need emails and collect their thumbnails
@@ -410,7 +469,10 @@ export class commonService {
         { _id: req.body.session_id },
         { report: filename }
       );
-      let fileUrl = await this.generatePreSignedPutUrl(filename, "pdf");
+      let fileUrl = await this.generatePreSignedPutUrl(
+        filename,
+        "application/pdf"
+      );
       return res
         .status(CONSTANCE.RES_CODE.success)
         .json({ success: 1, url: fileUrl });

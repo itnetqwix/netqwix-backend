@@ -15,6 +15,7 @@ import { CONSTANCE, NetquixImage } from "../../config/constance";
 import { stripeHelperController } from "../stripe/stripeHelperController";
 import admin_setting from "../../model/default_admin_setting.schema";
 import ReferredUser from "../../model/referred.user.schema";
+import { recordUserActivity, UserActivityEvent } from "../../helpers/userActivity";
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
 
@@ -36,10 +37,27 @@ export class AuthService {
       hashPassword = await this.bcrypt.getHashedPassword(createUser.password);
     }
 
-    if (createUser.account_type === AccountType.TRAINER) {
-      account = await stripeHelperController.createAccount(createUser);
-    } else if (createUser.account_type === AccountType.TRAINEE) {
-      account = await stripeHelperController.createCustomer(createUser);
+    // Stripe customer/account creation is best-effort during signup.
+    // If Stripe is unreachable or the API key is IP-restricted, the user
+    // can complete onboarding later via the is_registered_with_stript flag.
+    try {
+      if (createUser.account_type === AccountType.TRAINER) {
+        account = await stripeHelperController.createAccount(createUser);
+      } else if (createUser.account_type === AccountType.TRAINEE) {
+        account = await stripeHelperController.createCustomer(createUser);
+      }
+      if (account && !account.id) {
+        // createAccount returns the raw error object on failure rather than throwing
+        this.log.warn(
+          `Stripe ${createUser.account_type} creation failed for ${createUser.email}: ${account?.message || JSON.stringify(account)}`
+        );
+        account = undefined;
+      }
+    } catch (stripeErr) {
+      this.log.error(
+        `Stripe ${createUser.account_type} creation threw for ${createUser.email}: ${stripeErr?.message || stripeErr}`
+      );
+      account = undefined;
     }
 
     const global_commission = await admin_setting.findOne();
@@ -154,7 +172,9 @@ export class AuthService {
     );
     const adminEmail = process.env.EMAIL_USER || "shubhamrakhecha5@gmail.com";
 
-    if (createUser.account_type === AccountType.TRAINER) {
+    if (createUser.account_type === AccountType.ADMIN) {
+      // Admin accounts do not go through trainer/trainee onboarding emails.
+    } else if (createUser.account_type === AccountType.TRAINER) {
       SendEmail.sendRawEmail(
         "new-trainer",
         {
@@ -197,7 +217,7 @@ export class AuthService {
     }
   };
 
-  public login = async (user: loginModel): Promise<ResponseBuilder> => {
+  public login = async (user: loginModel, client?: { ip?: string }): Promise<ResponseBuilder> => {
     try {
       const { email, password } = user;
       if (!email) {
@@ -213,6 +233,12 @@ export class AuthService {
           userDetails.password
         );
         if (validPassword) {
+          const rawIp = client?.ip || "";
+          const ip =
+            typeof rawIp === "string" && rawIp.includes(",")
+              ? rawIp.split(",")[0].trim()
+              : rawIp;
+          void recordUserActivity(String(userDetails._id), UserActivityEvent.LOGIN, { channel: "password" }, ip);
           const payload = {
             user_id: userDetails._id,
             account_type: userDetails.account_type,
@@ -250,12 +276,21 @@ export class AuthService {
 
   public forgotPasswordEmail = async (
     email,
-    authUser
+    authUser,
+    portal = ""
   ): Promise<ResponseBuilder> => {
     try {
       const userInfo = await user.findById(authUser["_id"]);
       if (!userInfo) {
         return ResponseBuilder.errorMessage("User not found.");
+      }
+      if (
+        String(portal).toLowerCase() === "admin" &&
+        String(userInfo.account_type) !== AccountType.ADMIN
+      ) {
+        return ResponseBuilder.badRequest(
+          "This portal can only reset passwords for administrator accounts."
+        );
       }
       const token = this.JWT.signJWT({
         user_id: authUser["_id"],

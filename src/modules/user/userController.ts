@@ -75,10 +75,26 @@ export class userController {
         var newResult = JSON.parse(JSON.stringify(result.result));
         if (result.status !== CONSTANCE.FAIL) {
           if (req?.authUser?.account_type === "Trainer") {
-            var ratings = await booked_session.find({
-              trainer_id: req?.authUser?._id,
-            });
-            newResult.userInfo.ratings = ratings;
+            const ratingBookings = await booked_session.find(
+              {
+                trainer_id: req?.authUser?._id,
+                "ratings.trainee.recommendRating": { $exists: true, $ne: null },
+              },
+              {
+                "ratings.trainee.recommendRating": 1,
+              }
+            );
+
+            const totalRating = ratingBookings.length;
+            const avgRatingNumber = ratingBookings.reduce((acc, booking) => {
+              const value = Number(booking?.ratings?.trainee?.recommendRating || 0);
+              return acc + (Number.isFinite(value) ? value : 0);
+            }, 0);
+
+            newResult.userInfo.rating_summary = {
+              ratingRatio: totalRating ? Number((avgRatingNumber / totalRating).toFixed(2)) : 0,
+              totalRating,
+            };
           }
           res.status(result.code).json(newResult);
         } else {
@@ -182,8 +198,10 @@ export class userController {
   public getAllTrainee = async (req, res) => {
     try {
       if (req["authUser"]) {
+        const searchTerm = req?.query?.search ? String(req.query.search) : undefined;
         const result: ResponseBuilder = await this.userService.getAllTrainee(
-          req.authUser
+          req.authUser,
+          searchTerm
         );
         if (result.status !== CONSTANCE.FAIL) {
           res.status(result.code).json(result);
@@ -203,8 +221,10 @@ export class userController {
   public getAllTrainers = async (req, res) => {
     try {
       if (req["authUser"]) {
+        const searchTerm = req?.query?.search ? String(req.query.search) : undefined;
         const result: ResponseBuilder = await this.userService.getAllTrainers(
-          req.authUser
+          req.authUser,
+          searchTerm
         );
         if (result.status !== CONSTANCE.FAIL) {
           res.status(result.code).json(result);
@@ -577,6 +597,42 @@ export class userController {
     }
   };
 
+  public getSentFriendRequests = async (req, res) => {
+    try {
+      const senderId = req.authUser._id.toString();
+
+      const receivers = await user
+        .find(
+          { "friendRequests.senderId": senderId },
+          "fullname email profile_picture account_type friendRequests"
+        )
+        .lean();
+
+      const sentRequests = receivers.map((receiver: any) => {
+        const matchingReq = (receiver.friendRequests ?? []).find(
+          (fr: any) => fr.senderId?.toString() === senderId
+        );
+        return {
+          _id: matchingReq?._id ?? receiver._id,
+          receiverId: {
+            _id: receiver._id,
+            fullname: receiver.fullname,
+            email: receiver.email,
+            profile_picture: receiver.profile_picture,
+            account_type: receiver.account_type,
+          },
+          status: "pending",
+          createdAt: matchingReq?.createdAt ?? null,
+        };
+      });
+
+      res.status(200).json({ sentRequests });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Server error." });
+    }
+  };
+
   public removeFriend = async (req, res) => {
     const { friendId } = req.body;
     const userId = req.authUser._id;
@@ -602,6 +658,57 @@ export class userController {
       await Promise.all([userDoc.save(), friendDoc.save()]);
 
       res.status(200).json({ message: "Friend removed successfully." });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Server error." });
+    }
+  };
+
+  public blockUser = async (req, res) => {
+    const { userId: blockedUserId, reason } = req.body;
+    const userId = req.authUser._id;
+    try {
+      if (!blockedUserId) {
+        return res.status(400).json({ error: "userId is required." });
+      }
+      await user.findByIdAndUpdate(userId, {
+        $addToSet: { blockedUsers: blockedUserId },
+        $pull: { friends: blockedUserId },
+      });
+      await user.findByIdAndUpdate(blockedUserId, {
+        $pull: { friends: userId },
+      });
+      const FriendRequest = require("../../model/friend_request.schema").default;
+      await FriendRequest.deleteMany({
+        $or: [
+          { senderId: userId, receiverId: blockedUserId },
+          { senderId: blockedUserId, receiverId: userId },
+        ],
+      });
+      res.status(200).json({ message: "User blocked successfully." });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Server error." });
+    }
+  };
+
+  public reportUser = async (req, res) => {
+    const { userId: reportedUserId, reason, description } = req.body;
+    const userId = req.authUser._id;
+    try {
+      if (!reportedUserId || !reason) {
+        return res.status(400).json({ error: "userId and reason are required." });
+      }
+      const raise_concern = require("../../model/raise_concern.schema").default;
+      await raise_concern.create({
+        user_id: userId,
+        reported_user_id: reportedUserId,
+        reason,
+        description: description || "",
+        subject: `User Report: ${reason}`,
+        ticket_status: "submitted",
+      });
+      res.status(200).json({ message: "Report submitted successfully." });
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: "Server error." });
@@ -870,6 +977,48 @@ export class userController {
     }
   };
 
+  public getMyRaiseConcerns = async (req, res) => {
+    try {
+      if (req["authUser"]) {
+        const id = req["authUser"]._id;
+        const result: ResponseBuilder =
+          await this.userService.getMyRaiseConcerns(id);
+        if (result.status !== CONSTANCE.FAIL) {
+          res.status(result.code).json(result);
+        } else {
+          res.status(result.code).json({
+            status: result.status,
+            error: result.error,
+            code: CONSTANCE.RES_CODE.error.badRequest,
+          });
+        }
+      }
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.error });
+    }
+  };
+
+  public getMyReferrals = async (req, res) => {
+    try {
+      if (req["authUser"]) {
+        const id = req["authUser"]._id;
+        const result: ResponseBuilder =
+          await this.userService.getMyReferrals(id);
+        if (result.status !== CONSTANCE.FAIL) {
+          res.status(result.code).json(result);
+        } else {
+          res.status(result.code).json({
+            status: result.status,
+            error: result.error,
+            code: CONSTANCE.RES_CODE.error.badRequest,
+          });
+        }
+      }
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.error });
+    }
+  };
+
   public updateWriteUsTicketStatus = async (req, res) => {
     try {
       if (req["authUser"]) {
@@ -934,6 +1083,29 @@ export class userController {
         const { trainer_id, status } = req.body;
         const result: ResponseBuilder =
           await this.userService.updateTrainerStatus(trainer_id, status);
+        if (result.status !== CONSTANCE.FAIL) {
+          res.status(result.code).json(result);
+        } else {
+          res.status(result.code).json({
+            status: result.status,
+            error: result.error,
+            code: CONSTANCE.RES_CODE.error.badRequest,
+          });
+        }
+      }
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.error });
+    }
+  };
+
+  public deleteUser = async (req, res) => {
+    try {
+      if (req["authUser"]) {
+        const { id } = req.params;
+        const result: ResponseBuilder = await this.userService.deleteUser(
+          req.authUser,
+          id
+        );
         if (result.status !== CONSTANCE.FAIL) {
           res.status(result.code).json(result);
         } else {

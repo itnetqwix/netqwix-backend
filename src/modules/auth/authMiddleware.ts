@@ -47,12 +47,11 @@ export class AuthMiddleware {
     next: NextFunction
   ) => {
     try {
-      const isUserExist: isDataExists = await this.authService.isUserExists(
-        req.body
-      );
-      this.logger.info(isUserExist);
-      if (!isEmpty(isUserExist)) {
-        req["authUser"] = isUserExist;
+      const email = req.body?.email;
+      const existing = email ? await user.findOne({ email }).select("_id account_type") : null;
+      this.logger.info({ email, found: Boolean(existing) });
+      if (existing) {
+        req["authUser"] = existing;
         next();
       } else {
         return res.status(CONSTANCE.RES_CODE.error.badRequest).send({

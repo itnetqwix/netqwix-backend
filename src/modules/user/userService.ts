@@ -23,6 +23,7 @@ import { stripeHelperController } from "../stripe/stripeHelperController";
 import raise_concern from "../../model/raise_concern.schema";
 import { Constant, timeZoneAbbreviations } from "../../Utils/constant";
 import onlineUser from "../../model/online_user.schema";
+import { recordUserActivity, recordUserActivityMany, UserActivityEvent } from "../../helpers/userActivity";
 import SMSService from "../../services/sms-service";
 import user from "../../model/user.schema";
 import { DateTime } from "luxon";
@@ -73,7 +74,12 @@ export class UserService {
           { status: payload.booked_status },
           { new: true }
         );
-        
+        void recordUserActivityMany(
+          [String(bookedSessionDetail.trainee_id), String(bookedSessionDetail.trainer_id)],
+          UserActivityEvent.BOOKING_STATUS,
+          { sessionId: String(bookedSessionId), status: payload.booked_status }
+        );
+
         // Emit booking status updated event
         try {
           const { emitBookingStatusUpdated } = require("../socket/socket.service");
@@ -397,6 +403,7 @@ export class UserService {
         return ResponseBuilder.data([], "User not found");
       }
 
+      void recordUserActivity(String(userId), UserActivityEvent.PROFILE_UPDATE, { area: "isPrivate" });
       return ResponseBuilder.data(updatedUserInfo, "User privacy setting updated successfully");
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
@@ -417,6 +424,7 @@ export class UserService {
         return ResponseBuilder.data([], "User not found");
       }
 
+      void recordUserActivity(String(userInfo._id), UserActivityEvent.PROFILE_UPDATE, { area: "mobile_no" });
       return ResponseBuilder.data(updatedUserInfo, "User privacy setting updated successfully");
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
@@ -435,6 +443,7 @@ export class UserService {
         return ResponseBuilder.data([], "User not found");
       }
 
+      void recordUserActivity(String(userInfo._id), UserActivityEvent.PROFILE_UPDATE, { area: "notifications" });
       return ResponseBuilder.data(updatedUserInfo, "User Notification setting updated successfully");
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
@@ -443,9 +452,11 @@ export class UserService {
 
   public async getScheduledMeetings(req) {
     const { authUser, query } = req;
-    const { status, datetime, timezone } = query;
+    const { status, id } = query;
     try {
       let matchCondition = {};
+      const page = Math.max(Number(query?.page) || 1, 1);
+      const limit = Math.min(Math.max(Number(query?.limit) || 25, 1), 100);
 
       // Check both trainer_id and trainee_id to handle cases where user might have sessions in both roles
       // This is more flexible and handles edge cases where account_type might not match the session role
@@ -478,6 +489,12 @@ export class UserService {
         $exists: true, 
         $ne: null
       };
+
+      if (id && Types.ObjectId.isValid(id)) {
+        additionalFilters = {
+          _id: new Types.ObjectId(id),
+        };
+      }
       
       if (status) {
         const now = new Date();
@@ -542,8 +559,7 @@ export class UserService {
         };
       }
 
-      const result = await booked_session
-        .aggregate([
+      const pipeline: PipelineStage[] = [
           {
             $match: {
               ...matchCondition,
@@ -564,7 +580,18 @@ export class UserService {
               as: "trainer_info",
               pipeline: [
                 {
-                  $project: Constant.pipelineUser,
+                  $project: {
+                    _id: 1,
+                    fullname: 1,
+                    email: 1,
+                    mobile_no: 1,
+                    account_type: 1,
+                    login_type: 1,
+                    profile_picture: 1,
+                    category: 1,
+                    commission: 1,
+                    status: 1,
+                  },
                 },
               ],
             },
@@ -577,7 +604,16 @@ export class UserService {
               as: "trainee_info",
               pipeline: [
                 {
-                  $project: Constant.pipelineUser,
+                  $project: {
+                    _id: 1,
+                    fullname: 1,
+                    email: 1,
+                    mobile_no: 1,
+                    account_type: 1,
+                    login_type: 1,
+                    profile_picture: 1,
+                    status: 1,
+                  },
                 },
               ],
             },
@@ -623,6 +659,7 @@ export class UserService {
               iceServers: 1,
               extended_session_end_time:1,
               extended_end_time:1,
+              trainee_clip: 1,
               is_instant: { $ifNull: ["$is_instant", false] },
             },
           },
@@ -631,8 +668,16 @@ export class UserService {
               createdAt: -1,
             },
           },
-        ])
-        .exec();
+      ];
+
+      if (!id) {
+        pipeline.push({ $skip: (page - 1) * limit });
+        pipeline.push({ $limit: limit });
+      } else {
+        pipeline.push({ $limit: 1 });
+      }
+
+      const result = await booked_session.aggregate(pipeline).exec();
 
       // Debug logging
       this.log.debug("getScheduledMeetings - result count:", result?.length || 0);
@@ -650,7 +695,15 @@ export class UserService {
         this.log.debug("getScheduledMeetings - countDocuments result:", countResult);
       }
 
-      return ResponseBuilder.data({ data: result }, l10n.t("MEETING_FETCHED"));
+      return ResponseBuilder.data(
+        {
+          data: result,
+          page,
+          limit,
+          hasMore: !id ? result.length === limit : false,
+        },
+        l10n.t("MEETING_FETCHED")
+      );
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
     }
@@ -678,6 +731,13 @@ export class UserService {
         { $set: { ...bookingInfo } },
         { new: true }
       );
+      if (bookingInfo.status === BOOKED_SESSIONS_STATUS.completed) {
+        void recordUserActivityMany(
+          [String(bookingInfo.trainee_id), String(bookingInfo.trainer_id)],
+          UserActivityEvent.SESSION_COMPLETED,
+          { sessionId: String(bookingInfo._id) }
+        );
+      }
       return ResponseBuilder.data({ bookingInfo }, l10n.t("RATING_SUBMITTED"));
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
@@ -708,10 +768,18 @@ export class UserService {
     }
   }
 
-  public async getAllTrainee(userInfo: any) {
+  public async getAllTrainee(userInfo: any, searchTerm?: string) {
     try {
-      const { _id } = userInfo;
-      var trainee = await user.find({ account_type: AccountType.TRAINEE });
+      const filter: any = { account_type: AccountType.TRAINEE };
+      if (searchTerm && String(searchTerm).trim()) {
+        const s = String(searchTerm).trim();
+        filter.$or = [
+          { fullname: { $regex: s, $options: "i" } },
+          { email: { $regex: s, $options: "i" } },
+          { mobile_no: { $regex: s, $options: "i" } },
+        ];
+      }
+      const trainee = await user.find(filter);
       if (!trainee) {
         return ResponseBuilder.data(trainee, "Trainee not found");
       }
@@ -721,10 +789,18 @@ export class UserService {
     }
   }
 
-  public async getAllTrainers(userInfo: any) {
+  public async getAllTrainers(userInfo: any, searchTerm?: string) {
     try {
-      const { _id } = userInfo;
-      var trainer = await user.find({ account_type: AccountType.TRAINER });
+      const filter: any = { account_type: AccountType.TRAINER };
+      if (searchTerm && String(searchTerm).trim()) {
+        const s = String(searchTerm).trim();
+        filter.$or = [
+          { fullname: { $regex: s, $options: "i" } },
+          { email: { $regex: s, $options: "i" } },
+          { mobile_no: { $regex: s, $options: "i" } },
+        ];
+      }
+      const trainer = await user.find(filter);
       if (!trainer) {
         return ResponseBuilder.data(trainer, "Trainer not found");
       }
@@ -1298,6 +1374,62 @@ export class UserService {
     }
   }
 
+  public async getMyRaiseConcerns(userId: string) {
+    try {
+      const mongoose = require("mongoose");
+      const pipeline: PipelineStage[] = [
+        { $match: { user_id: new mongoose.Types.ObjectId(userId) } },
+        {
+          $lookup: {
+            from: "booked_sessions",
+            localField: "booking_id",
+            foreignField: "_id",
+            as: "booking_details",
+          },
+        },
+        {
+          $addFields: {
+            booking_details: { $arrayElemAt: ["$booking_details", 0] },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            ticket_status: 1,
+            reason: 1,
+            subject: 1,
+            description: 1,
+            is_releted_to_refund: 1,
+            createdAt: 1,
+            updatedAt: 1,
+            "booking_details.booked_date": 1,
+            "booking_details.start_time": 1,
+            "booking_details.end_time": 1,
+            "booking_details.status": 1,
+            "booking_details.category": 1,
+          },
+        },
+        { $sort: { createdAt: -1 } },
+      ];
+      const list = await raise_concern.aggregate(pipeline);
+      return ResponseBuilder.data(list ?? [], "Fetched successfully");
+    } catch (err) {
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
+  public async getMyReferrals(userId: string) {
+    try {
+      const mongoose = require("mongoose");
+      const list = await ReferredUser.find({ referrerId: new mongoose.Types.ObjectId(userId) })
+        .sort({ createdAt: -1 })
+        .lean();
+      return ResponseBuilder.data(list ?? [], "Fetched successfully");
+    } catch (err) {
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
   public async updateWriteUsTicketStatus(body) {
     try {
       const { id, ticket_status } = body;
@@ -1438,6 +1570,40 @@ export class UserService {
         err,
         l10n.t("ERR_INTERNAL_SERVER") || "Internal Server Error"
       );
+    }
+  }
+
+  public async deleteUser(authUser: any, userId: string): Promise<ResponseBuilder> {
+    try {
+      if (authUser?.account_type !== AccountType.ADMIN) {
+        return ResponseBuilder.badRequest("Only admin can delete users");
+      }
+
+      if (!userId) {
+        return ResponseBuilder.badRequest("User id is required");
+      }
+
+      if (String(authUser?._id) === String(userId)) {
+        return ResponseBuilder.badRequest("Admin cannot delete own account");
+      }
+
+      const targetUser = await user.findById(userId);
+      if (!targetUser) {
+        return ResponseBuilder.badRequest("User not found");
+      }
+
+      if (targetUser.account_type === AccountType.ADMIN) {
+        return ResponseBuilder.badRequest("Admin user cannot be deleted");
+      }
+
+      await user.findByIdAndDelete(userId);
+
+      return ResponseBuilder.data(
+        { deletedUserId: userId },
+        "User deleted successfully"
+      );
+    } catch (err) {
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
     }
   }
 

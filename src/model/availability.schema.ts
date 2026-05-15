@@ -3,7 +3,7 @@ import { Tables } from "../config/tables";
 
 const availabilitySchema: Schema = new Schema(
   {
-    trainer_id: { type: Schema.Types.ObjectId, ref: "users" },
+    trainer_id: { type: Schema.Types.ObjectId, ref: "user" },
     start_time: { type: Date },
     end_time: { type: Date },
     status: { type: Boolean, default: false }

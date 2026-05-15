@@ -1,12 +1,11 @@
 import { Readable } from "stream";
 import { MemCache } from "../../Utils/memCache";
-import { EVENTS } from "../../config/constance";
+import { EVENTS, BOOKED_SESSIONS_STATUS } from "../../config/constance";
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const axios = require("axios");
 import savedSession from "../../model/saved_sessions.schema";
-import * as AWS from "aws-sdk";
 import onlineUser from "../../model/online_user.schema";
 import CallDiagnostics from "../../model/call_diagnostics.schema";
 import * as webpush from "web-push";
@@ -15,19 +14,12 @@ import user from "../../model/user.schema";
 import { NotificationType } from "../../enum/notification.enum";
 import mongoose from "mongoose";
 import booked_session from "../../model/booked_sessions.schema";
-const logoPath = path.resolve(__dirname, "../../assets/netqwix_logo.png");
+import { s3, S3_BUCKET } from "../../Utils/s3Client";
+import { touchUserPresence } from "../../helpers/userActivity";
+import { NotificationsService } from "../notifications/notificationsService";
 
-const bucketName = process.env.AWS_BUCKET_NAME;
-const region = process.env.AWS_REGION;
-const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-const s3 = new AWS.S3({
-  endpoint: `https://${process.env.CLOUDFLARE_R2}.r2.cloudflarestorage.com`,
-  region,
-  accessKeyId,
-  secretAccessKey,
-  signatureVersion: "v4",
-});
+const pushService = new NotificationsService();
+const logoPath = path.resolve(__dirname, "../../assets/netqwix_logo.png");
 
 //NOTE -  Set VAPID details
 webpush.setVapidDetails(
@@ -38,8 +30,12 @@ webpush.setVapidDetails(
 
 let activeUsers = {};
 let ioInstance: any = null; // Store io instance for emitting events from services
+/** Set once `emitBookingStatusUpdated` is defined (handlers above need a late binding). */
+let emitBookingStatusUpdatedDelegate: ((bookingData: any) => Promise<void>) | null = null;
 
 // Set the io instance (called from socket init)
+export const getIo = () => ioInstance;
+
 export const setIoInstance = (io: any) => {
   ioInstance = io;
   
@@ -88,6 +84,107 @@ type LessonSessionState = {
 };
 
 const lessonSessions: Map<string, LessonSessionState> = new Map();
+
+/** Brief disconnects (e.g. ERR_NETWORK_CHANGED → reconnect) must not pause the lesson or emit PARTICIPANT_LEFT. */
+const SESSION_LEAVE_GRACE_MS = 12000;
+const pendingLessonDisconnectTimers = new Map<string, NodeJS.Timeout>();
+
+function cancelLessonDisconnectGrace(sessionId: string, userId: string) {
+  const key = `${String(sessionId)}:${String(userId)}`;
+  const t = pendingLessonDisconnectTimers.get(key);
+  if (t) {
+    clearTimeout(t);
+    pendingLessonDisconnectTimers.delete(key);
+  }
+}
+
+function lessonRoomEmit(roomName: string, event: string, payload: unknown) {
+  if (ioInstance) ioInstance.to(roomName).emit(event, payload);
+}
+
+function finalizeLessonParticipantDisconnect(
+  sessionId: string,
+  roomName: string,
+  role: "trainer" | "trainee",
+  disconnectedUserId: string,
+) {
+  const session = lessonSessions.get(sessionId);
+  if (!session) return;
+
+  if (role === "trainer") {
+    if (!session.coachJoined) return;
+    session.coachJoined = false;
+    console.log(`[SESSION] Trainer ${disconnectedUserId} confirmed leave after grace for session ${sessionId}`);
+
+    if (session.status === "running" && session.startedAt != null) {
+      const elapsedSeconds = Math.floor((Date.now() - session.startedAt) / 1000);
+      session.remainingSeconds = Math.max(0, session.remainingSeconds - elapsedSeconds);
+      session.startedAt = null;
+      session.status = "paused";
+      session.trainerLeftPaused = true;
+      clearLessonTimeouts(session);
+
+      const pausedPayload = {
+        sessionId: session.sessionId,
+        remainingSeconds: session.remainingSeconds,
+        duration: session.duration,
+        reason: "trainer_left",
+      };
+      lessonRoomEmit(roomName, "LESSON_TIME_PAUSED", pausedPayload);
+      const statePayload = {
+        sessionId: session.sessionId,
+        status: session.status,
+        startedAt: session.startedAt,
+        duration: session.duration,
+        remainingSeconds: session.remainingSeconds,
+        trainerConnected: session.coachJoined,
+        traineeConnected: session.userJoined,
+      };
+      lessonRoomEmit(roomName, "LESSON_STATE_SYNC", statePayload);
+    }
+
+    lessonRoomEmit(roomName, "PARTICIPANT_STATUS_CHANGED", {
+      sessionId,
+      role: "trainer",
+      status: "disconnected",
+      userId: disconnectedUserId,
+    });
+    lessonRoomEmit(roomName, EVENTS.VIDEO_CALL.ON_CALL_LEAVE, {
+      userId: disconnectedUserId,
+      accountType: "Trainer",
+      sessionId,
+      timestamp: Date.now(),
+    });
+    lessonRoomEmit(roomName, "PARTICIPANT_LEFT", {
+      sessionId,
+      role: "trainer",
+      userId: disconnectedUserId,
+    });
+    return;
+  }
+
+  if (!session.userJoined) return;
+  session.userJoined = false;
+  console.log(`[SESSION] Trainee ${disconnectedUserId} confirmed leave after grace for session ${sessionId}`);
+
+  lessonRoomEmit(roomName, "PARTICIPANT_STATUS_CHANGED", {
+    sessionId,
+    role: "trainee",
+    status: "disconnected",
+    userId: disconnectedUserId,
+  });
+  lessonRoomEmit(roomName, EVENTS.VIDEO_CALL.ON_CALL_LEAVE, {
+    userId: disconnectedUserId,
+    accountType: "Trainee",
+    sessionId,
+    timestamp: Date.now(),
+  });
+  lessonRoomEmit(roomName, "PARTICIPANT_LEFT", {
+    sessionId,
+    role: "trainee",
+    userId: disconnectedUserId,
+  });
+}
 
 const emitLessonStateSync = (socket: any, roomName: string, session: LessonSessionState) => {
   const statePayload = {
@@ -158,23 +255,22 @@ async function updateUserActivity(socket) {
           trainer_id: trainerId,
         });
 
-        // console.log(
-        //   "checkIfUserIsAlreadyAdded=========",
-        //   checkIfUserIsAlreadyAdded
-        // );
-
         if (checkIfUserIsAlreadyAdded) {
           await onlineUser.updateOne(
             { trainer_id: trainerId },
             { $set: { last_activity_time: Date.now() } }
           );
         } else {
-          const createNewOnlineUser = await new onlineUser({
+          await new onlineUser({
             trainer_id: trainerId,
             last_activity_time: Date.now(),
           }).save();
         }
+        void touchUserPresence(trainerId);
       }
+    } else if (socket?.user?._doc?.account_type === "Trainee") {
+      activeUsers[userId] = { ...socket.user._doc };
+      void touchUserPresence(userId);
     }
 
     // Broadcast the updated active users list to all connected clients
@@ -193,77 +289,32 @@ async function updateUserActivity(socket) {
     socket.on("disconnect", async () => {
       if (!activeUsers[userId]) return;
 
-      // Remove the user from the active users list
+      const wasTrainer = activeUsers[userId]?.account_type === "Trainer";
+
       delete activeUsers[userId];
 
-      // Broadcast the updated active users list to all connected clients
+      user.findByIdAndUpdate(userId, { lastSeen: new Date() }).catch(() => {});
+
       socket.broadcast.emit("userStatus", {
         user: activeUsers,
         status: "offline",
         userId,
       });
 
-      // Update the user's last_activity_time instead of deleting them
-      try {
-        await onlineUser.updateOne(
-          { trainer_id: userId },
-          { $set: { last_activity_time: Date.now() } },
-          { upsert: true } // Ensures the document exists or creates it
-        );
-      } catch (error) {
-        console.error("Error updating last_activity_time on disconnect:", error);
-      }
-
-      // Clean up timer state if user disconnects during a session.
-      // Trainer disconnect auto-pauses a running timer; trainee disconnect leaves it running.
-      const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
-      for (const [sessionId, session] of lessonSessions.entries()) {
-        const roomName = `session:${sessionId}`;
-
-        if (accountType === "Trainer" && session.coachJoined) {
-          session.coachJoined = false;
-          console.log(`[TIMER] Trainer ${userId} disconnected from session ${sessionId}`);
-
-          // Auto-pause running timer when trainer leaves
-          if (session.status === "running" && session.startedAt != null) {
-            const elapsedSeconds = Math.floor((Date.now() - session.startedAt) / 1000);
-            session.remainingSeconds = Math.max(0, session.remainingSeconds - elapsedSeconds);
-            session.startedAt = null;
-            session.status = "paused";
-            session.trainerLeftPaused = true; // distinguish from manual pause
-            clearLessonTimeouts(session);
-            console.log(`[TIMER] Auto-paused timer for session ${sessionId} at ${session.remainingSeconds}s remaining`);
-
-            const pausedPayload = {
-              sessionId: session.sessionId,
-              remainingSeconds: session.remainingSeconds,
-              duration: session.duration,
-              reason: "trainer_left",
-            };
-            if (ioInstance) ioInstance.to(roomName).emit("LESSON_TIME_PAUSED", pausedPayload);
-            else socket.nsp.to(roomName).emit("LESSON_TIME_PAUSED", pausedPayload);
-            emitLessonStateSync(socket, roomName, session);
-          }
-
-          // Notify the other participant the trainer left
-          socket.to(roomName).emit("PARTICIPANT_LEFT", {
-            sessionId,
-            role: "trainer",
-            userId,
-          });
-
-        } else if (accountType !== "Trainer" && session.userJoined) {
-          session.userJoined = false;
-          console.log(`[TIMER] Trainee ${userId} disconnected from session ${sessionId}`);
-
-          // Notify the trainer the trainee left (timer keeps running)
-          socket.to(roomName).emit("PARTICIPANT_LEFT", {
-            sessionId,
-            role: "trainee",
-            userId,
-          });
+      if (wasTrainer) {
+        try {
+          await onlineUser.updateOne(
+            { trainer_id: userId },
+            { $set: { last_activity_time: Date.now() } },
+            { upsert: true }
+          );
+        } catch (error) {
+          console.error("Error updating last_activity_time on disconnect:", error);
         }
       }
+
+      // Lesson leave / timer pause / PARTICIPANT_LEFT are handled in handleSocketEvents
+      // with a reconnect grace period (see finalizeLessonParticipantDisconnect).
     });
 
     // Listen for any event to update the user's last activity time
@@ -292,53 +343,43 @@ export const handleSocketEvents = (socket, connections = {}) => {
   socket.on("disconnect", () => {
     socketHeartbeats.delete(socketId);
     
-    // Notify all rooms this socket was in that the user disconnected
     const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
     const userId = socket?.user?._doc?._id || socket?.user?._id;
-    
-    // Find all session rooms this socket was in
-    socket.rooms.forEach((roomName) => {
-      if (roomName.startsWith("session:")) {
-        const sessionId = roomName.replace("session:", "");
-        const session = lessonSessions.get(sessionId);
-        
-        if (session) {
-          // Update join status
-          let role = "trainee";
-          if (accountType === "Trainer") {
-            session.coachJoined = false;
-            role = "trainer";
-            console.log(`[SESSION] Trainer ${userId} disconnected from session ${sessionId}`);
-          } else {
-            session.userJoined = false;
-            role = "trainee";
-            console.log(`[SESSION] Trainee ${userId} disconnected from session ${sessionId}`);
-          }
+    if (!userId) return;
 
-          // Keep frontend presence state in sync
-          socket.to(roomName).emit("PARTICIPANT_STATUS_CHANGED", {
-            sessionId,
-            role,
-            status: "disconnected",
-            userId,
-          });
-          
-          // Notify other party in the room
-          socket.to(roomName).emit(EVENTS.VIDEO_CALL.ON_CALL_LEAVE, {
-            userId,
-            accountType,
-            sessionId,
-            timestamp: Date.now()
-          });
-          console.log(`[SESSION] Notified room ${roomName} that ${userId} (${accountType}) disconnected`);
-        }
-      }
+    socket.rooms.forEach((roomName) => {
+      if (!roomName.startsWith("session:")) return;
+      const sessionId = roomName.replace("session:", "");
+      const session = lessonSessions.get(sessionId);
+      if (!session) return;
+
+      const role = accountType === "Trainer" ? "trainer" : "trainee";
+      const key = `${sessionId}:${String(userId)}`;
+      const existing = pendingLessonDisconnectTimers.get(key);
+      if (existing) clearTimeout(existing);
+
+      const timer = setTimeout(() => {
+        pendingLessonDisconnectTimers.delete(key);
+        finalizeLessonParticipantDisconnect(
+          sessionId,
+          roomName,
+          role,
+          String(userId),
+        );
+      }, SESSION_LEAVE_GRACE_MS);
+      pendingLessonDisconnectTimers.set(key, timer);
+
+      console.log(
+        `[SESSION] Socket disconnect in ${roomName} — deferring leave notification ${SESSION_LEAVE_GRACE_MS}ms (user ${userId}, ${role})`,
+      );
     });
   });
 
   // Heartbeat handler: clients send this periodically to prove they're alive
   socket.on("HEARTBEAT", () => {
     socketHeartbeats.set(socketId, Date.now());
+    const uid = socket?.user?._doc?._id || socket?.user?._id;
+    if (uid) void touchUserPresence(String(uid));
   });
 
   socket.on(EVENTS.JOIN_ROOM, async (socketReq, request) => {
@@ -547,6 +588,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
       // Join the room immediately when user joins (don't wait for both parties)
       const roomName = `session:${sessionId}`;
       socket.join(roomName);
+      cancelLessonDisconnectGrace(sessionId, String(userId));
       console.log(`[SESSION] User ${userId} (${accountType}) joined room ${roomName} for session ${sessionId}`);
       
       let session = lessonSessions.get(sessionId);
@@ -946,11 +988,13 @@ export const handleSocketEvents = (socket, connections = {}) => {
   listenVideoShowEvent(socket);
   listenDrawingModeToggle(socket);
   listenFullscreenToggle(socket);
+  listenInstantLessonSessionRecording(socket);
   listenLockModeToggle(socket);
   listenVideoChunksEvent(socket);
   listenNotificationEvents(socket);
   listenInstantLessonEvents(socket);
   listenBookingEvents(socket);
+  listenChatEvents(socket);
 };
 
 const listenNotificationEvents = (socket) => {
@@ -999,6 +1043,15 @@ const listenNotificationEvents = (socket) => {
           console.error("Error sending push notification:", error);
         }
       }
+
+      if (!toUserSocketId && receiverId) {
+        void pushService.sendPushNotification(
+          receiverId,
+          title || "NetQwix",
+          description || "You have a new notification",
+          { kind: "notification", bookingInfo }
+        );
+      }
     });
   } catch (err) {
     console.error(`Error while listening to notification event:`, err);
@@ -1016,7 +1069,6 @@ const listenInstantLessonEvents = (socket) => {
         
         // Validate required fields
         if (!lessonId || !coachId || !traineeId) {
-          console.error("[INSTANT_LESSON] Missing required fields in request:", payload);
           return;
         }
 
@@ -1031,12 +1083,16 @@ const listenInstantLessonEvents = (socket) => {
             expiresAt,
             lessonType,
           });
-          console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Request sent to coach ${coachId} for lesson ${lessonId}, expires at ${expiresAt}`);
         } else {
-          console.warn(`[INSTANT_LESSON] Coach ${coachId} not connected`);
+          void pushService.sendPushNotification(
+            coachId,
+            "Instant Lesson Request",
+            `${traineeInfo?.fullname || "A trainee"} wants to start a ${duration || 30}-min lesson now!`,
+            { kind: "instant_lesson_request", lessonId, traineeId }
+          );
         }
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling request:`, err);
+      } catch (_err) {
+        /* intentionally quiet — add app-level logging if needed */
       }
     });
 
@@ -1046,8 +1102,27 @@ const listenInstantLessonEvents = (socket) => {
         const { lessonId, coachId, traineeId } = payload;
         
         if (!lessonId || !coachId || !traineeId) {
-          console.error("[INSTANT_LESSON] Missing required fields in accept:", payload);
           return;
+        }
+
+        let updatedBooking: any = null;
+        try {
+          updatedBooking = await booked_session.findOneAndUpdate(
+            {
+              _id: lessonId,
+              is_instant: true,
+              trainer_id: coachId,
+              trainee_id: traineeId,
+              status: BOOKED_SESSIONS_STATUS.BOOKED,
+            },
+            { $set: { status: BOOKED_SESSIONS_STATUS.confirm } },
+            { new: true }
+          );
+          if (updatedBooking && emitBookingStatusUpdatedDelegate) {
+            void emitBookingStatusUpdatedDelegate(updatedBooking);
+          }
+        } catch (_dbErr) {
+          /* intentionally quiet */
         }
 
         // Emit to both parties
@@ -1067,11 +1142,17 @@ const listenInstantLessonEvents = (socket) => {
             coachId,
             traineeId,
           });
+        } else {
+          void pushService.sendPushNotification(
+            traineeId,
+            "Lesson Accepted",
+            "Your trainer accepted the instant lesson. Tap to join!",
+            { kind: "instant_lesson_accept", lessonId, coachId }
+          );
         }
 
-        console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Lesson ${lessonId} accepted by coach ${coachId} for trainee ${traineeId}`);
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling accept:`, err);
+      } catch (_err) {
+        /* intentionally quiet */
       }
     });
 
@@ -1081,7 +1162,6 @@ const listenInstantLessonEvents = (socket) => {
         const { lessonId, coachId, traineeId } = payload;
         
         if (!lessonId || !coachId || !traineeId) {
-          console.error("[INSTANT_LESSON] Missing required fields in decline:", payload);
           return;
         }
 
@@ -1092,10 +1172,16 @@ const listenInstantLessonEvents = (socket) => {
             coachId,
             traineeId,
           });
-          console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Lesson ${lessonId} declined by coach ${coachId} for trainee ${traineeId}`);
+        } else {
+          void pushService.sendPushNotification(
+            traineeId,
+            "Lesson Declined",
+            "The trainer declined your instant lesson request.",
+            { kind: "instant_lesson_decline", lessonId }
+          );
         }
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling decline:`, err);
+      } catch (_err) {
+        /* intentionally quiet */
       }
     });
 
@@ -1105,9 +1191,15 @@ const listenInstantLessonEvents = (socket) => {
         const { lessonId, coachId, traineeId } = payload;
         
         if (!lessonId) {
-          console.error("[INSTANT_LESSON] Missing lessonId in expire:", payload);
           return;
         }
+
+        try {
+          await booked_session.findOneAndUpdate(
+            { _id: lessonId, is_instant: true, status: BOOKED_SESSIONS_STATUS.BOOKED },
+            { $set: { status: BOOKED_SESSIONS_STATUS.cancel } }
+          );
+        } catch (_dbErr) { /* non-fatal */ }
 
         const coachSocketId = coachId ? MemCache.getDetail(process.env.SOCKET_CONFIG, coachId) : null;
         const traineeSocketId = traineeId ? MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId) : null;
@@ -1125,11 +1217,17 @@ const listenInstantLessonEvents = (socket) => {
             coachId,
             traineeId,
           });
+        } else if (traineeId) {
+          void pushService.sendPushNotification(
+            traineeId,
+            "Lesson Expired",
+            "Your instant lesson request expired. The trainer didn't respond in time.",
+            { kind: "instant_lesson_expire", lessonId }
+          );
         }
 
-        console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Lesson ${lessonId} expired`);
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling expire:`, err);
+      } catch (_err) {
+        /* intentionally quiet */
       }
     });
 
@@ -1138,7 +1236,6 @@ const listenInstantLessonEvents = (socket) => {
       try {
         const { lessonId, coachId, traineeId } = payload;
         if (!lessonId || !coachId) {
-          console.error("[INSTANT_LESSON] Missing required fields in clips_selected:", payload);
           return;
         }
         const coachSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, coachId);
@@ -1148,10 +1245,9 @@ const listenInstantLessonEvents = (socket) => {
             coachId,
             traineeId,
           });
-          console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Clips selected for lesson ${lessonId}, coach ${coachId} notified`);
         }
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling clips_selected:`, err);
+      } catch (_err) {
+        /* intentionally quiet */
       }
     });
 
@@ -1163,14 +1259,13 @@ const listenInstantLessonEvents = (socket) => {
         const coachSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, coachId);
         if (coachSocketId) {
           socket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.TRAINEE_CANCELLED, { lessonId, coachId, traineeId });
-          console.log(`[INSTANT_LESSON] [${new Date().toISOString()}] Lesson ${lessonId} cancelled by trainee ${traineeId}`);
         }
-      } catch (err) {
-        console.error(`[INSTANT_LESSON] Error handling trainee_cancelled:`, err);
+      } catch (_err) {
+        /* intentionally quiet */
       }
     });
-  } catch (err) {
-    console.error(`[INSTANT_LESSON] Error setting up instant lesson event listeners:`, err);
+  } catch (_err) {
+    /* intentionally quiet */
   }
 };
 
@@ -1188,6 +1283,127 @@ const listenBookingEvents = (socket) => {
     });
   } catch (err) {
     console.error(`[BOOKING] Error setting up booking event listeners:`, err);
+  }
+};
+
+// Chat Event Handlers
+const listenChatEvents = (socket) => {
+  const ChatMessage = require("../../model/chat_message.schema").default;
+
+  try {
+    socket.on(EVENTS.CHAT.JOIN, (payload: any) => {
+      try {
+        const { conversationId } = payload || {};
+        if (!conversationId) return;
+        socket.join(`chat:${conversationId}`);
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.LEAVE, (payload: any) => {
+      try {
+        const { conversationId } = payload || {};
+        if (!conversationId) return;
+        socket.leave(`chat:${conversationId}`);
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.MESSAGE, async (payload: any) => {
+      try {
+        const { conversationId, receiverId, senderId, _id } = payload || {};
+        if (!conversationId) return;
+
+        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.MESSAGE, payload);
+
+        if (receiverId) {
+          const receiverSid = MemCache.getDetail(process.env.SOCKET_CONFIG, String(receiverId));
+          if (receiverSid) {
+            socket.to(String(receiverSid)).emit(EVENTS.CHAT.MESSAGE, payload);
+            if (_id && mongoose.isValidObjectId(_id)) {
+              await ChatMessage.findByIdAndUpdate(_id, { status: "delivered", deliveredAt: new Date() });
+              socket.emit(EVENTS.CHAT.DELIVERED, { messageId: _id, conversationId });
+            }
+          } else {
+            const senderDoc = await user.findById(senderId).select("fullname").lean();
+            const senderName = (senderDoc as any)?.fullname ?? "Someone";
+            const content = payload.content ?? "Sent you a message";
+            const preview = content.length > 60 ? content.slice(0, 57) + "..." : content;
+            void pushService.sendPushNotification(
+              String(receiverId),
+              senderName,
+              preview,
+              { kind: "chat_message", conversationId, senderId: String(senderId) }
+            );
+          }
+        }
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.DELIVERED, async (payload: any) => {
+      try {
+        const { messageIds, conversationId } = payload || {};
+        if (!messageIds?.length || !conversationId) return;
+        const validIds = messageIds.filter((id: string) => mongoose.isValidObjectId(id));
+        if (validIds.length) {
+          await ChatMessage.updateMany(
+            { _id: { $in: validIds }, status: "sent" },
+            { status: "delivered", deliveredAt: new Date() }
+          );
+        }
+        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.DELIVERED, {
+          messageIds: validIds,
+          conversationId,
+        });
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.READ, async (payload: any) => {
+      try {
+        const { conversationId, readerId } = payload || {};
+        if (!conversationId) return;
+        const now = new Date();
+        await ChatMessage.updateMany(
+          { conversationId, receiverId: readerId || socket?.user?._doc?._id, isRead: false },
+          { isRead: true, status: "read", readAt: now }
+        );
+        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.READ, {
+          conversationId,
+          readerId: readerId || String(socket?.user?._doc?._id),
+          readAt: now.toISOString(),
+        });
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.TYPING, (payload: any) => {
+      try {
+        const { conversationId, userId } = payload || {};
+        if (!conversationId) return;
+        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.TYPING, { conversationId, userId });
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+
+    socket.on(EVENTS.CHAT.STOP_TYPING, (payload: any) => {
+      try {
+        const { conversationId, userId } = payload || {};
+        if (!conversationId) return;
+        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.STOP_TYPING, { conversationId, userId });
+      } catch (_err) {
+        /* intentionally quiet */
+      }
+    });
+  } catch (err) {
+    console.error(`[CHAT] Error setting up chat event listeners:`, err);
   }
 };
 
@@ -1281,6 +1497,8 @@ export const emitBookingStatusUpdated = async (bookingData: any) => {
     console.error(`[BOOKING] Error emitting BOOKING_STATUS_UPDATED event:`, err);
   }
 };
+
+emitBookingStatusUpdatedDelegate = emitBookingStatusUpdated;
 
 const listenDrawEvent = (socket) => {
   try {
@@ -1378,6 +1596,25 @@ const listenLockModeToggle = (socket) => {
     });
   } catch (err) {
     console.error(`Error while listening to lock mode toggle:`, err);
+    throw err;
+  }
+};
+
+/** Instant lesson: trainer toggles "record session" so peer can show the same state in-call */
+const listenInstantLessonSessionRecording = (socket) => {
+  try {
+    socket.on(EVENTS.INSTANT_LESSON.SESSION_RECORDING, async (socketReq: any) => {
+      const { userInfo } = socketReq || {};
+      const toUserSocketId = MemCache.getDetail(
+        process.env.SOCKET_CONFIG,
+        userInfo?.to_user
+      );
+      if (toUserSocketId) {
+        socket.to(toUserSocketId).emit(EVENTS.INSTANT_LESSON.SESSION_RECORDING, socketReq);
+      }
+    });
+  } catch (err) {
+    console.error(`Error while listening to instant lesson session recording:`, err);
     throw err;
   }
 };
@@ -1497,7 +1734,7 @@ const listenVideoTimeEvent = (socket) => {
 
 const generatePreSignedPutUrl = async (fileName, fileType) => {
   const params = {
-    Bucket: bucketName,
+    Bucket: S3_BUCKET,
     Key: fileName,
     Expires: 60,
     // ACL: "public-read",

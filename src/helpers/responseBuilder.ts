@@ -15,14 +15,14 @@ export class ResponseBuilder {
     const rb: ResponseBuilder = new ResponseBuilder();
     rb.code = 500;
     rb.status = CONSTANCE.FAIL;
-    rb.error = msg != null ? msg : l10n.t("ERR_INTERNAL_SERVER");
+    rb.error = msg != null ? ResponseBuilder.stringifyError(msg) : l10n.t("ERR_INTERNAL_SERVER");
     return rb;
   }
 
   public static badRequest(msg: any, code?: number): ResponseBuilder {
     const rb: ResponseBuilder = new ResponseBuilder();
     rb.code = code || 400;
-    rb.error = msg;
+    rb.error = ResponseBuilder.stringifyError(msg);
     rb.status = CONSTANCE.FAIL;
     return rb;
   }
@@ -37,16 +37,31 @@ export class ResponseBuilder {
     return rb;
   }
 
+  /** Safe for JSON responses (never assign raw Error objects to `error`). */
+  public static stringifyError(input: any): string {
+    if (input == null) return l10n.t("ERR_INTERNAL_SERVER");
+    if (typeof input === "string") return input;
+    if (typeof input === "number" || typeof input === "boolean") return String(input);
+    if (input instanceof Error) return input.message || "Error";
+    const msg = (input as any)?.message;
+    if (typeof msg === "string" && msg) return msg;
+    try {
+      return JSON.stringify(input);
+    } catch {
+      return "Unknown error";
+    }
+  }
+
   public static error(err: Failure, msg?: string): ResponseBuilder {
     const rb: ResponseBuilder = new ResponseBuilder();
     if (err instanceof ResponseBuilder) {
       return err;
     }
     rb.code = 500;
-    rb.error = err || l10n.t("ERR_INTERNAL_SERVER");
+    rb.error = err != null ? ResponseBuilder.stringifyError(err) : l10n.t("ERR_INTERNAL_SERVER");
     rb.status = CONSTANCE.FAIL;
     rb.msg = msg || null;
-    rb.description = err.description;
+    rb.description = (err as any)?.description;
     rb.result = err
       ? l10n.t("ERR_THROW_BY_CODE")
       : l10n.t("ERR_INTERNAL_SERVER");

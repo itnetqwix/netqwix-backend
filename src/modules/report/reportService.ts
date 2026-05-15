@@ -11,20 +11,9 @@ import user from "../../model/user.schema";
 import { AccountType } from "../auth/authEnum";
 import { Utils } from "../../Utils/Utils";
 import { commonService } from "../common/commonService";
-const bucketName = process.env.AWS_BUCKET_NAME;
-const region = process.env.AWS_REGION;
-const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 import * as AWS from "aws-sdk";
 import mongoose from "mongoose";
-import { Constant } from "../../Utils/constant";
-const s3 = new AWS.S3({
-  endpoint: `https://${process.env.CLOUDFLARE_R2}.r2.cloudflarestorage.com`,
-  region,
-  accessKeyId,
-  secretAccessKey,
-  signatureVersion: "v4",
-});
+import { s3, S3_BUCKET } from "../../Utils/s3Client";
 
 export class ReportService {
   public log = log.getLogger();
@@ -53,7 +42,7 @@ export class ReportService {
 
   generatePreSignedPutUrl = async (fileName, fileType) => {
     const params = {
-      Bucket: bucketName,
+      Bucket: S3_BUCKET,
       Key: fileName,
       Expires: 60,
       // ACL: "public-read",
@@ -71,6 +60,41 @@ export class ReportService {
     }
     return url;
   };
+
+  public async addSessionRecording(data: any): Promise<ResponseBuilder> {
+    const filename = "session-rec-" + new Date().getTime().toString() + ".webm";
+    const isReportExist = await Report.findOne({
+      sessions: data?.sessions,
+      trainee: data?.trainee,
+      trainer: data?.trainer,
+    });
+    if (isReportExist) {
+      await Report.updateOne(
+        {
+          sessions: data?.sessions,
+          trainee: data?.trainee,
+          trainer: data?.trainer,
+        },
+        { $set: { sessionRecordingUrl: filename } }
+      );
+    } else {
+      const obj = {
+        title: data?.title || "",
+        description: data?.description || "",
+        reportData: [],
+        sessions: data?.sessions,
+        trainer: data?.trainer,
+        trainee: data?.trainee,
+        sessionRecordingUrl: filename,
+      };
+      await new Report(obj).save();
+    }
+    const fileUrl = await this.generatePreSignedPutUrl(filename, "video/webm");
+    if (fileUrl) {
+      return ResponseBuilder.data({ url: fileUrl }, l10n.t("REPORT_GENERATED"));
+    }
+    return ResponseBuilder.errorMessage(l10n.t("ERR_INTERNAL_SERVER"));
+  }
 
   public async addImage(data: any): Promise<ResponseBuilder> {
     var filename = "file-" + new Date().getTime().toString() + ".png";
@@ -113,7 +137,7 @@ export class ReportService {
       };
       const report = new Report(obj).save();
     }
-    let fileUrl = await this.generatePreSignedPutUrl(filename, "png");
+    let fileUrl = await this.generatePreSignedPutUrl(filename, "image/png");
     if (fileUrl) {
       return ResponseBuilder.data({ url: fileUrl }, l10n.t("REPORT_GENERATED"));
     } else {
@@ -144,7 +168,7 @@ export class ReportService {
         },
         { reportData: newReportData }
       );
-      let fileUrl = await this.generatePreSignedPutUrl(filename, "png");
+      let fileUrl = await this.generatePreSignedPutUrl(filename, "image/png");
       if (fileUrl) {
         return ResponseBuilder.data(
           { url: fileUrl },
@@ -189,9 +213,18 @@ export class ReportService {
       const reportData = report.toObject ? report.toObject() : report;
       reportData.addLogoToImages = false;
       return ResponseBuilder.data(reportData, l10n.t("REPORT_GET"));
-    } else {
-      return ResponseBuilder.errorMessage(l10n.t("ERR_INTERNAL_SERVER"));
     }
+    // No row yet (common at session start / instant lesson) — same shape as a real report, 200 OK
+    return ResponseBuilder.data(
+      {
+        reportData: [],
+        sessions: data?.sessions,
+        trainee: data?.trainee,
+        trainer: data?.trainer,
+        addLogoToImages: false,
+      },
+      l10n.t("REPORT_GET")
+    );
   }
 
   // public async getAllReport(data: any): Promise<ResponseBuilder> {
@@ -319,7 +352,12 @@ export class ReportService {
             as: "trainee",
             pipeline: [
               {
-                $project: Constant.pipelineUser,
+                $project: {
+                  _id: 1,
+                  fullname: 1,
+                  profile_picture: 1,
+                  account_type: 1,
+                },
               },
             ],
           },
@@ -337,7 +375,12 @@ export class ReportService {
             as: "trainer",
             pipeline: [
               {
-                $project: Constant.pipelineUser,
+                $project: {
+                  _id: 1,
+                  fullname: 1,
+                  profile_picture: 1,
+                  account_type: 1,
+                },
               },
             ],
           },
@@ -353,11 +396,44 @@ export class ReportService {
             localField: "sessions",
             foreignField: "_id",
             as: "session",
+            pipeline: [
+              {
+                $project: {
+                  _id: 1,
+                  report: 1,
+                  status: 1,
+                  booked_date: 1,
+                  session_start_time: 1,
+                  session_end_time: 1,
+                  start_time: 1,
+                  end_time: 1,
+                  createdAt: 1,
+                  updatedAt: 1,
+                },
+              },
+            ],
           },
         },
         {
           $unwind: {
             path: "$session",
+          },
+        },
+        {
+          // Keep payload minimal for Locker/Game Plan consumers.
+          $project: {
+            _id: 1,
+            reportData: 1,
+            sessions: 1,
+            sessionRecordingUrl: 1,
+            trainer: 1,
+            trainee: 1,
+            session: 1,
+            title: 1,
+            description: 1,
+            status: 1,
+            createdAt: 1,
+            updatedAt: 1,
           },
         },
         {

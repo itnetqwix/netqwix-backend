@@ -5,13 +5,18 @@ const raiseConcernSchema: Schema = new Schema(
     {
         user_id: {
             type: Schema.Types.ObjectId,
-            ref: "users",
+            ref: "user",
             required: true,
         },
         booking_id: {
             type: Schema.Types.ObjectId,
             ref: "booked_sessions",
-            required: true,
+            default: null,
+        },
+        reported_user_id: {
+            type: Schema.Types.ObjectId,
+            ref: "user",
+            default: null,
         },
         name: {
             type: String,

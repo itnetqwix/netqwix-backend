@@ -38,6 +38,20 @@ export class reportController {
     }
   };
 
+  public addSessionRecording = async (req: any, res: Response) => {
+    const { _id } = req.authUser;
+    req.body.trainer = _id;
+    try {
+      const result: ResponseBuilder = await this.reportService.addSessionRecording(req.body);
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res
+        .status(err.code)
+        .send({ status: CONSTANCE.FAIL, error: err.error });
+    }
+  };
+
 
 
   public cropImage = async (req: any, res: Response) => {

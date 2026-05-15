@@ -15,6 +15,7 @@ import schedule_inventory from "../../model/schedule_inventory.schema";
 import * as l10n from "jm-ez-l10n";
 import { bookSessionModal, bookInstantMeetingModal } from "./traineeValidator";
 import booked_session from "../../model/booked_sessions.schema";
+import { recordUserActivityMany, UserActivityEvent } from "../../helpers/userActivity";
 import { PipelineStage } from "mongoose";
 import { DateFormat } from "../../Utils/dateFormat";
 import { SendEmail } from "../../Utils/sendEmail";
@@ -22,9 +23,11 @@ import user from "../../model/user.schema";
 import { CovertTimeAccordingToTimeZone, isOverlap, Utils } from "../../Utils/Utils";
 import * as mongoose from "mongoose";
 import { Failure } from "../../helpers/error";
+import availability from "../../model/availability.schema";
 import { DateTime } from "luxon";
 import SMSService from "../../services/sms-service";
 import { timeZoneAbbreviations } from "../../Utils/constant";
+import { PromoCodeService } from "../promo-code/promoCodeService";
 
 export class TraineeService {
   public log = log.getLogger();
@@ -264,6 +267,23 @@ export class TraineeService {
     }
   };
 
+  private async checkBookingConflict(
+    trainer_id: string,
+    start: Date,
+    end: Date
+  ): Promise<string | null> {
+    const conflict = await booked_session.findOne({
+      trainer_id,
+      status: { $nin: [BOOKED_SESSIONS_STATUS.cancel] },
+      start_time: { $lt: end },
+      end_time: { $gt: start },
+    }).lean();
+    if (conflict) {
+      return "This trainer already has a booking during this time slot. Please choose a different time.";
+    }
+    return null;
+  }
+
   public async bookSession(
     payload: bookSessionModal,
     _id: string
@@ -275,7 +295,7 @@ export class TraineeService {
         !payload.booked_date ||
         !payload.session_start_time ||
         !payload.session_end_time ||
-        !payload.charging_price ||
+        (payload.charging_price == null) ||
         !payload.time_zone
       ) {
         const validationError: Failure = {
@@ -332,10 +352,40 @@ export class TraineeService {
         // Non-fatal: fall back to null so existing behaviour is preserved
       }
 
+      if (start_time && end_time) {
+        const conflictMsg = await this.checkBookingConflict(payload.trainer_id, start_time, end_time);
+        if (conflictMsg) return ResponseBuilder.badRequest(conflictMsg);
+      }
+
+      let promoDiscountAmount = 0;
+      let appliedPromoCode: string | null = null;
+      const originalPrice = Number(payload.charging_price);
+
+      if (payload.coupon_code && typeof payload.coupon_code === "string" && payload.coupon_code.trim()) {
+        const promoService = new PromoCodeService();
+        const promoResult = await promoService.validatePromoCode(
+          payload.coupon_code,
+          _id,
+          "Trainee",
+          "scheduled",
+          originalPrice
+        );
+        if (promoResult.valid) {
+          promoDiscountAmount = promoResult.discount_amount!;
+          appliedPromoCode = payload.coupon_code.trim().toUpperCase();
+        }
+      }
+
+      const finalPrice = Number(Math.max(originalPrice - promoDiscountAmount, 0).toFixed(2));
+
       const sessionObj = new booked_session({
         ...payload,
         trainee_id: _id,
         time_zone: payload.time_zone,
+        charging_price: finalPrice,
+        amount: String(finalPrice),
+        original_amount: String(originalPrice),
+        ...(appliedPromoCode && { coupon_code: appliedPromoCode, discount_applied: promoDiscountAmount }),
         ...(start_time && { start_time }),
         ...(end_time && { end_time }),
       });
@@ -423,9 +473,25 @@ export class TraineeService {
         }
       }
       var bookingData = await sessionObj.save();
+
+      if (appliedPromoCode && promoDiscountAmount > 0) {
+        const promoService = new PromoCodeService();
+        void promoService.applyPromoCode(
+          appliedPromoCode,
+          _id,
+          String(bookingData._id),
+          promoDiscountAmount
+        );
+      }
+
+      void recordUserActivityMany(
+        [String(bookingData.trainee_id), String(bookingData.trainer_id)],
+        UserActivityEvent.BOOKING_CREATED,
+        { sessionId: String(bookingData._id), kind: "scheduled" }
+      );
       await user.updateOne(
         { _id: payload.trainer_id },
-        { $inc: { wallet_amount: +payload.charging_price || 0 } }
+        { $inc: { wallet_amount: finalPrice || 0 } }
       );
       
       // Emit booking created event
@@ -463,6 +529,10 @@ export class TraineeService {
   ): Promise<ResponseBuilder> {
     const { trainer_id, duration: durationMinutes } = payload;
     try {
+      // Look up the trainer to verify hourly rate and enforce payment
+      const trainerDoc = await user.findById(trainer_id).select("extraInfo.hourly_rate stripe_account_id commission").lean();
+      const hourlyRate = Number(trainerDoc?.extraInfo?.hourly_rate ?? 0);
+
       // Use server UTC "now" so instant lesson works for any trainee/trainer timezone
       const nowUtc = new Date();
       const booked_date = payload.booked_date ? new Date(payload.booked_date) : nowUtc;
@@ -471,6 +541,27 @@ export class TraineeService {
       const duration = durationMinutes && [15, 30, 60, 120].includes(Number(durationMinutes))
         ? Number(durationMinutes)
         : 30;
+
+      const expectedPrice = Number(((hourlyRate / 60) * duration).toFixed(2));
+
+      let promoDiscountAmount = 0;
+      let appliedPromoCode: string | null = null;
+      const promoMadeFree = payload.charging_price != null && Number(payload.charging_price) === 0;
+
+      if (payload.coupon_code && typeof payload.coupon_code === "string" && payload.coupon_code.trim()) {
+        const promoService = new PromoCodeService();
+        const promoResult = await promoService.validatePromoCode(
+          payload.coupon_code,
+          _id,
+          "Trainee",
+          "instant",
+          expectedPrice
+        );
+        if (promoResult.valid) {
+          promoDiscountAmount = promoResult.discount_amount!;
+          appliedPromoCode = payload.coupon_code.trim().toUpperCase();
+        }
+      }
 
       const session_start_time = DateFormat.addMinutes(
         booked_date,
@@ -489,19 +580,62 @@ export class TraineeService {
       const start_time = new Date(booked_date);
       const end_time = new Date(start_time.getTime() + duration * 60 * 1000);
 
-      const userObj = new booked_session({
+      const conflictMsg = await this.checkBookingConflict(trainer_id, start_time, end_time);
+      if (conflictMsg) return ResponseBuilder.badRequest(conflictMsg);
+
+      const basePrice = payload.charging_price != null && payload.charging_price > 0
+        ? payload.charging_price
+        : expectedPrice;
+      const chargingPrice = Number(Math.max(basePrice - promoDiscountAmount, 0).toFixed(2));
+
+      const bookingFields: Record<string, any> = {
         trainer_id,
         trainee_id: _id,
-        status: BOOKED_SESSIONS_STATUS.confirm,
+        status: BOOKED_SESSIONS_STATUS.BOOKED,
         booked_date,
         session_start_time,
         session_end_time,
         start_time,
         end_time,
         is_instant: true,
-      });
+      };
+      if (payload.payment_intent_id) bookingFields.payment_intent_id = payload.payment_intent_id;
+      if (basePrice > 0) bookingFields.original_amount = String(basePrice);
+      bookingFields.amount = String(chargingPrice);
+      if (appliedPromoCode) {
+        bookingFields.coupon_code = appliedPromoCode;
+        bookingFields.discount_applied = promoDiscountAmount;
+      }
+
+      const userObj = new booked_session(bookingFields);
 
       const bookingData = await userObj.save();
+
+      if (appliedPromoCode && promoDiscountAmount > 0) {
+        const promoService = new PromoCodeService();
+        void promoService.applyPromoCode(
+          appliedPromoCode,
+          _id,
+          String(bookingData._id),
+          promoDiscountAmount
+        );
+      }
+
+      void recordUserActivityMany(
+        [String(bookingData.trainee_id), String(bookingData.trainer_id)],
+        UserActivityEvent.BOOKING_CREATED,
+        { sessionId: String(bookingData._id), kind: "instant" }
+      );
+
+      void availability.updateMany(
+        {
+          trainer_id,
+          status: false,
+          start_time: { $lt: end_time },
+          end_time: { $gt: start_time },
+        },
+        { $set: { status: true } }
+      ).catch((e) => console.error("[BOOKING] Error marking availability:", e));
 
       // Emit booking created event for instant lesson (trainer sees in upcoming / gets popup)
       try {

@@ -9,7 +9,7 @@ const adminSettingSchema: Schema = new Schema(
     },
     last_updated_admin_id: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "user",
     },
   },
   { timestamps: true }

@@ -16,7 +16,7 @@ const moneyRequestSchema: Schema = new Schema(
     },
     trainer: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "user",
     },
   },
   { timestamps: true }

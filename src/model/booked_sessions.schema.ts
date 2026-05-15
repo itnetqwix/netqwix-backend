@@ -6,12 +6,12 @@ const bookedSessionsSchema: Schema = new Schema(
     {
         trainer_id: {
             type: Schema.Types.ObjectId,
-            ref: "users",
+            ref: "user",
             required: true,
         },
         trainee_id: {
             type: Schema.Types.ObjectId,
-            ref: "users",
+            ref: "user",
             required: true,
         },
         status: {
@@ -92,7 +92,18 @@ const bookedSessionsSchema: Schema = new Schema(
             type: Boolean,
             default: false,
         },
-
+        coupon_code: {
+            type: String,
+            default: null,
+        },
+        discount_applied: {
+            type: Number,
+            default: 0,
+        },
+        original_amount: {
+            type: String,
+            default: null,
+        },
     },
     { timestamps: true }
 );

@@ -4,6 +4,13 @@ import { ResponseBuilder } from "./../../helpers/responseBuilder";
 import { Request, Response } from "express";
 import { AdminService } from "./adminService";
 import CallDiagnostics from "../../model/call_diagnostics.schema";
+import { AccountType } from "../auth/authEnum";
+
+const adminErrorBody = (result: ResponseBuilder) => ({
+  status: result.status,
+  error: ResponseBuilder.stringifyError(result.error),
+  code: result.code || CONSTANCE.RES_CODE.error.badRequest,
+});
 
 export class AdminController {
   public adminService = new AdminService();
@@ -16,17 +23,13 @@ export class AdminController {
         if (result.status !== CONSTANCE.FAIL) {
           res.status(result.code).json(result);
         } else {
-          res.status(result.code).json({
-            status: result.status,
-            error: result.error,
-            code: CONSTANCE.RES_CODE.error.badRequest,
-          });
+          res.status(result.code).json(adminErrorBody(result));
         }
       }
     } catch (err) {
       return res
         .status(err.code)
-        .send({ status: CONSTANCE.FAIL, error: err.error });
+        .send({ status: CONSTANCE.FAIL, error: ResponseBuilder.stringifyError(err.error) });
     }
   };
 
@@ -36,22 +39,22 @@ export class AdminController {
       if (result.status !== CONSTANCE.FAIL) {
         res.status(result.code).json(result);
       } else {
-        res.status(result.code).json({
-          status: result.status,
-          error: result.error,
-          code: CONSTANCE.RES_CODE.error.badRequest,
-        });
+        res.status(result.code).json(adminErrorBody(result));
       }
     } catch (err) {
       return res
         .status(err.code)
-        .send({ status: CONSTANCE.FAIL, error: err.error });
+        .send({ status: CONSTANCE.FAIL, error: ResponseBuilder.stringifyError(err.error) });
     }
   };
 
   // Get call diagnostics for a specific session or user
   public getCallDiagnostics = async (req: Request, res: Response) => {
     try {
+      const at = String(req["authUser"]?.account_type ?? "").trim().toLowerCase();
+      if (at !== String(AccountType.ADMIN).toLowerCase()) {
+        return res.status(403).json({ status: CONSTANCE.FAIL, error: "Only admin can access call diagnostics" });
+      }
       const { sessionId, userId, eventType, limit = 100, skip = 0 } = req.query;
 
       const query: any = {};
@@ -150,6 +153,157 @@ export class AdminController {
         error: "Failed to fetch call quality summary",
         code: CONSTANCE.RES_CODE.error.internalServerError,
       });
+    }
+  };
+
+  public getUser360 = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const includeRaw = String(req.query.include || "")
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+      const result: ResponseBuilder = await this.adminService.getUser360(req["authUser"], id, includeRaw);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getUserLessons = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result: ResponseBuilder = await this.adminService.getUserLessons(req["authUser"], id, req.query);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getUserReviews = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result: ResponseBuilder = await this.adminService.getUserReviews(req["authUser"], id, req.query);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getUserAssets = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result: ResponseBuilder = await this.adminService.getUserAssets(req["authUser"], id, req.query);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public deleteEntity = async (req: Request, res: Response) => {
+    try {
+      const { entityType, entityId } = req.params;
+      const mode = String(req.query.mode || "soft").toLowerCase() === "hard" ? "hard" : "soft";
+      const reason = String(req.query.reason || "");
+      const result: ResponseBuilder = await this.adminService.deleteEntity(
+        req["authUser"],
+        entityType,
+        entityId,
+        mode,
+        reason
+      );
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getAuditLogs = async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.userId ? String(req.query.userId) : undefined;
+      const result: ResponseBuilder = await this.adminService.getAdminAuditLogs(req["authUser"], userId, req.query);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getUserTimeline = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const result: ResponseBuilder = await this.adminService.getUserTimeline(req["authUser"], id, req.query);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getClipPlayUrl = async (req: Request, res: Response) => {
+    try {
+      const { clipId } = req.params;
+      const result: ResponseBuilder = await this.adminService.getAdminClipPlayUrl(req["authUser"], clipId);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  public getDashboardMetrics = async (req: Request, res: Response) => {
+    try {
+      const result: ResponseBuilder = await this.adminService.getDashboardMetrics(req["authUser"]);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
+  /** Trainers & trainees with an active Socket.IO connection (same source as ADMIN_ONLINE_USERS). */
+  public getOnlineUsers = async (req: Request, res: Response) => {
+    try {
+      const result: ResponseBuilder = await this.adminService.getOnlineUsers(req["authUser"]);
+      if (result.status !== CONSTANCE.FAIL) {
+        return res.status(result.code).json(result);
+      }
+      return res.status(result.code).json(adminErrorBody(result));
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
     }
   };
 }

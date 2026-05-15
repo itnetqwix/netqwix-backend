@@ -46,4 +46,29 @@ export class NotificationsController {
             return res.status(err.code).send({ status: CONSTANCE.FAIL, error: err.error });
         }
     };
+
+    public registerPushToken = async (req: any, res: Response) => {
+        try {
+            const userId = req["authUser"]?.["_id"];
+            const { token, platform, deviceId, kind } = req.body;
+            const data: ResponseBuilder = await this.notificationsService.registerPushToken(
+                userId, token, platform, deviceId, kind
+            );
+            return res.status(data.code).send({ status: CONSTANCE.SUCCESS, msg: data.msg });
+        } catch (err) {
+            this.logger.error(err);
+            return res.status(500).send({ status: CONSTANCE.FAIL, error: err.msg || err.error });
+        }
+    };
+
+    public unregisterPushToken = async (req: any, res: Response) => {
+        try {
+            const { deviceId } = req.params;
+            const data: ResponseBuilder = await this.notificationsService.unregisterPushToken(deviceId);
+            return res.status(data.code).send({ status: CONSTANCE.SUCCESS, msg: data.msg });
+        } catch (err) {
+            this.logger.error(err);
+            return res.status(500).send({ status: CONSTANCE.FAIL, error: err.msg || err.error });
+        }
+    };
 }

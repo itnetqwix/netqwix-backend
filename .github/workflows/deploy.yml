@@ -1,29 +1,92 @@
-name: Deploy Backend — Staging
+name: Deploy Backend
 
 on:
   push:
     branches:
       - staging
+      - main
 
 jobs:
-  deploy:
+  deploy-staging:
+    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to staging EC2
+      - name: Deploy staging to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.STAGING_SERVER_IP }}
-          username: ubuntu
+          username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.STAGING_SSH_KEY }}
           timeout: 300s
           script: |
             set -e
+
+            echo "🚀 Starting STAGING deployment..."
+
+            echo "📂 Moving to project directory"
             cd /home/ubuntu/nq-backend
             git fetch origin
+
+            echo "📌 Resetting to latest staging"
             git reset --hard origin/staging
+
+            echo "📦 Installing dependencies"
             npm install --no-audit --no-fund
+
+            echo "🏗️ Building project"
             export NODE_OPTIONS="--max-old-space-size=1536"
             npm run build
-            pm2 restart netqwix-api-staging
+
+            echo "♻️ Starting or reloading PM2 process"
+            if pm2 describe netqwix-api-staging > /dev/null; then
+              pm2 reload netqwix-api-staging
+            else
+              pm2 start npm --name netqwix-api-staging -- run prod
+            fi
+
             pm2 save
-            echo "✅ Backend staging deploy complete"
+
+            echo "✅ Staging deployment completed successfully"
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to production EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          timeout: 300s
+          script: |
+            set -e
+
+            echo "🚀 Starting PRODUCTION deployment..."
+
+            echo "📂 Moving to project directory"
+            cd /home/ubuntu/nq-backend
+
+            echo "🔄 Fetching latest code"
+            git fetch origin
+
+            echo "📌 Resetting to latest main"
+            git reset --hard origin/main
+
+            echo "📦 Installing dependencies"
+            npm install --no-audit --no-fund
+
+            echo "🏗️ Building project"
+            export NODE_OPTIONS="--max-old-space-size=1536"
+            npm run build
+
+            echo "♻️ Reloading PM2 process"
+            if pm2 describe netqwix-api-prod > /dev/null; then
+              pm2 reload netqwix-api-prod
+            else
+              pm2 start npm --name netqwix-api-prod -- run prod
+            fi
+
+            pm2 save
+
+            echo "✅ Production deployment completed successfully"

@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { commonController } from "./commonController";
+import { ChatController } from "../chat/chatController";
+import { PromoCodeController } from "../promo-code/promoCodeController";
 import multer = require("multer");
 import fs = require("fs");
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
@@ -49,5 +51,21 @@ route.delete('/delete-saved-session/:id', commonC.deleteSavedSession);
 route.put("/update-profile-picture", commonC.profileImageUrl);
 route.post("/generate-thumbnail", upload.single('video'), commonC.generateThumbnail);
 route.post("/featured-content-upload-url", commonC.featuredContentUploadUrl);
+
+route.post("/chat-media-upload-url", commonC.chatMediaUploadUrl);
+
+const chatC = new ChatController();
+route.get("/chat-conversations", chatC.getConversations);
+route.get("/chat-messages/:conversationId", chatC.getMessages);
+route.post("/chat-send", chatC.sendMessage);
+route.post("/chat-conversation", chatC.getOrCreateConversation);
+route.post("/chat-create-group", chatC.createGroup);
+route.get("/chat-policy", chatC.getChatPolicy);
+route.get("/chat-flagged", chatC.getFlaggedChats);
+route.post("/chat-flag-update", chatC.updateFlagStatus);
+
+const promoC = new PromoCodeController();
+route.post("/validate-promo", promoC.validate);
+route.get("/visible-promos", promoC.visiblePromos);
 
 export const commonRoute: Router = route;

@@ -14,4 +14,13 @@ export class Tables {
     public static readonly online_user = "online_user";
     public static readonly notifications = "notifications";
     public static readonly call_diagnostics = "call_diagnostics";
+    public static readonly admin_audit = "admin_audit";
+    public static readonly user_activity = "user_activity";
+    public static readonly user_presence = "user_presence";
+    public static readonly chat_message = "chat_message";
+    public static readonly chat_conversation = "chat_conversation";
+    public static readonly push_token = "push_token";
+    public static readonly chat_flag = "chat_flag";
+    public static readonly promo_code = "promo_code";
+    public static readonly broadcast = "broadcast";
 }

@@ -87,8 +87,11 @@ route.post("/accept-friend-request", userC.acceptFriendRequest);
 route.post("/cancel-friend-request", userC.cancelFriendRequest);
 route.post("/reject-friend-request", userC.rejectFriendRequest);
 route.get("/friend-requests", userC.getFriendRequests);
+route.get("/sent-friend-requests", userC.getSentFriendRequests);
 route.get("/friends", userC.getFriends);
 route.post("/remove-friend", userC.removeFriend);
+route.post("/block-user", userC.blockUser);
+route.post("/report-user", userC.reportUser);
 route.post("/update-account-privacy",userC.updateIsPrivate);
 route.get("/get-all-trainee",userC.getAllTrainee);
 route.get("/get-all-users",userC.getAllUsers);
@@ -106,12 +109,15 @@ route.post("/write-us",userC.captureWriteUs);
 route.post("/raise-concern",userC.createRaiseConcern);
 route.get("/write-us",userC.getCaptureWriteUs);
 route.get("/raise-concern",userC.getRaiseConcern);
+route.get("/my-raise-concerns",userC.getMyRaiseConcerns);
+route.get("/my-referrals",userC.getMyReferrals);
 route.put("/update-contact-us-status",userC.updateWriteUsTicketStatus);
 route.put("/update-raised-concern-ticket",userC.updateRaiseConcernTicketStatus);
 route.get("/all-online-user",userC.getAllLatestOnlineUser);
 route.put("/update-mobile-number",userC.updateMobileNumber);
 route.patch("/update-notifications-settings",userC.updateNotificationSettings);
 route.put("/update-trainer-status",userC.updateTrainerStatus.bind(userC));
+route.delete("/delete-user/:id", isValidMongoMiddleware.isValidTokenInReqParams, userC.deleteUser.bind(userC));
 route.get("/approve-expert/:id",userC.approveTrainer.bind(userC));
 
 

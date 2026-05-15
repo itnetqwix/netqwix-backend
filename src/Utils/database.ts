@@ -15,7 +15,9 @@ export class DatabaseInit {
     try {
       const url = this.getConnectURL();
       // WRITE MONGO CONNECT
-      mongoose.connect(url);
+      await mongoose.connect(url);
+      console.log("🔥 Connected DB Name:", mongoose.connection.name);
+      console.log("🔥 Connected Host:", mongoose.connection.host);
       this.log.info("Database connected successfully");
     } catch (err) {
       this.log.error(`mongo Connection error ---- `, err);

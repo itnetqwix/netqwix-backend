@@ -61,7 +61,9 @@ const userSchema: Schema = new Schema(
       type: Boolean,
       default: false, // Default to false so users appear in search by default
     },
-    friends: [{ type: ObjectId, ref: 'user' }], // List of friends
+    friends: [{ type: ObjectId, ref: 'user' }],
+    blockedUsers: [{ type: ObjectId, ref: 'user' }],
+    lastSeen: { type: Date, default: null },
     friendRequests: [
       {
         senderId: { type: Schema.Types.ObjectId, ref: 'user' },
@@ -78,7 +80,15 @@ const userSchema: Schema = new Schema(
         sms: { type: Boolean, default: true },
       },
     },
-    status: { // Added new field
+    interests: {
+      type: [String],
+      default: [],
+    },
+    ai_profile_summary: {
+      type: String,
+      default: null,
+    },
+    status: {
       type: String,
       enum: ["pending", "approved", "rejected"],
       default: "pending",

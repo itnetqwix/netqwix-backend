@@ -3,7 +3,7 @@ import { Tables } from "../config/tables";
 
 const onlineUserSchema: Schema = new Schema(
     {
-        trainer_id: { type: Schema.Types.ObjectId, ref: "users",unique:true },
+        trainer_id: { type: Schema.Types.ObjectId, ref: "user",unique:true },
         last_activity_time: { type: Date },
     },
     { timestamps: true }

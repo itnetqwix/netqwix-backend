@@ -18,16 +18,20 @@ const reportSchema: Schema = new Schema(
     },
     trainer: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "user",
     },
     trainee: {
       type: Schema.Types.ObjectId,
-      ref: "users",
+      ref: "user",
     },
     status: {
       type : Boolean,
       default : true
-    }
+    },
+    /** S3 key (e.g. session-rec-*.webm) for full instant-lesson session recording */
+    sessionRecordingUrl: {
+      type: String,
+    },
   },
   { timestamps: true }
 );
