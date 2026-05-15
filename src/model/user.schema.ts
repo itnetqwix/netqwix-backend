@@ -64,6 +64,8 @@ const userSchema: Schema = new Schema(
     friends: [{ type: ObjectId, ref: 'user' }],
     blockedUsers: [{ type: ObjectId, ref: 'user' }],
     lastSeen: { type: Date, default: null },
+    /** When false, trainer stays hidden from online lists even if socket is connected. */
+    showAsOnline: { type: Boolean, default: true },
     friendRequests: [
       {
         senderId: { type: Schema.Types.ObjectId, ref: 'user' },

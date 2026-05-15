@@ -2,6 +2,7 @@ import ChatConversation from "../../model/chat_conversation.schema";
 import ChatMessage from "../../model/chat_message.schema";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { checkChatPolicy, getChatPolicyInfo } from "./chatPolicy";
+import { isUserOnline } from "../socket/socket.service";
 
 export class ChatService {
   public async getConversations(userId: string): Promise<ResponseBuilder> {
@@ -20,7 +21,14 @@ export class ChatService {
             receiverId: userId,
             isRead: false,
           });
-          return { ...c, unreadCount };
+          const participants = (c.participants ?? []).map((p: any) => {
+            const pid = String(p?._id ?? p);
+            return {
+              ...p,
+              isOnline: pid !== String(userId) ? isUserOnline(pid) : undefined,
+            };
+          });
+          return { ...c, participants, unreadCount };
         })
       );
       const rb = new ResponseBuilder();
@@ -53,9 +61,10 @@ export class ChatService {
         .limit(limit)
         .lean();
 
+      const now = new Date();
       await ChatMessage.updateMany(
         { conversationId, receiverId: userId, isRead: false },
-        { isRead: true }
+        { isRead: true, status: "read", readAt: now }
       );
 
       const rb = new ResponseBuilder();

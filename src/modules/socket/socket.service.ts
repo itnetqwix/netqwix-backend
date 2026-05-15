@@ -28,8 +28,64 @@ webpush.setVapidDetails(
   process.env.WEB_PUSH_PRIVATE_KEY
 );
 
-let activeUsers = {};
+let activeUsers: Record<string, any> = {};
 let ioInstance: any = null; // Store io instance for emitting events from services
+
+export function isUserOnline(userId: string): boolean {
+  return !!activeUsers[String(userId)];
+}
+
+export function getActiveUserIds(): string[] {
+  return Object.keys(activeUsers);
+}
+
+function broadcastUserStatus(userId: string, status: "online" | "offline") {
+  if (!ioInstance) return;
+  ioInstance.emit("userStatus", {
+    user: activeUsers,
+    status,
+    userId: String(userId),
+  });
+}
+
+export async function removeUserFromActivePresence(userId: string) {
+  const uid = String(userId);
+  if (!activeUsers[uid]) return;
+
+  const wasTrainer = activeUsers[uid]?.account_type === "Trainer";
+  delete activeUsers[uid];
+
+  user.findByIdAndUpdate(uid, { lastSeen: new Date() }).catch(() => {});
+
+  if (wasTrainer) {
+    try {
+      await onlineUser.deleteOne({ trainer_id: uid });
+    } catch (error) {
+      console.error("Error removing trainer from online_user:", error);
+    }
+  }
+
+  broadcastUserStatus(uid, "offline");
+}
+
+export async function applyAvailabilityForConnectedUser(userId: string) {
+  const uid = String(userId);
+  if (!ioInstance) return;
+
+  const sid = MemCache.getDetail(process.env.SOCKET_CONFIG, uid);
+  if (!sid) return;
+
+  const socket = ioInstance.sockets?.sockets?.get(String(sid));
+  if (!socket) return;
+
+  const userDoc = await user.findById(uid).select("showAsOnline account_type").lean();
+  if ((userDoc as any)?.showAsOnline === false) {
+    await removeUserFromActivePresence(uid);
+    return;
+  }
+
+  await updateUserActivity(socket);
+}
 /** Set once `emitBookingStatusUpdated` is defined (handlers above need a late binding). */
 let emitBookingStatusUpdatedDelegate: ((bookingData: any) => Promise<void>) | null = null;
 
@@ -244,10 +300,15 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
 async function updateUserActivity(socket) {
   try {
     const userId = String(socket.user._id);
+    const accountType = socket?.user?._doc?.account_type;
+    const userDoc = await user.findById(userId).select("showAsOnline account_type").lean();
+    const showAsOnline = (userDoc as any)?.showAsOnline !== false;
 
-    // Add the current user to the active users list
-
-    if (socket?.user?._doc?.account_type === "Trainer") {
+    if (accountType === "Trainer") {
+      if (!showAsOnline) {
+        delete activeUsers[userId];
+        return;
+      }
       activeUsers[userId] = { ...socket.user._doc };
       if (socket.user._doc._id) {
         const trainerId = String(socket.user._doc._id);
@@ -268,9 +329,11 @@ async function updateUserActivity(socket) {
         }
         void touchUserPresence(trainerId);
       }
-    } else if (socket?.user?._doc?.account_type === "Trainee") {
+    } else if (accountType === "Trainee") {
       activeUsers[userId] = { ...socket.user._doc };
       void touchUserPresence(userId);
+    } else {
+      return;
     }
 
     // Broadcast the updated active users list to all connected clients

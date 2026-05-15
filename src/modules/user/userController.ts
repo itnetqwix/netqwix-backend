@@ -738,7 +738,16 @@ export class userController {
         await userDoc.save();
       }
 
-      res.status(200).json({ friends: uniqueFriends });
+      const { isUserOnline } = require("../socket/socket.service");
+      const friendsWithPresence = uniqueFriends.map((friend: any) => {
+        const plain = friend?.toObject ? friend.toObject() : friend;
+        return {
+          ...plain,
+          is_online: isUserOnline(String(plain._id)),
+        };
+      });
+
+      res.status(200).json({ friends: friendsWithPresence });
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: "Server error." });
@@ -1071,6 +1080,37 @@ export class userController {
           error: result.error,
           code: CONSTANCE.RES_CODE.error.badRequest,
         });
+      }
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.error });
+    }
+  };
+
+  public setOnlineAvailability = async (req, res) => {
+    try {
+      if (req["authUser"]) {
+        const showAsOnline = req.body?.showAsOnline ?? req.body?.online;
+        if (typeof showAsOnline !== "boolean") {
+          return res.status(400).json({
+            status: CONSTANCE.FAIL,
+            error: "showAsOnline (boolean) is required",
+          });
+        }
+        const result: ResponseBuilder = await this.userService.setOnlineAvailability(
+          String(req.authUser._id),
+          showAsOnline
+        );
+        if (result.status !== CONSTANCE.FAIL) {
+          res.status(result.code).json(result);
+        } else {
+          res.status(result.code).json({
+            status: result.status,
+            error: result.error,
+            code: CONSTANCE.RES_CODE.error.badRequest,
+          });
+        }
+      } else {
+        res.status(401).json({ status: CONSTANCE.FAIL, error: "Unauthorized" });
       }
     } catch (err) {
       return res.status(500).send({ status: CONSTANCE.FAIL, error: err.error });

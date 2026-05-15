@@ -26,6 +26,7 @@ import onlineUser from "../../model/online_user.schema";
 import { recordUserActivity, recordUserActivityMany, UserActivityEvent } from "../../helpers/userActivity";
 import SMSService from "../../services/sms-service";
 import user from "../../model/user.schema";
+import { applyAvailabilityForConnectedUser } from "../socket/socket.service";
 import { DateTime } from "luxon";
 import ReferredUser from "../../model/referred.user.schema";
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
@@ -1509,6 +1510,11 @@ export class UserService {
           },
         },
         {
+          $match: {
+            "trainer_info.showAsOnline": { $ne: false },
+          },
+        },
+        {
           $project: {
             _id: 1,
             last_activity_time: 1,
@@ -1541,6 +1547,29 @@ export class UserService {
     }
   }
 
+
+  public async setOnlineAvailability(
+    userId: string,
+    showAsOnline: boolean
+  ): Promise<ResponseBuilder> {
+    try {
+      const updated = await user.findByIdAndUpdate(
+        userId,
+        { showAsOnline: !!showAsOnline },
+        { new: true }
+      ).select("-password -subscriptionId");
+      if (!updated) {
+        return ResponseBuilder.badRequest("User not found");
+      }
+      await applyAvailabilityForConnectedUser(String(userId));
+      return ResponseBuilder.data(
+        { user: updated, showAsOnline: !!showAsOnline },
+        showAsOnline ? "You are now shown as online" : "You are now shown as offline"
+      );
+    } catch (err) {
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
 
   public async updateTrainerStatus(
     trainerId: string,
