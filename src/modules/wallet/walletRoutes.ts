@@ -15,6 +15,8 @@ route.get("/transactions/:id", walletController.getTransactionDetail);
 route.get("/ledger", walletController.getLedger);
 route.get("/earnings", walletController.getEarnings);
 route.post("/topup/create-intent", walletController.createTopUpIntent);
+route.get("/topup/:topupId/status", walletController.getTopUpStatus);
+route.post("/topup/:topupId/confirm", walletController.confirmTopUp);
 route.post("/pin/set", walletController.setPin);
 route.post("/pin/verify", walletPinLimiter, walletController.verifyPin);
 route.post("/pin/forgot/request", walletController.forgotPinRequest);

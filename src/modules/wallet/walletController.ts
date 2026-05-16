@@ -53,12 +53,42 @@ export class WalletController {
     try {
       const userId = String(req["authUser"]?._id);
       const amountMinor = Number(req.body.amount_minor ?? req.body.amountMinor);
+      const accountType =
+        req["authUser"]?.account_type === AccountType.TRAINER ? "trainer" : "trainee";
       const result = await topUpService.createTopUpIntent({
         userId,
         amountMinor,
         region: req.body.region,
-        stripeCustomerId: req.body.customer ?? req["authUser"]?.stripe_account_id,
+        accountType,
       });
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ status: CONSTANCE.FAIL, error: result.error });
+      }
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err: any) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public getTopUpStatus = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const topupId = String(req.params.topupId);
+      const result = await topUpService.getTopUpStatus(userId, topupId);
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ status: CONSTANCE.FAIL, error: result.error });
+      }
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err: any) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public confirmTopUp = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const topupId = String(req.params.topupId);
+      const result = await topUpService.confirmTopUpFromClient(userId, topupId);
       if (result.status === CONSTANCE.FAIL) {
         return res.status(result.code).send({ status: CONSTANCE.FAIL, error: result.error });
       }

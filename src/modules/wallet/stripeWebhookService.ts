@@ -32,6 +32,13 @@ export class StripeWebhookService {
     );
 
     try {
+      if (event.type === "payment_intent.payment_failed") {
+        const pi = event.data.object;
+        if (pi.metadata?.kind === "wallet_topup") {
+          await topUpService.markTopUpFailed(pi.id);
+        }
+      }
+
       if (event.type === "payment_intent.succeeded") {
         const pi = event.data.object;
         const kind = pi.metadata?.kind;
