@@ -265,6 +265,20 @@ export class UserService {
       if (!userInfo) {
         return ResponseBuilder.data({ userInfo }, "User not found");
       }
+      if (userInfo.account_type === AccountType.TRAINER && userInfo._id) {
+        const { ensureTrainerGracePeriod } = await import(
+          "../verification/gracePeriod"
+        );
+        const { buildOnboardingStatus } = await import(
+          "../verification/onboardingHelpers"
+        );
+        await ensureTrainerGracePeriod(String(userInfo._id));
+        const fresh = await user.findById(userInfo._id).lean();
+        if (fresh) {
+          userInfo = fresh;
+          (userInfo as any).onboarding = buildOnboardingStatus(fresh);
+        }
+      }
       if (
         userInfo.account_type === AccountType.TRAINER &&
         !userInfo.is_kyc_completed

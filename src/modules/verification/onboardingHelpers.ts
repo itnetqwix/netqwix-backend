@@ -1,5 +1,9 @@
 import { AccountType } from "../auth/authEnum";
 import { VERIFICATION_CONFIG, type OnboardingStep } from "../../config/verification";
+import { maskEmail, maskPhone } from "./contactVerificationSync";
+import { graceDaysRemaining, isInGracePeriod } from "./gracePeriod";
+
+export type ContactSubstep = "email" | "phone" | "complete";
 
 export type OnboardingStatusPayload = {
   required: boolean;
@@ -8,9 +12,14 @@ export type OnboardingStatusPayload = {
   rejection_reason?: string;
   email_verified: boolean;
   phone_verified: boolean;
+  email_masked?: string | null;
+  phone_masked?: string | null;
+  contact_substep?: ContactSubstep;
   submitted_for_review_at?: Date;
   review_escalated_at?: Date;
   grace_deadline?: Date;
+  in_grace_period?: boolean;
+  grace_days_remaining?: number;
   next_route?: string;
 };
 
@@ -68,17 +77,29 @@ export function buildOnboardingStatus(u: any): OnboardingStatusPayload {
   const tv = getTrainerVerification(u);
   const step = (tv.onboarding_step || "account_created") as OnboardingStep;
   const required = isOnboardingRequired(u);
+  const emailVerified = Boolean(tv.email_verified_at);
+  const phoneVerified = Boolean(tv.phone_verified_at);
+  const contactSubstep: ContactSubstep = !emailVerified
+    ? "email"
+    : !phoneVerified
+      ? "phone"
+      : "complete";
 
   return {
     required,
     step: required ? step : "completed",
     status: u.status || "pending",
     rejection_reason: tv.rejection_reason,
-    email_verified: Boolean(tv.email_verified_at),
-    phone_verified: Boolean(tv.phone_verified_at),
+    email_verified: emailVerified,
+    phone_verified: phoneVerified,
+    email_masked: maskEmail(u.email),
+    phone_masked: maskPhone(u.mobile_no),
+    contact_substep: contactSubstep,
     submitted_for_review_at: tv.submitted_for_review_at,
     review_escalated_at: tv.review_escalated_at,
     grace_deadline: tv.grace_deadline,
+    in_grace_period: isInGracePeriod(u),
+    grace_days_remaining: isInGracePeriod(u) ? graceDaysRemaining(u) : 0,
     next_route: required ? STEP_ROUTES[step] || "/onboarding/contact" : "/dashboard",
   };
 }

@@ -9,7 +9,7 @@ import { signupModel } from "./authValidator/signup";
 import * as l10n from "jm-ez-l10n";
 import JWT from "../../Utils/jwt";
 import { googleLoginModel } from "./authValidator/googleSignIn";
-import user from "../../model/user.schema";
+import userModel from "../../model/user.schema";
 import { SendEmail } from "../../Utils/sendEmail";
 import { CONSTANCE, NetquixImage } from "../../config/constance";
 import { stripeHelperController } from "../stripe/stripeHelperController";
@@ -20,6 +20,8 @@ import {
   buildOnboardingStatus,
   initTrainerVerificationOnSignup,
 } from "../verification/onboardingHelpers";
+import { syncTrustedContactVerification } from "../verification/contactVerificationSync";
+import { ensureTrainerGracePeriod } from "../verification/gracePeriod";
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
 
@@ -128,8 +130,8 @@ export class AuthService {
 
     // Create the user object, but replace its _id if referredUser exists
     const userObj = referredUser
-      ? new user({ ...updateduserObj, _id: referredUser._id,friends:[referredUser.referrerId] }) // Use referred user's _id
-      : new user(updateduserObj); // Create a new user normally
+      ? new userModel({ ...updateduserObj, _id: referredUser._id,friends:[referredUser.referrerId] }) // Use referred user's _id
+      : new userModel(updateduserObj); // Create a new user normally
 
 
     await userObj.save();
@@ -139,7 +141,7 @@ export class AuthService {
 
     // Remove the referred user from the ReferredUser collection if it was created from there
     if (referredUser) {
-      const rUser = await user.findById(referredUser.referrerId);
+      const rUser = await userModel.findById(referredUser.referrerId);
       rUser.friends = [referredUser._id];
       await rUser.save();
       await ReferredUser.deleteOne({ _id: referredUser._id });
@@ -195,7 +197,7 @@ export class AuthService {
         `NetQwix New Expert Sign Up Request from ${createUser.fullname}`,
       );
     } else {
-      await user.findByIdAndUpdate(userObj._id, { status: "approved" },
+      await userModel.findByIdAndUpdate(userObj._id, { status: "approved" },
         { new: true })
       SendEmail.sendRawEmail(
         "new-trainee",
@@ -219,7 +221,7 @@ export class AuthService {
       if (!email) {
         return ResponseBuilder.badRequest("Email is required.");
       }
-      return await user.findOne({ email }).select('+password');
+      return await userModel.findOne({ email }).select('+password');
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
     }
@@ -253,7 +255,12 @@ export class AuthService {
           };
           const access_token = this.JWT.signJWT(payload);
           //TODO: Store access_token in DB
-          const onboarding = buildOnboardingStatus(userDetails);
+          await ensureTrainerGracePeriod(String(userDetails._id));
+          await syncTrustedContactVerification(String(userDetails._id), {
+            trustEmailFromLogin: true,
+          });
+          const freshUser = await userModel.findById(userDetails._id).lean();
+          const onboarding = buildOnboardingStatus(freshUser || userDetails);
           return ResponseBuilder.data(
             {
               data: {
@@ -281,7 +288,7 @@ export class AuthService {
         ResponseBuilder.badRequest("Email is required.");
       }
       this.log.info(newUser);
-      return await user.exists({
+      return await userModel.exists({
         email: newUser.email,
       });
     } catch (error) {
@@ -295,7 +302,7 @@ export class AuthService {
     portal = ""
   ): Promise<ResponseBuilder> => {
     try {
-      const userInfo = await user.findById(authUser["_id"]);
+      const userInfo = await userModel.findById(authUser["_id"]);
       if (!userInfo) {
         return ResponseBuilder.errorMessage("User not found.");
       }
@@ -346,7 +353,7 @@ export class AuthService {
       if (!decodedToken || !decodedToken["user_id"]) {
         return ResponseBuilder.badRequest(l10n.t("NOT_VERIFIED_TOKEN"));
       }
-      const updatedUser = await user.findOneAndUpdate(
+      const updatedUser = await userModel.findOneAndUpdate(
         { _id: decodedToken["user_id"] },
         { $set: { password: hashedPassword } },
         { new: true }
@@ -375,7 +382,7 @@ export class AuthService {
       if (!email) {
         return ResponseBuilder.badRequest("Email is required.");
       }
-      return await user.findOne({ email });
+      return await userModel.findOne({ email });
     } catch (error) {
       return ResponseBuilder.error(l10n.t("ERR_INTERNAL_SERVER"));
     }
@@ -389,7 +396,10 @@ export class AuthService {
       };
       const access_token = this.JWT.signJWT(payload);
       //TODO: Store access_token in DB
-      const onboarding = buildOnboardingStatus(user);
+      await ensureTrainerGracePeriod(String(user._id));
+      await syncTrustedContactVerification(String(user._id), { trustEmailFromLogin: true });
+      const freshUser = await userModel.findById(user._id).lean();
+      const onboarding = buildOnboardingStatus(freshUser || user);
       return ResponseBuilder.data(
         {
           data: {
