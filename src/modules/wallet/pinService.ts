@@ -3,6 +3,7 @@ import * as crypto from "crypto";
 import * as jwt from "jsonwebtoken";
 import wallet_accounts from "../../model/wallet_accounts.schema";
 import wallet_security_events from "../../model/wallet_security_events.schema";
+import { getJwtSecret } from "../../config/jwtSecret";
 import { WALLET_CONFIG } from "../../config/wallet";
 import { financialAuditService } from "./financialAuditService";
 
@@ -77,13 +78,9 @@ export class PinService {
     });
     await this.logEvent(userId, walletAccountId, "pin_verify_success");
 
-    const secret = process.env.JWT_SECRET;
-    if (!secret || secret.length < 16) {
-      throw new Error("JWT_SECRET is not configured.");
-    }
     const token = jwt.sign(
       { sub: userId, wid: walletAccountId, typ: "wallet_pin" },
-      secret,
+      getJwtSecret(),
       { expiresIn: `${WALLET_CONFIG.pinSessionTtlMinutes}m`, algorithm: "HS256" }
     );
     await this.logEvent(userId, walletAccountId, "pin_session_issued");
@@ -91,11 +88,7 @@ export class PinService {
   }
 
   verifyPinSessionToken(token: string): { userId: string; walletAccountId: string } {
-    const secret = process.env.JWT_SECRET;
-    if (!secret || secret.length < 16) {
-      throw new Error("JWT_SECRET is not configured.");
-    }
-    const decoded = jwt.verify(token, secret, {
+    const decoded = jwt.verify(token, getJwtSecret(), {
       algorithms: ["HS256"],
     }) as { sub: string; wid: string; typ: string };
     if (decoded.typ !== "wallet_pin") throw new Error("Invalid pin session.");

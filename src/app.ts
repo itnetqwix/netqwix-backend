@@ -8,7 +8,7 @@ const socketio = require("socket.io");
 const { ExpressPeerServer } = require("peer");
 
 import * as bodyParser from "body-parser";
-import * as dotEnv from "dotenv";
+import "./config/loadEnv";
 import { SocketInit } from "./modules/socket/init";
 import { registerTrainerTraineePresenceProvider } from "./modules/socket/socketPresenceRegistry";
 import { cronjobs } from "./cronjob";
@@ -17,7 +17,6 @@ import { securityHeaders } from "./middleware/securityHeaders.middleware";
 import { globalApiLimiter } from "./middleware/rateLimit.middleware";
 import { AuthorizeMiddleware } from "./middleware/authorize.middleware";
 
-dotEnv.config();
 export class App {
   protected app: express.Application;
   private socketEvents = new SocketInit();

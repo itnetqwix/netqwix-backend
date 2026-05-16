@@ -1,5 +1,6 @@
 import * as crypto from "crypto";
 import * as jwt from "jsonwebtoken";
+import { getJwtExpiration, getJwtSecret } from "../../config/jwtSecret";
 
 type RefreshRecord = {
   userId: string;
@@ -7,12 +8,6 @@ type RefreshRecord = {
 };
 
 const refreshStore = new Map<string, RefreshRecord>();
-
-function secret() {
-  const s = process.env.JWT_SECRET;
-  if (!s || s.length < 16) throw new Error("JWT_SECRET is not configured.");
-  return s;
-}
 
 export class RefreshTokenService {
   issueRefreshToken(userId: string, ttlDays = 30) {
@@ -50,8 +45,8 @@ export class RefreshTokenService {
   }
 
   issueAccessToken(userId: string, accountType: string) {
-    return jwt.sign({ user_id: userId, account_type: accountType }, secret(), {
-      expiresIn: process.env.JWT_EXPIRATION_TIME || "7d",
+    return jwt.sign({ user_id: userId, account_type: accountType }, getJwtSecret(), {
+      expiresIn: getJwtExpiration(),
       algorithm: "HS256",
     });
   }

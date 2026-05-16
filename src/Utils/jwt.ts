@@ -1,4 +1,5 @@
 import * as jwt from "jsonwebtoken";
+import { getJwtExpiration, getJwtSecret } from "../config/jwtSecret";
 import { ResponseBuilder } from "../helpers/responseBuilder";
 import * as l10n from "jm-ez-l10n";
 
@@ -8,18 +9,14 @@ interface IJwtPayload {
 }
 export default class JWT {
   public signJWT = (payload: IJwtPayload) => {
-    let jwtSecretKey = process.env.JWT_SECRET;
-    return jwt.sign(payload, jwtSecretKey, {
-      expiresIn: process.env.JWT_EXPIRATION_TIME,
+    return jwt.sign(payload, getJwtSecret(), {
+      expiresIn: getJwtExpiration(),
+      algorithm: "HS256",
     });
   };
 
   private static getSecret(): string {
-    const secret = process.env.JWT_SECRET;
-    if (!secret || secret.length < 16) {
-      throw new Error("JWT_SECRET is not configured.");
-    }
-    return secret;
+    return getJwtSecret();
   }
 
   /**
