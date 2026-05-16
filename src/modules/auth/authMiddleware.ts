@@ -70,6 +70,53 @@ export class AuthMiddleware {
     }
   };
 
+  public isAppleUserExists = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { verifyAppleIdentityToken } = await import("./appleTokenVerify");
+      const identityToken = req.body?.identity_token;
+      if (!identityToken) {
+        return res.status(401).send({
+          status: CONSTANCE.FAIL,
+          error: "Apple identity token required.",
+        });
+      }
+      const verified = await verifyAppleIdentityToken(String(identityToken));
+      req.body.apple_sub = verified.sub;
+      if (verified.email) {
+        req.body.email = String(verified.email).toLowerCase();
+      }
+      const email = req.body?.email;
+      if (!email) {
+        return res.status(400).send({
+          status: CONSTANCE.FAIL,
+          error: "Email is required for first-time Apple sign in.",
+        });
+      }
+      const existing = await this.authService.isGoogleUserExists({
+        email,
+      } as any);
+      if (isEmpty(existing)) {
+        res.status(CONSTANCE.RES_CODE.success).json({
+          data: { email, isRegistered: false },
+          msg: l10n.t("GOOGLE_LOGIN_REGISTER_PENDING"),
+        });
+      } else {
+        req.body = existing;
+        next();
+      }
+    } catch (error) {
+      this.logger.error(error);
+      return res.status(CONSTANCE.RES_CODE.error.internalServerError).send({
+        status: CONSTANCE.FAIL,
+        error: (error as Error).message || "Internal Server Error",
+      });
+    }
+  };
+
   public isGoogleUserExists = async (
     req: Request,
     res: Response,

@@ -7,4 +7,5 @@ export enum AccountType {
 export enum LoginType {
   DEFAULT = "default",
   GOOGLE = "google",
+  APPLE = "apple",
 }

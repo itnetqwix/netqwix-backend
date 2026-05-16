@@ -9,6 +9,7 @@ import {
 } from "./authValidator/login";
 import { AuthMiddleware } from "./authMiddleware";
 import { googleLoginModel } from "./authValidator/googleSignIn";
+import { appleLoginModel } from "./authValidator/appleSignIn";
 import {
   authForgotLimiter,
   authLoginLimiter,
@@ -50,5 +51,11 @@ route.post(
   V.validate(googleLoginModel),
   authMiddleware.isGoogleUserExists,
   authC.googleLogin
+);
+route.post(
+  "/verify-apple-login",
+  V.validate(appleLoginModel),
+  authMiddleware.isAppleUserExists,
+  authC.appleLogin
 );
 export const authRoute: Router = route;
