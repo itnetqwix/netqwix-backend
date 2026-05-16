@@ -59,7 +59,7 @@ jobs:
             echo "♻️ Starting or Reloading PM2 process"
 
             if pm2 describe netqwix-api-staging > /dev/null; then
-              pm2 reload netqwix-api-staging
+              pm2 reload netqwix-api-staging --update-env
             else
               pm2 start npm --name netqwix-api-staging -- run prod
             fi
@@ -105,7 +105,7 @@ jobs:
             echo "♻️ Reloading PM2 process"
 
             if pm2 describe netqwix-api-prod > /dev/null; then
-              pm2 reload netqwix-api-prod
+              pm2 reload netqwix-api-prod --update-env
             else
               pm2 start npm --name netqwix-api-prod -- run prod
             fi
