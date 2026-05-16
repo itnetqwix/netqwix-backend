@@ -21,7 +21,6 @@ import { DateFormat } from "../../Utils/dateFormat";
 import { SendEmail } from "../../Utils/sendEmail";
 import user from "../../model/user.schema";
 import { CovertTimeAccordingToTimeZone, isOverlap, Utils } from "../../Utils/Utils";
-import * as mongoose from "mongoose";
 import { Failure } from "../../helpers/error";
 import availability from "../../model/availability.schema";
 import { DateTime } from "luxon";

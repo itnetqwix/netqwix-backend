@@ -46,7 +46,7 @@ export class WalletTransactionDetailService {
         reference_type: entry.reference_type,
         reference_id: entry.reference_id,
         session_id: sessionId,
-        createdAt: entry.createdAt,
+        createdAt: (entry as { createdAt?: Date }).createdAt,
       },
       status: topupStatus ?? booking?.status ?? booking?.refund_status ?? null,
       payment: {

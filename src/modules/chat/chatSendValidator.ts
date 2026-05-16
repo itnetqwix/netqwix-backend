@@ -21,7 +21,7 @@ export function validateChatSendBody(body: Record<string, unknown>): string | nu
   if (mediaUrl != null && typeof mediaUrl !== "string") {
     return "mediaUrl must be a string.";
   }
-  if (mediaUrl && mediaUrl.length > 2048) {
+  if (typeof mediaUrl === "string" && mediaUrl.length > 2048) {
     return "mediaUrl is too long.";
   }
   return null;

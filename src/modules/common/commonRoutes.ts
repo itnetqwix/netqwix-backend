@@ -67,13 +67,13 @@ route.get("/chat-flagged", (req, res, next) => {
   const { assertAdminUser } = require("../admin/adminPermission");
   const denied = assertAdminUser(req["authUser"]);
   if (denied) return res.status(403).json({ status: 0, error: denied });
-  return chatC.getFlaggedChats(req, res, next);
+  return chatC.getFlaggedChats(req, res);
 });
 route.post("/chat-flag-update", (req, res, next) => {
   const { assertAdminUser } = require("../admin/adminPermission");
   const denied = assertAdminUser(req["authUser"]);
   if (denied) return res.status(403).json({ status: 0, error: denied });
-  return chatC.updateFlagStatus(req, res, next);
+  return chatC.updateFlagStatus(req, res);
 });
 
 const promoC = new PromoCodeController();
