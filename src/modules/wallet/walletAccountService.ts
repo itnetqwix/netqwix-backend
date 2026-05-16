@@ -67,6 +67,14 @@ export class WalletAccountService {
     return wallet_accounts.findOne(filter).lean();
   }
 
+  async listUserWalletIds(userId: string): Promise<mongoose.Types.ObjectId[]> {
+    const rows = await wallet_accounts
+      .find({ user_id: new mongoose.Types.ObjectId(userId) })
+      .select("_id")
+      .lean();
+    return rows.map((r) => r._id as mongoose.Types.ObjectId);
+  }
+
   async updatePayoutPreference(
     userId: string,
     preference: "wallet_fast" | "bank_standard",

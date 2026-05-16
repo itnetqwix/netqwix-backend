@@ -9,6 +9,10 @@ import {
 } from "./authValidator/login";
 import { AuthMiddleware } from "./authMiddleware";
 import { googleLoginModel } from "./authValidator/googleSignIn";
+import {
+  authForgotLimiter,
+  authLoginLimiter,
+} from "../../middleware/rateLimit.middleware";
 
 const route: Router = Router();
 const authC = new authController();
@@ -22,11 +26,13 @@ route.post(
   authMiddleware.isUserExist,
   authC.signup
 );
-route.post("/login", V.validate(loginModel), authC.login);
+route.post("/login", authLoginLimiter, V.validate(loginModel), authC.login);
+route.post("/refresh", authC.refreshToken);
 
 // to send email for forgot password
 route.post(
   "/forgot-password",
+  authForgotLimiter,
   V.validate(forgotPasswordEmailModal),
   authMiddleware.isUserNotExist,
   authC.forgotPasswordEmail

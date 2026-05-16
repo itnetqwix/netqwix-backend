@@ -2,7 +2,8 @@ import ChatConversation from "../../model/chat_conversation.schema";
 import ChatMessage from "../../model/chat_message.schema";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { checkChatPolicy, getChatPolicyInfo } from "./chatPolicy";
-import { isUserOnline } from "../socket/socket.service";
+import { EVENTS } from "../../config/constance";
+import { getIo, isUserOnline } from "../socket/socket.service";
 
 export class ChatService {
   public async getConversations(userId: string): Promise<ResponseBuilder> {
@@ -109,6 +110,12 @@ export class ChatService {
       const isGroup = conversation.isGroup;
       const actualReceiverId = isGroup ? null : receiverId;
       const finalReceiverId = actualReceiverId ?? receiverId;
+      if (!isGroup && finalReceiverId) {
+        const { isChatBlocked } = require("../../helpers/chatBlockCheck");
+        if (await isChatBlocked(senderId, finalReceiverId)) {
+          return ResponseBuilder.badRequest("You cannot message this user.");
+        }
+      }
       if (!isGroup && type === "text" && finalReceiverId) {
         const policy = await checkChatPolicy(senderId, finalReceiverId, content, String(conversation._id), null);
         if (!policy.allowed) {
@@ -145,9 +152,34 @@ export class ChatService {
         lastMessageAt: new Date(),
         lastMessageSenderId: senderId,
       });
+
+      const msgPayload: any =
+        typeof (message as any)?.toObject === "function"
+          ? (message as any).toObject()
+          : message;
+      const convId = String(conversation._id);
+
+      if (!isGroup && finalReceiverId && isUserOnline(String(finalReceiverId))) {
+        const deliveredAt = new Date();
+        await ChatMessage.findByIdAndUpdate(message._id, {
+          status: "delivered",
+          deliveredAt,
+        });
+        msgPayload.status = "delivered";
+        msgPayload.deliveredAt = deliveredAt;
+        const io = getIo();
+        if (io) {
+          io.to(`chat:${convId}`).emit(EVENTS.CHAT.DELIVERED, {
+            messageId: String(message._id),
+            messageIds: [String(message._id)],
+            conversationId: convId,
+          });
+        }
+      }
+
       const rb = new ResponseBuilder();
       rb.code = 200;
-      rb.result = { message: message, conversationId: conversation._id };
+      rb.result = { message: msgPayload, conversationId: conversation._id };
       return rb;
     } catch (err) {
       return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");

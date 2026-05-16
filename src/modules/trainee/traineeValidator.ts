@@ -59,6 +59,14 @@ export class bookSessionModal extends model {
   @IsString()
   public payment_intent_id?: string;
 
+  @IsOptional()
+  @IsString()
+  public payment_method?: string;
+
+  @IsOptional()
+  @IsString()
+  public pin_session_token?: string;
+
   public iceServers: any[]; 
   
   constructor(body) {
@@ -74,6 +82,8 @@ export class bookSessionModal extends model {
       time_zone,
       coupon_code,
       payment_intent_id,
+      payment_method,
+      pin_session_token,
     } = body;
     this.trainer_id = trainer_id;
     this.status = status;
@@ -86,6 +96,8 @@ export class bookSessionModal extends model {
     this.time_zone = time_zone;
     this.coupon_code = coupon_code;
     this.payment_intent_id = payment_intent_id;
+    this.payment_method = payment_method;
+    this.pin_session_token = pin_session_token;
   }
 }
 
@@ -115,16 +127,35 @@ export class bookInstantMeetingModal extends model {
   public payment_intent_id?: string;
 
   @IsOptional()
+  @IsString()
+  public payment_method?: string;
+
+  @IsOptional()
+  @IsString()
+  public pin_session_token?: string;
+
+  @IsOptional()
   public charging_price?: number;
 
   constructor(body) {
     super();
-    const { trainer_id, booked_date, duration, coupon_code, payment_intent_id, charging_price } = body;
+    const {
+      trainer_id,
+      booked_date,
+      duration,
+      coupon_code,
+      payment_intent_id,
+      payment_method,
+      pin_session_token,
+      charging_price,
+    } = body;
     this.trainer_id = trainer_id;
     this.booked_date = booked_date;
     this.duration = duration;
     this.coupon_code = coupon_code;
     this.payment_intent_id = payment_intent_id;
+    this.payment_method = payment_method;
+    this.pin_session_token = pin_session_token;
     this.charging_price = charging_price;
   }
 }

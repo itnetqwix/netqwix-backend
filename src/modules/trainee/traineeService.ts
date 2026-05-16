@@ -16,7 +16,7 @@ import * as l10n from "jm-ez-l10n";
 import { bookSessionModal, bookInstantMeetingModal } from "./traineeValidator";
 import booked_session from "../../model/booked_sessions.schema";
 import { recordUserActivityMany, UserActivityEvent } from "../../helpers/userActivity";
-import { PipelineStage } from "mongoose";
+import mongoose, { PipelineStage } from "mongoose";
 import { DateFormat } from "../../Utils/dateFormat";
 import { SendEmail } from "../../Utils/sendEmail";
 import user from "../../model/user.schema";
@@ -39,8 +39,12 @@ export class TraineeService {
       const {
         search = "",
         category = "",
+        categories = "",
         sortBy = "name",
         onlineOnly = "",
+        minRating = "",
+        minHourlyRate = "",
+        maxHourlyRate = "",
         page = "1",
         limit = "50",
       } = query;
@@ -65,8 +69,21 @@ export class TraineeService {
         );
         matchStage.$or = searchQuery.$or;
       }
-      if (category && String(category).trim()) {
-        matchStage.category = { $regex: String(category).trim(), $options: "i" };
+      const categoryList = String(categories || category || "")
+        .split(",")
+        .map((c) => c.trim())
+        .filter(Boolean);
+      if (categoryList.length === 1) {
+        matchStage.category = { $regex: categoryList[0], $options: "i" };
+      } else if (categoryList.length > 1) {
+        matchStage.$and = [
+          ...(Array.isArray(matchStage.$and) ? matchStage.$and : []),
+          {
+            $or: categoryList.map((c) => ({
+              category: { $regex: c, $options: "i" },
+            })),
+          },
+        ];
       }
 
       // const filteredTrainer =
@@ -251,6 +268,19 @@ export class TraineeService {
         },
       ];
 
+      const minRatingNum = parseFloat(String(minRating));
+      if (Number.isFinite(minRatingNum) && minRatingNum > 0) {
+        pipeline.push({ $match: { avgRating: { $gte: minRatingNum } } });
+      }
+      const minRateNum = parseFloat(String(minHourlyRate));
+      const maxRateNum = parseFloat(String(maxHourlyRate));
+      const rateMatch: Record<string, number> = {};
+      if (Number.isFinite(minRateNum) && minRateNum > 0) rateMatch.$gte = minRateNum;
+      if (Number.isFinite(maxRateNum) && maxRateNum > 0) rateMatch.$lte = maxRateNum;
+      if (Object.keys(rateMatch).length) {
+        pipeline.push({ $match: { hourly_rate: rateMatch } });
+      }
+
       const sortKey = String(sortBy || "name").toLowerCase();
       if (sortKey === "rating") {
         pipeline.push({ $sort: { avgRating: -1, fullname: 1 } });
@@ -422,8 +452,27 @@ export class TraineeService {
 
       const finalPrice = Number(Math.max(originalPrice - promoDiscountAmount, 0).toFixed(2));
 
+      const bookingId = new mongoose.Types.ObjectId();
+      if (payload.payment_method === "wallet" && finalPrice > 0) {
+        const { walletPaymentService } = require("../wallet/walletPaymentService");
+        try {
+          await walletPaymentService.payFromWallet({
+            traineeId: _id,
+            sessionId: String(bookingId),
+            trainerId: payload.trainer_id,
+            amountDollars: finalPrice,
+            pinSessionToken: payload.pin_session_token,
+            kind: "booking",
+            idempotencyKey: `book:wallet:${bookingId}`,
+          });
+        } catch (walletErr: any) {
+          return ResponseBuilder.badRequest(walletErr?.message || "Wallet payment failed.");
+        }
+      }
+
       const sessionObj = new booked_session({
         ...payload,
+        _id: bookingId,
         trainee_id: _id,
         time_zone: payload.time_zone,
         charging_price: finalPrice,
@@ -685,7 +734,25 @@ export class TraineeService {
         bookingFields.discount_applied = promoDiscountAmount;
       }
 
-      const userObj = new booked_session(bookingFields);
+      const bookingId = new mongoose.Types.ObjectId();
+      if (payload.payment_method === "wallet" && chargingPrice > 0) {
+        const { walletPaymentService } = require("../wallet/walletPaymentService");
+        try {
+          await walletPaymentService.payFromWallet({
+            traineeId: _id,
+            sessionId: String(bookingId),
+            trainerId: trainer_id,
+            amountDollars: chargingPrice,
+            pinSessionToken: payload.pin_session_token,
+            kind: "booking",
+            idempotencyKey: `instant:wallet:${bookingId}`,
+          });
+        } catch (walletErr: any) {
+          return ResponseBuilder.badRequest(walletErr?.message || "Wallet payment failed.");
+        }
+      }
+
+      const userObj = new booked_session({ ...bookingFields, _id: bookingId });
 
       const bookingData = await userObj.save();
 

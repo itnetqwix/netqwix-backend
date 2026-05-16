@@ -22,6 +22,13 @@ import {
 } from "../verification/onboardingHelpers";
 import { syncTrustedContactVerification } from "../verification/contactVerificationSync";
 import { ensureTrainerGracePeriod } from "../verification/gracePeriod";
+import {
+  assertLoginNotLocked,
+  clearLoginFailures,
+  recordLoginFailure,
+} from "./loginLockoutService";
+import { refreshTokenService } from "./refreshTokenService";
+import { logSecurityEvent } from "../security/securityAuditService";
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
 
@@ -236,6 +243,12 @@ export class AuthService {
       if (!password) {
         return ResponseBuilder.badRequest("Password is required.");
       }
+      try {
+        assertLoginNotLocked(email);
+      } catch (lockErr: any) {
+        logSecurityEvent({ action: "login_locked", meta: { email } });
+        return ResponseBuilder.error(lockErr, lockErr.message);
+      }
       const userDetails: any = await this.getUser(user);
       if (userDetails) {
         const validPassword = await this.bcrypt.comparePassword(
@@ -243,6 +256,7 @@ export class AuthService {
           userDetails.password
         );
         if (validPassword) {
+          clearLoginFailures(email);
           const rawIp = client?.ip || "";
           const ip =
             typeof rawIp === "string" && rawIp.includes(",")
@@ -253,8 +267,13 @@ export class AuthService {
             user_id: userDetails._id,
             account_type: userDetails.account_type,
           };
-          const access_token = this.JWT.signJWT(payload);
-          //TODO: Store access_token in DB
+          const access_token = refreshTokenService.issueAccessToken(
+            String(userDetails._id),
+            String(userDetails.account_type)
+          );
+          const refresh_token = refreshTokenService.issueRefreshToken(
+            String(userDetails._id)
+          );
           await ensureTrainerGracePeriod(String(userDetails._id));
           await syncTrustedContactVerification(String(userDetails._id), {
             trustEmailFromLogin: true,
@@ -265,6 +284,7 @@ export class AuthService {
             {
               data: {
                 access_token,
+                refresh_token,
                 account_type: userDetails.account_type,
                 onboarding,
               },
@@ -272,9 +292,13 @@ export class AuthService {
             l10n.t("LOGIN_SUCCESSFULL")
           );
         } else {
+          recordLoginFailure(email);
+          logSecurityEvent({ action: "login_failed", meta: { email } });
           return ResponseBuilder.badRequest(l10n.t("INVALID_CREDENTIAL"));
         }
       } else {
+        recordLoginFailure(email);
+        logSecurityEvent({ action: "login_failed", meta: { email } });
         return ResponseBuilder.badRequest(l10n.t("INVALID_CREDENTIAL"));
       }
     } catch (err) {
@@ -394,8 +418,11 @@ export class AuthService {
         user_id: user._id,
         account_type: user.account_type,
       };
-      const access_token = this.JWT.signJWT(payload);
-      //TODO: Store access_token in DB
+      const access_token = refreshTokenService.issueAccessToken(
+        String(user._id),
+        String(user.account_type)
+      );
+      const refresh_token = refreshTokenService.issueRefreshToken(String(user._id));
       await ensureTrainerGracePeriod(String(user._id));
       await syncTrustedContactVerification(String(user._id), { trustEmailFromLogin: true });
       const freshUser = await userModel.findById(user._id).lean();
@@ -404,6 +431,7 @@ export class AuthService {
         {
           data: {
             access_token,
+            refresh_token,
             account_type: user.account_type,
             onboarding,
           },

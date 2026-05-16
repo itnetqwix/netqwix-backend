@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty } from "class-validator";
+import { IsEmail, IsNotEmpty, IsOptional, IsString } from "class-validator";
 import { model } from "../../../model";
 
 export class googleLoginModel extends model {
@@ -6,11 +6,14 @@ export class googleLoginModel extends model {
   @IsNotEmpty()
   public email: string;
 
+  @IsOptional()
+  @IsString()
+  public id_token?: string;
 
   constructor(body: any) {
     super();
-    const { email } = body;
-
+    const { email, id_token } = body;
     this.email = email;
+    this.id_token = id_token;
   }
 }

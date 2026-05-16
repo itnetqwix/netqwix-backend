@@ -76,6 +76,23 @@ export class AuthMiddleware {
     next: NextFunction
   ) => {
     try {
+      const idToken = req.body?.id_token;
+      if (idToken) {
+        const axios = require("axios");
+        const { data } = await axios.get(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
+        );
+        const tokenEmail = String(data?.email ?? "").toLowerCase();
+        const bodyEmail = String(req.body?.email ?? "").toLowerCase();
+        const googleSub = String(data?.sub ?? "");
+        if (!tokenEmail || tokenEmail !== bodyEmail || !googleSub) {
+          return res.status(401).send({
+            status: CONSTANCE.FAIL,
+            error: "Google token verification failed.",
+          });
+        }
+        req.body.google_sub = googleSub;
+      }
       const isGoogleUserExists = await this.authService.isGoogleUserExists(
         req.body
       );

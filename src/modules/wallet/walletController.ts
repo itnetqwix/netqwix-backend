@@ -7,6 +7,7 @@ import { walletPaymentService } from "./walletPaymentService";
 import { walletAccountService } from "./walletAccountService";
 import { ledgerService } from "./ledgerService";
 import { payoutService } from "./payoutService";
+import { walletTransactionDetailService } from "./walletTransactionDetailService";
 import { AccountType } from "../auth/authEnum";
 
 export class WalletController {
@@ -17,6 +18,20 @@ export class WalletController {
         req["authUser"]?.account_type === AccountType.TRAINER ? "trainer" : "trainee";
       const summary = await walletPaymentService.getBalanceSummary(userId, accountType);
       return res.status(200).send({ status: CONSTANCE.SUCCESS, data: summary });
+    } catch (err: any) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public getTransactionDetail = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const entryId = String(req.params.id);
+      const detail = await walletTransactionDetailService.getLedgerDetail(userId, entryId);
+      if (!detail) {
+        return res.status(404).send({ status: CONSTANCE.FAIL, error: "Transaction not found." });
+      }
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data: detail });
     } catch (err: any) {
       return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
     }
@@ -102,7 +117,12 @@ export class WalletController {
         userId,
         accountType: "trainee",
       });
-      await pinService.confirmPinReset(userId, String(wallet._id), req.body.new_pin);
+      await pinService.confirmPinReset(
+        userId,
+        String(wallet._id),
+        req.body.new_pin,
+        req.body.reset_token
+      );
       return res.status(200).send({ status: CONSTANCE.SUCCESS, data: { ok: true } });
     } catch (err: any) {
       return res.status(400).send({ status: CONSTANCE.FAIL, error: err.message });
@@ -159,6 +179,7 @@ export class WalletController {
         walletPayEnabled: WALLET_CONFIG.walletPayEnabled,
         minTopUpMinor: WALLET_CONFIG.minTopUpMinor,
         maxTopUpMinor: WALLET_CONFIG.maxTopUpMinor,
+        stepUpThresholdMinor: WALLET_CONFIG.stepUpThresholdMinor,
         regionCurrency: WALLET_CONFIG.regionCurrency,
       },
     });

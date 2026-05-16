@@ -5,6 +5,8 @@ import { UserService } from "../user/userService";
 import { AuthService } from "./authService";
 import { Request, Response } from "express";
 import { AccountType } from "./authEnum";
+import { refreshTokenService } from "./refreshTokenService";
+import userModel from "../../model/user.schema";
 
 const loginAttemptStore = new Map<string, { count: number; resetAt: number }>();
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -172,6 +174,42 @@ export class authController {
           error.code ? error.code : CONSTANCE.RES_CODE.error.internalServerError
         )
         .send({ status: CONSTANCE.FAIL, error: error.message });
+    }
+  };
+
+  public refreshToken = async (req: Request, res: Response) => {
+    try {
+      const refresh_token = String(req.body?.refresh_token ?? "").trim();
+      if (!refresh_token) {
+        return res.status(400).json({
+          status: CONSTANCE.FAIL,
+          error: "refresh_token is required.",
+        });
+      }
+      const userId = refreshTokenService.validateRefreshToken(refresh_token);
+      const userDoc = await userModel.findById(userId).lean();
+      if (!userDoc) {
+        return res.status(401).json({ status: CONSTANCE.FAIL, error: "Invalid refresh token." });
+      }
+      const newRefresh = refreshTokenService.rotateRefreshToken(refresh_token);
+      const access_token = refreshTokenService.issueAccessToken(
+        String(userDoc._id),
+        String(userDoc.account_type)
+      );
+      return res.status(200).json({
+        status: CONSTANCE.SUCCESS,
+        data: {
+          access_token,
+          refresh_token: newRefresh,
+          account_type: userDoc.account_type,
+        },
+      });
+    } catch (error) {
+      this.logger.error(error);
+      return res.status(401).json({
+        status: CONSTANCE.FAIL,
+        error: error?.message || "Invalid refresh token.",
+      });
     }
   };
 }

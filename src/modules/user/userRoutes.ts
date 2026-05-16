@@ -20,12 +20,7 @@ route.use([
     req.byPassRoute = [
       '/sign-up',
       '/stripe-account-verification',
-      '/all-online-user'
     ];
-    
-    if (req.path.startsWith('/approve-expert/')) {
-      return next();
-    }
     
     if (req.byPassRoute.includes(req.path)) {
       return next();
@@ -102,6 +97,7 @@ route.put("/update-kyc-status",userC.updateIsKYCCompleted);
 route.put("/create-verification-session",userC.createVerificationSessionStripeKYC);
 route.get("/booking-list",userC.getAllBooking);
 route.get("/booking-list-by-id",userC.getAllBookingById);
+route.get("/booking/:bookingId",userC.getBookingById);
 route.put("/stripe-account-verification",userC.createStripeAccountVarificationUrl);
 route.get("/check-stripe-verification",userC.checkIsKycCompleted);
 route.post("/update-refund-status",userC.updateRefundStatus);

@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { ChatService } from "./chatService";
 import { CONSTANCE } from "../../config/constance";
+import { validateChatSendBody } from "./chatSendValidator";
 
 export class ChatController {
   private chatService = new ChatService();
@@ -46,8 +47,9 @@ export class ChatController {
       if (!receiverId && !conversationId) {
         return res.status(400).send({ status: CONSTANCE.FAIL, error: "receiverId or conversationId is required" });
       }
-      if (!content && type === "text") {
-        return res.status(400).send({ status: CONSTANCE.FAIL, error: "content is required for text messages" });
+      const validationError = validateChatSendBody(req.body ?? {});
+      if (validationError) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: validationError });
       }
       const result = await this.chatService.sendMessage(
         req["authUser"]["_id"],

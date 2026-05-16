@@ -24,6 +24,17 @@ export class PayoutService {
       throw new Error("Amount exceeds withdrawal limit.");
     }
 
+    if (params.amountMinor >= WALLET_CONFIG.stepUpThresholdMinor) {
+      if (!params.pinSessionToken) {
+        throw new Error("PIN verification required for this withdrawal.");
+      }
+      const { pinService } = require("./pinService");
+      const session = pinService.verifyPinSessionToken(params.pinSessionToken);
+      if (session.userId !== params.trainerId) {
+        throw new Error("Invalid PIN session.");
+      }
+    }
+
     const wallet = await walletAccountService.getOrCreateUserWallet({
       userId: params.trainerId,
       accountType: "trainer",

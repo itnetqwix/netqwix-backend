@@ -817,6 +817,31 @@ export class userController {
     }
   };
 
+  public getBookingById = async (req: any, res: Response) => {
+    try {
+      if (req["authUser"]) {
+        const userId = String(req["authUser"]?._id);
+        const accountType = req["authUser"]?.account_type;
+        const bookingId = String(req.params.bookingId);
+        const { walletTransactionDetailService } = require("../wallet/walletTransactionDetailService");
+        const detail = await walletTransactionDetailService.getBookingDetail(
+          userId,
+          accountType,
+          bookingId
+        );
+        if (!detail) {
+          return res.status(404).json({ success: 0, message: "Booking not found." });
+        }
+        return res.status(CONSTANCE.RES_CODE.success).json({ status: CONSTANCE.SUCCESS, data: detail });
+      }
+    } catch (error) {
+      res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
+        success: 0,
+        message: Message.internal,
+      });
+    }
+  };
+
   public getAllBookingById = async (req: any, res: Response) => {
     try {
       if (req["authUser"]) {
@@ -1122,7 +1147,7 @@ export class userController {
       if (req["authUser"]) {
         const { trainer_id, status } = req.body;
         const result: ResponseBuilder =
-          await this.userService.updateTrainerStatus(trainer_id, status);
+          await this.userService.updateTrainerStatus(trainer_id, status, req.authUser);
         if (result.status !== CONSTANCE.FAIL) {
           res.status(result.code).json(result);
         } else {
@@ -1164,6 +1189,11 @@ export class userController {
 
   public approveTrainer = async (req, res) => {
     try {
+      const { assertAdminUser } = require("../admin/adminPermission");
+      const denied = assertAdminUser(req.authUser);
+      if (denied) {
+        return res.status(403).send({ status: CONSTANCE.FAIL, error: denied });
+      }
       const { id } = req.params;
       const htmlResponse = await this.userService.approveTrainer(id);
 

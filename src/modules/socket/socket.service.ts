@@ -50,11 +50,13 @@ export function getActiveUserIds(): string[] {
 
 function broadcastUserStatus(userId: string, status: "online" | "offline") {
   if (!ioInstance) return;
-  ioInstance.emit("userStatus", {
+  const payload = {
     user: activeUsers,
     status,
     userId: String(userId),
-  });
+  };
+  ioInstance.emit("userStatus", payload);
+  ioInstance.emit("onlineUser", payload);
 }
 
 export async function removeUserFromActivePresence(userId: string) {
@@ -771,6 +773,14 @@ export const handleSocketEvents = (socket, connections = {}) => {
     });
     
     if (sessionId && mongoose.isValidObjectId(sessionId)) {
+      const { assertSessionParticipant } = require("../../helpers/chatBlockCheck");
+      const allowed = userId
+        ? await assertSessionParticipant(String(sessionId), String(userId))
+        : false;
+      if (!allowed) {
+        console.warn(`[SESSION] Denied join for user ${userId} on session ${sessionId}`);
+        return;
+      }
       // Join the room immediately when user joins (don't wait for both parties)
       const roomName = `session:${sessionId}`;
       socket.join(roomName);

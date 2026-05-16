@@ -1643,9 +1643,15 @@ export class UserService {
 
   public async updateTrainerStatus(
     trainerId: string,
-    status: string
+    status: string,
+    authUser?: any
   ): Promise<any> {
     try {
+      const { assertAdminUser } = require("../admin/adminPermission");
+      const denied = assertAdminUser(authUser);
+      if (denied) {
+        return ResponseBuilder.error(null, denied);
+      }
       console.log("Updating trainer status:", { trainerId, status });
       if (!["approved", "rejected", "pending"].includes(status)) {
         return ResponseBuilder.error(null, "Invalid status value");

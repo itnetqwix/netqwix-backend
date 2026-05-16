@@ -2,6 +2,7 @@ import { Router } from "express";
 import { commonController } from "./commonController";
 import { ChatController } from "../chat/chatController";
 import { PromoCodeController } from "../promo-code/promoCodeController";
+import * as crypto from "crypto";
 import multer = require("multer");
 import fs = require("fs");
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
@@ -18,7 +19,8 @@ const destination = (req, file, cb) => {
 };
 
 const filename = (req, file, cb) => {
-  cb(null, Date.now() + "-" + file.originalname);
+  const ext = (file.originalname?.split(".").pop() ?? "bin").replace(/[^a-zA-Z0-9]/g, "");
+  cb(null, `${Date.now()}-${crypto.randomBytes(8).toString("hex")}.${ext}`);
 };
 
 const storage = multer.diskStorage({
@@ -61,8 +63,18 @@ route.post("/chat-send", chatC.sendMessage);
 route.post("/chat-conversation", chatC.getOrCreateConversation);
 route.post("/chat-create-group", chatC.createGroup);
 route.get("/chat-policy", chatC.getChatPolicy);
-route.get("/chat-flagged", chatC.getFlaggedChats);
-route.post("/chat-flag-update", chatC.updateFlagStatus);
+route.get("/chat-flagged", (req, res, next) => {
+  const { assertAdminUser } = require("../admin/adminPermission");
+  const denied = assertAdminUser(req["authUser"]);
+  if (denied) return res.status(403).json({ status: 0, error: denied });
+  return chatC.getFlaggedChats(req, res, next);
+});
+route.post("/chat-flag-update", (req, res, next) => {
+  const { assertAdminUser } = require("../admin/adminPermission");
+  const denied = assertAdminUser(req["authUser"]);
+  if (denied) return res.status(403).json({ status: 0, error: denied });
+  return chatC.updateFlagStatus(req, res, next);
+});
 
 const promoC = new PromoCodeController();
 route.post("/validate-promo", promoC.validate);

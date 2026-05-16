@@ -13,6 +13,9 @@ import { SocketInit } from "./modules/socket/init";
 import { registerTrainerTraineePresenceProvider } from "./modules/socket/socketPresenceRegistry";
 import { cronjobs } from "./cronjob";
 import { webhookRoute } from "./modules/wallet/webhookRoutes";
+import { securityHeaders } from "./middleware/securityHeaders.middleware";
+import { globalApiLimiter } from "./middleware/rateLimit.middleware";
+import { AuthorizeMiddleware } from "./middleware/authorize.middleware";
 
 dotEnv.config();
 export class App {
@@ -22,14 +25,25 @@ export class App {
   PORT = process.env.PORT;
   constructor() {
     this.app = express();
+    this.app.use(securityHeaders);
+    this.app.use(globalApiLimiter);
     this.app.use("/public/assets", express.static("uploads"));
     this.app.use("/webhooks", webhookRoute);
     const route = new Routes();
     this.app.use(bodyParser.json());
-    // Global CORS configuration for REST API
+    const corsOrigins = String(process.env.CORS_ORIGINS ?? "")
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean);
+    const corsOrigin =
+      corsOrigins.length > 0
+        ? corsOrigins
+        : process.env.NODE_ENV === "production"
+        ? false
+        : "*";
     this.app.use(
       cors({
-        origin: "*",
+        origin: corsOrigin,
         methods: ["GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"],
         allowedHeaders: [
           "Content-Type",
@@ -37,8 +51,6 @@ export class App {
           "X-Requested-With",
           "Origin",
           "Accept",
-          // Frontend currently (incorrectly) sends this as a request header.
-          // Including it here allows preflight to succeed without breaking clients.
           "Access-Control-Allow-Origin",
         ],
       })
@@ -86,10 +98,17 @@ export class App {
     this.socketEvents.init(io, this.app);
     registerTrainerTraineePresenceProvider(() => this.socketEvents.getTrainerTraineePresence());
 
-  // Example route to get connected users
-  this.app.get('/connected-users', (req, res) => {
-  const connectedUsers = this.socketEvents.getConnectedUsers();
-  res.json({ connectedUsers });
+  const authorizeMiddleware = new AuthorizeMiddleware();
+  this.app.get("/connected-users", (req, res, next) => {
+    authorizeMiddleware.authorizeUser(req, res, () => {
+      const { assertAdminUser } = require("./modules/admin/adminPermission");
+      const denied = assertAdminUser(req["authUser"]);
+      if (denied) {
+        return res.status(403).json({ status: 0, error: denied });
+      }
+      const connectedUsers = this.socketEvents.getConnectedUsers();
+      return res.json({ connectedUsers });
+    });
   });
   }
 }

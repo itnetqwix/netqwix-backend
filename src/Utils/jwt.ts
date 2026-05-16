@@ -14,15 +14,33 @@ export default class JWT {
     });
   };
 
-  /*
-   * decodeAuthToken
+  private static getSecret(): string {
+    const secret = process.env.JWT_SECRET;
+    if (!secret || secret.length < 16) {
+      throw new Error("JWT_SECRET is not configured.");
+    }
+    return secret;
+  }
+
+  /**
+   * Verify signature + expiry. Use for all auth tokens (REST, socket, password reset).
    */
-  public static decodeAuthToken(token) {
-    const decodedToken = jwt.decode(token);
-    if (decodedToken) {
-      return decodedToken;
-    } else {
+  public static verifyAuthToken(token: string): IJwtPayload & jwt.JwtPayload {
+    try {
+      const decoded = jwt.verify(token, JWT.getSecret(), {
+        algorithms: ["HS256"],
+      }) as IJwtPayload & jwt.JwtPayload;
+      if (!decoded?.user_id) {
+        throw new Error("Invalid token payload");
+      }
+      return decoded;
+    } catch {
       throw ResponseBuilder.badRequest(l10n.t("NOT_VERIFIED_TOKEN"));
     }
+  }
+
+  /** @deprecated Use verifyAuthToken — decode-only is insecure. */
+  public static decodeAuthToken(token: string) {
+    return JWT.verifyAuthToken(token);
   }
 }
