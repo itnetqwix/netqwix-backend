@@ -6,6 +6,11 @@ const masterDataSchema: Schema = new Schema({
     type: [String],
     default: ['Golf', 'Tennis']
   },
+  /** Rotating sports tips for mobile/web loaders (admin-updatable). */
+  loader_tips: {
+    type: [String],
+    default: [],
+  },
 });
 
 const master_data = Model(Tables.master_data, masterDataSchema);

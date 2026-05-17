@@ -9,6 +9,7 @@ const { ExpressPeerServer } = require("peer");
 
 import * as bodyParser from "body-parser";
 import "./config/loadEnv";
+import { resolveCorsOrigins } from "./config/corsOrigins";
 import { SocketInit } from "./modules/socket/init";
 import { registerTrainerTraineePresenceProvider } from "./modules/socket/socketPresenceRegistry";
 import { cronjobs } from "./cronjob";
@@ -30,31 +31,30 @@ export class App {
     this.app.use("/webhooks", webhookRoute);
     const route = new Routes();
     this.app.use(bodyParser.json());
-    const corsOrigins = String(process.env.CORS_ORIGINS ?? "")
-      .split(",")
-      .map((o) => o.trim())
-      .filter(Boolean);
-    const corsOrigin =
-      corsOrigins.length > 0
-        ? corsOrigins
-        : process.env.NODE_ENV === "production"
-        ? false
-        : "*";
-    this.app.use(
-      cors({
-        origin: corsOrigin,
-        methods: ["GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"],
-        allowedHeaders: [
-          "Content-Type",
-          "Authorization",
-          "X-Requested-With",
-          "Origin",
-          "Accept",
-          "Access-Control-Allow-Origin",
-        ],
-      })
-    );
-    this.app.options("*", cors());
+    const corsOrigin = resolveCorsOrigins();
+    const corsOptions: cors.CorsOptions = {
+      origin: corsOrigin,
+      credentials: true,
+      methods: ["GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"],
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "Origin",
+        "Accept",
+        "Access-Control-Allow-Origin",
+        "X-Session-Id",
+      ],
+    };
+    this.app.use(cors(corsOptions));
+    this.app.options("*", cors(corsOptions));
+    if (process.env.NODE_ENV !== "test") {
+      this.logger.info(
+        `[CORS] allowed origins: ${
+          corsOrigin === "*" ? "*" : JSON.stringify(corsOrigin)
+        }`
+      );
+    }
     this.app.use(bodyParser.json({ limit: '50mb' }));
     this.app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
     this.app.use("/", route.routePath());
@@ -80,16 +80,16 @@ export class App {
     this.app.use("/peerjs", peerServer);
     this.logger.info("PeerJS signaling server mounted at /peerjs");
 
+    const socketCorsOrigin =
+      corsOrigin === "*" || corsOrigin === false ? "*" : corsOrigin;
     const io = socketio(server, {
       maxHttpBufferSize: 1e8,
       transports: ['websocket', 'polling'], // Explicitly allow both transports
       allowEIO3: true, // Allow Engine.IO v3 clients
       cors: {
-        origin: "*",
-        // or with an array of origins
-        // origin: ["https://netquix-ui.vercel.app", "https://hwus.us", "http://localhost:3000"],
-        methods: ["*"],
-        credentials: true, // Enable credentials for WebSocket
+        origin: socketCorsOrigin,
+        methods: ["GET", "POST"],
+        credentials: true,
       },
       pingTimeout: 60000, // Increase ping timeout
       pingInterval: 25000, // Increase ping interval
