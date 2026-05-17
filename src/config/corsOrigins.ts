@@ -1,10 +1,14 @@
+import type { CorsOptions } from "cors";
+
+export type ResolvedCorsOrigin = CorsOptions["origin"];
+
 /**
  * Builds the list of allowed browser origins for CORS.
  *
  * Production must allow both apex and www (users often land on www.netqwix.com).
  * Set `CORS_ORIGINS` explicitly, or rely on `FRONTEND_URL` / `ADMIN_FRONTEND_URL`.
  */
-export function resolveCorsOrigins(): string[] | boolean {
+export function resolveCorsOrigins(): ResolvedCorsOrigin {
   const fromEnv = String(process.env.CORS_ORIGINS ?? "")
     .split(",")
     .map((o) => o.trim())

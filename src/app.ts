@@ -9,7 +9,27 @@ const { ExpressPeerServer } = require("peer");
 
 import * as bodyParser from "body-parser";
 import "./config/loadEnv";
-import { resolveCorsOrigins } from "./config/corsOrigins";
+import { resolveCorsOrigins, type ResolvedCorsOrigin } from "./config/corsOrigins";
+
+function formatCorsOriginsForLog(origin: ResolvedCorsOrigin): string {
+  if (origin === "*") return "*";
+  if (origin === true) return "(reflect request origin)";
+  if (origin === false) return "(disabled)";
+  return JSON.stringify(origin);
+}
+
+function socketOriginsFromCors(origin: ResolvedCorsOrigin): string | string[] {
+  if (origin === "*" || origin === true || origin === false) {
+    return "*";
+  }
+  if (typeof origin === "string") {
+    return origin;
+  }
+  if (Array.isArray(origin)) {
+    return origin.filter((o): o is string => typeof o === "string");
+  }
+  return "*";
+}
 import { SocketInit } from "./modules/socket/init";
 import { registerTrainerTraineePresenceProvider } from "./modules/socket/socketPresenceRegistry";
 import { cronjobs } from "./cronjob";
@@ -50,9 +70,7 @@ export class App {
     this.app.options("*", cors(corsOptions));
     if (process.env.NODE_ENV !== "test") {
       this.logger.info(
-        `[CORS] allowed origins: ${
-          corsOrigin === "*" ? "*" : JSON.stringify(corsOrigin)
-        }`
+        `[CORS] allowed origins: ${formatCorsOriginsForLog(corsOrigin)}`
       );
     }
     this.app.use(bodyParser.json({ limit: '50mb' }));
@@ -80,8 +98,7 @@ export class App {
     this.app.use("/peerjs", peerServer);
     this.logger.info("PeerJS signaling server mounted at /peerjs");
 
-    const socketCorsOrigin =
-      corsOrigin === "*" || corsOrigin === false ? "*" : corsOrigin;
+    const socketCorsOrigin = socketOriginsFromCors(corsOrigin);
     const io = socketio(server, {
       maxHttpBufferSize: 1e8,
       transports: ['websocket', 'polling'], // Explicitly allow both transports
