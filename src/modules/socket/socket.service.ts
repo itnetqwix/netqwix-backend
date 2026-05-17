@@ -1722,18 +1722,82 @@ const listenChatEvents = (socket) => {
   }
 };
 
+async function persistBookingCreatedNotification(
+  bookingData: any,
+  bookingType: "instant" | "scheduled",
+  socketPayload: Record<string, unknown>
+) {
+  const trainerId = socketPayload.trainerId as string;
+  const traineeId = socketPayload.traineeId as string;
+  if (!trainerId || !traineeId) return;
+
+  const [trainee, trainer] = await Promise.all([
+    user.findById(traineeId).lean(),
+    user.findById(trainerId).lean(),
+  ]);
+  const traineeName = trainee?.fullname || "A trainee";
+  const title =
+    bookingType === "instant" ? "Instant lesson request" : "New Booking Request";
+  const description =
+    bookingType === "instant"
+      ? `${traineeName} requested an instant lesson. Open the app to respond.`
+      : `${traineeName} booked a session with you. Open Session requests to confirm.`;
+
+  const bookingId = socketPayload.bookingId as string;
+  const doc = await notification.create({
+    title,
+    description,
+    senderId: traineeId,
+    receiverId: trainerId,
+    type: NotificationType.TRANSCATIONAL,
+  });
+
+  const receivePayload = {
+    _id: doc?._id,
+    title: doc?.title,
+    description: doc?.description,
+    createdAt: doc?.createdAt,
+    isRead: doc?.isRead,
+    sender: {
+      _id: trainee?._id,
+      name: trainee?.fullname,
+      profile_picture: trainee?.profile_picture || null,
+    },
+    bookingInfo: { bookingId, ...socketPayload },
+  };
+
+  const trainerSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, trainerId);
+  if (trainerSocketId && ioInstance) {
+    ioInstance
+      .to(trainerSocketId)
+      .emit(EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, receivePayload);
+  }
+
+  if (trainer?.subscriptionId) {
+    try {
+      const subscription = JSON.parse(trainer.subscriptionId);
+      await webpush.sendNotification(
+        subscription,
+        JSON.stringify({ title, description })
+      );
+    } catch (error) {
+      console.error("[BOOKING] Web push error (trainer):", error);
+    }
+  }
+
+  void pushService.sendPushNotification(trainerId, title, description, {
+    bookingId,
+    type: "booking_created",
+    bookingType,
+  });
+}
+
 // Helper functions to emit booking events from services
 export const emitBookingCreated = async (bookingData: any, bookingType: 'instant' | 'scheduled' = 'scheduled') => {
   try {
-    if (!ioInstance) {
-      console.warn("[BOOKING] ioInstance not set, cannot emit BOOKING_CREATED event");
-      return;
-    }
-
     const { _id: bookingId, trainer_id, trainee_id, createdAt } = bookingData;
     const trainerId = trainer_id?.toString ? trainer_id.toString() : trainer_id;
     const traineeId = trainee_id?.toString ? trainee_id.toString() : trainee_id;
-
 
     const startTimeUtc =
       bookingData?.start_time ? new Date(bookingData.start_time).toISOString() : null;
@@ -1749,21 +1813,29 @@ export const emitBookingCreated = async (bookingData: any, bookingType: 'instant
       traineeId,
       type: bookingType,
       createdAt: createdAt || new Date().toISOString(),
-      // Time information – always UTC + original logical time zone
       startTimeUtc,
       endTimeUtc,
       bookedDateUtc,
       bookingTimeZone,
     };
 
-    // Emit to trainer
+    try {
+      await persistBookingCreatedNotification(bookingData, bookingType, payload);
+    } catch (notifyErr) {
+      console.error("[BOOKING] Error persisting booking notification:", notifyErr);
+    }
+
+    if (!ioInstance) {
+      console.warn("[BOOKING] ioInstance not set, cannot emit BOOKING_CREATED event");
+      return;
+    }
+
     const trainerSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, trainerId);
     if (trainerSocketId && ioInstance) {
       ioInstance.to(trainerSocketId).emit(EVENTS.BOOKING.CREATED, payload);
       console.log(`[BOOKING] BOOKING_CREATED event emitted to trainer ${trainerId}`);
     }
 
-    // Emit to trainee
     const traineeSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId);
     if (traineeSocketId && ioInstance) {
       ioInstance.to(traineeSocketId).emit(EVENTS.BOOKING.CREATED, payload);
