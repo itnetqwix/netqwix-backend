@@ -1187,6 +1187,39 @@ export class userController {
   };
 
 
+  public setChatPublicKey = async (req, res) => {
+    try {
+      const userId = req["authUser"]?._id;
+      const publicKey = String(req.body?.publicKey ?? "").trim();
+      if (!publicKey || publicKey.length < 32) {
+        return res.status(400).send({
+          status: CONSTANCE.FAIL,
+          error: "Invalid chat public key.",
+        });
+      }
+      await user.findByIdAndUpdate(userId, { chat_public_key: publicKey });
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data: { ok: true } });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err?.message ?? "Server error" });
+    }
+  };
+
+  public getChatPublicKey = async (req, res) => {
+    try {
+      const { id } = req.params;
+      const u = await user.findById(id).select("chat_public_key").lean();
+      if (!u) {
+        return res.status(404).send({ status: CONSTANCE.FAIL, error: "User not found." });
+      }
+      return res.status(200).send({
+        status: CONSTANCE.SUCCESS,
+        data: { publicKey: u.chat_public_key ?? null },
+      });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err?.message ?? "Server error" });
+    }
+  };
+
   public approveTrainer = async (req, res) => {
     try {
       const { assertAdminUser } = require("../admin/adminPermission");

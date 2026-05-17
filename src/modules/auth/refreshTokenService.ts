@@ -1,47 +1,27 @@
-import * as crypto from "crypto";
 import * as jwt from "jsonwebtoken";
 import { getJwtExpiration, getJwtSecret } from "../../config/jwtSecret";
-
-type RefreshRecord = {
-  userId: string;
-  expiresAt: number;
-};
-
-const refreshStore = new Map<string, RefreshRecord>();
+import type { ClientSessionMeta } from "./clientSessionMeta";
+import { authSessionService } from "./authSessionService";
 
 export class RefreshTokenService {
-  issueRefreshToken(userId: string, ttlDays = 30) {
-    const token = crypto.randomBytes(48).toString("hex");
-    refreshStore.set(token, {
-      userId,
-      expiresAt: Date.now() + ttlDays * 24 * 60 * 60 * 1000,
-    });
-    return token;
+  issueRefreshToken(userId: string, meta: ClientSessionMeta, ttlDays = 30) {
+    return authSessionService.issueSession(userId, meta, ttlDays);
   }
 
-  validateRefreshToken(token: string): string {
-    const rec = refreshStore.get(token);
-    if (!rec || rec.expiresAt < Date.now()) {
-      refreshStore.delete(token);
-      throw new Error("Invalid refresh token.");
-    }
-    return rec.userId;
+  validateRefreshToken(token: string) {
+    return authSessionService.validateAndTouch(token).then((r) => r.userId);
   }
 
-  rotateRefreshToken(oldToken: string) {
-    const userId = this.validateRefreshToken(oldToken);
-    refreshStore.delete(oldToken);
-    return this.issueRefreshToken(userId);
+  rotateRefreshToken(oldToken: string, meta?: Partial<ClientSessionMeta>) {
+    return authSessionService.rotateRefreshToken(oldToken, meta);
   }
 
   revokeRefreshToken(token: string) {
-    refreshStore.delete(token);
+    return authSessionService.revokeByRefreshToken(token);
   }
 
   revokeAllForUser(userId: string) {
-    for (const [t, r] of refreshStore.entries()) {
-      if (r.userId === userId) refreshStore.delete(t);
-    }
+    return authSessionService.revokeAllForUser(userId);
   }
 
   issueAccessToken(userId: string, accountType: string) {

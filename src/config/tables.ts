@@ -33,5 +33,7 @@ export class Tables {
     public static readonly stripe_webhook_events = "stripe_webhook_events";
     public static readonly ops_events = "ops_events";
     public static readonly verification_otps = "verification_otps";
+    public static readonly signup_verification_otps = "signup_verification_otps";
     public static readonly trainer_verification_audit = "trainer_verification_audit";
+    public static readonly auth_sessions = "auth_sessions";
 }

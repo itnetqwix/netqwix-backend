@@ -7,6 +7,11 @@ const aiModeration = new AIService();
 
 const DAILY_MESSAGE_LIMIT_UNPAID = 10;
 
+/** Client-side E2E payloads — server cannot moderate ciphertext. */
+export function isEncryptedChatContent(content: string): boolean {
+  return typeof content === "string" && content.startsWith("NQENC1:");
+}
+
 const SUSPICIOUS_PATTERNS = [
   /\b(?:venmo|zelle|cashapp|cash\s*app|paypal|pay\s*pal|gpay|apple\s*pay)\b/i,
   /\b(?:pay\s*me\s*directly|off[\s-]*platform|outside\s*(?:the\s*)?app)\b/i,
@@ -45,7 +50,9 @@ export async function checkChatPolicy(
   const hasPaidSession = await hasPaidSessionBetween(senderId, receiverId);
 
   if (hasPaidSession) {
-    const flagged = await scanAndFlag(content, senderId, conversationId, messageId);
+    const flagged = isEncryptedChatContent(content)
+      ? false
+      : await scanAndFlag(content, senderId, conversationId, messageId);
     return {
       allowed: true,
       hasPaidSession: true,
@@ -77,7 +84,9 @@ export async function checkChatPolicy(
     };
   }
 
-  const flagged = await scanAndFlag(content, senderId, conversationId, messageId);
+  const flagged = isEncryptedChatContent(content)
+    ? false
+    : await scanAndFlag(content, senderId, conversationId, messageId);
 
   return {
     allowed: true,

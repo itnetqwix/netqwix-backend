@@ -56,6 +56,13 @@ route.get(
   userC.getMe
 );
 
+route.put("/me/chat-public-key", userC.setChatPublicKey);
+route.get(
+  "/:id/chat-public-key",
+  isValidMongoMiddleware.isValidTokenInReqParams,
+  userC.getChatPublicKey
+);
+
 
 route.post(
   "/share-clips",

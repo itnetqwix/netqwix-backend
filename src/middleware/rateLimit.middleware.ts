@@ -47,6 +47,13 @@ export const authForgotLimiter = createRateLimiter({
   max: 10,
 });
 
+export const authSignupOtpLimiter = createRateLimiter({
+  name: "auth-signup-otp",
+  windowMs: 60 * 60 * 1000,
+  max: 30,
+  message: "Too many verification code requests. Try again later.",
+});
+
 export const walletPinLimiter = createRateLimiter({
   name: "wallet-pin",
   windowMs: 15 * 60 * 1000,

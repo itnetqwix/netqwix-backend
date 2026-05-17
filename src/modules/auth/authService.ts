@@ -28,7 +28,10 @@ import {
   recordLoginFailure,
 } from "./loginLockoutService";
 import { refreshTokenService } from "./refreshTokenService";
+import type { ClientSessionMeta } from "./clientSessionMeta";
 import { logSecurityEvent } from "../security/securityAuditService";
+import { signupOtpService } from "./signupOtpService";
+import { validateSignupPassword } from "./passwordPolicy";
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
 
@@ -41,6 +44,21 @@ export class AuthService {
     createUser: signupModel
   ): Promise<ResponseBuilder> => {
     this.log.info(createUser);
+
+    if (!createUser.isGoogleRegister) {
+      const pwErr = validateSignupPassword(createUser.password);
+      if (pwErr) {
+        return ResponseBuilder.badRequest(pwErr);
+      }
+      try {
+        await signupOtpService.assertContactVerified(createUser.email, createUser.mobile_no, {
+          skipEmail: Boolean(createUser.isGoogleRegister),
+        });
+      } catch (e: any) {
+        return ResponseBuilder.badRequest(e?.message || "Contact verification required.");
+      }
+    }
+
     let hashPassword: string;
     let account: any;
     // Check if a referred user with this email exists
@@ -234,7 +252,11 @@ export class AuthService {
     }
   };
 
-  public login = async (user: loginModel, client?: { ip?: string }): Promise<ResponseBuilder> => {
+  public login = async (
+    user: loginModel,
+    client?: { ip?: string },
+    sessionMeta?: ClientSessionMeta
+  ): Promise<ResponseBuilder> => {
     try {
       const { email, password } = user;
       if (!email) {
@@ -271,8 +293,17 @@ export class AuthService {
             String(userDetails._id),
             String(userDetails.account_type)
           );
-          const refresh_token = refreshTokenService.issueRefreshToken(
-            String(userDetails._id)
+          const meta: ClientSessionMeta = sessionMeta ?? {
+            clientType: "unknown",
+            platform: "unknown",
+            deviceLabel: "Unknown device",
+            loginMethod: "password",
+            ipAddress: typeof ip === "string" ? ip : "",
+            userAgent: "",
+          };
+          const issued = await refreshTokenService.issueRefreshToken(
+            String(userDetails._id),
+            meta
           );
           await ensureTrainerGracePeriod(String(userDetails._id));
           await syncTrustedContactVerification(String(userDetails._id), {
@@ -284,7 +315,8 @@ export class AuthService {
             {
               data: {
                 access_token,
-                refresh_token,
+                refresh_token: issued.refreshToken,
+                session_id: issued.sessionId,
                 account_type: userDetails.account_type,
                 onboarding,
               },
@@ -412,17 +444,21 @@ export class AuthService {
     }
   };
 
-  public googleLogin = async (user): Promise<any> => {
+  public googleLogin = async (user, sessionMeta?: ClientSessionMeta): Promise<any> => {
     try {
-      const payload = {
-        user_id: user._id,
-        account_type: user.account_type,
-      };
       const access_token = refreshTokenService.issueAccessToken(
         String(user._id),
         String(user.account_type)
       );
-      const refresh_token = refreshTokenService.issueRefreshToken(String(user._id));
+      const meta: ClientSessionMeta = sessionMeta ?? {
+        clientType: "unknown",
+        platform: "unknown",
+        deviceLabel: "Unknown device",
+        loginMethod: "unknown",
+        ipAddress: "",
+        userAgent: "",
+      };
+      const issued = await refreshTokenService.issueRefreshToken(String(user._id), meta);
       await ensureTrainerGracePeriod(String(user._id));
       await syncTrustedContactVerification(String(user._id), { trustEmailFromLogin: true });
       const freshUser = await userModel.findById(user._id).lean();
@@ -431,7 +467,8 @@ export class AuthService {
         {
           data: {
             access_token,
-            refresh_token,
+            refresh_token: issued.refreshToken,
+            session_id: issued.sessionId,
             account_type: user.account_type,
             onboarding,
           },

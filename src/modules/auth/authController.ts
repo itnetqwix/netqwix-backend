@@ -6,7 +6,10 @@ import { AuthService } from "./authService";
 import { Request, Response } from "express";
 import { AccountType } from "./authEnum";
 import { refreshTokenService } from "./refreshTokenService";
+import { authSessionService } from "./authSessionService";
+import { parseClientSessionMeta } from "./clientSessionMeta";
 import userModel from "../../model/user.schema";
+import { signupOtpService } from "./signupOtpService";
 
 const loginAttemptStore = new Map<string, { count: number; resetAt: number }>();
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -22,6 +25,40 @@ export class authController {
   public authService = new AuthService();
   public userService = new UserService();
   public logger = log.getLogger();
+
+  public signupOtpSend = async (req: Request, res: Response) => {
+    try {
+      const channel = req.body?.channel;
+      if (channel !== "email" && channel !== "sms") {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "Invalid channel." });
+      }
+      const destination =
+        channel === "email" ? req.body?.email : req.body?.mobile_no ?? req.body?.mobile;
+      const data = await signupOtpService.sendOtp(channel, String(destination || ""));
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data });
+    } catch (e: any) {
+      return res.status(400).send({ status: CONSTANCE.FAIL, error: e?.message || "Could not send code." });
+    }
+  };
+
+  public signupOtpVerify = async (req: Request, res: Response) => {
+    try {
+      const channel = req.body?.channel;
+      if (channel !== "email" && channel !== "sms") {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "Invalid channel." });
+      }
+      const destination =
+        channel === "email" ? req.body?.email : req.body?.mobile_no ?? req.body?.mobile;
+      const data = await signupOtpService.verifyOtp(
+        channel,
+        String(destination || ""),
+        String(req.body?.code || "")
+      );
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data });
+    } catch (e: any) {
+      return res.status(400).send({ status: CONSTANCE.FAIL, error: e?.message || "Verification failed." });
+    }
+  };
 
   public signup = async (req: Request, res: Response) => {
     try {
@@ -67,7 +104,8 @@ export class authController {
 
       const fwd = (req.headers["x-forwarded-for"] as string) || "";
       const ip = fwd || req.socket?.remoteAddress || "";
-      const result: ResponseBuilder = await this.authService.login(req.body, { ip });
+      const sessionMeta = parseClientSessionMeta(req, "password");
+      const result: ResponseBuilder = await this.authService.login(req.body, { ip }, sessionMeta);
       if (result.status !== CONSTANCE.FAIL) {
         loginAttemptStore.delete(key);
         res.status(result.code).json(result);
@@ -155,9 +193,8 @@ export class authController {
 
   public appleLogin = async (req: Request, res: Response) => {
     try {
-      const result: ResponseBuilder = await this.authService.googleLogin(
-        req.body
-      );
+      const sessionMeta = parseClientSessionMeta(req, "apple");
+      const result: ResponseBuilder = await this.authService.googleLogin(req.body, sessionMeta);
       if (result.status !== CONSTANCE.FAIL) {
         res.status(result.code).json(result);
       } else {
@@ -177,9 +214,8 @@ export class authController {
 
   public googleLogin = async (req: Request, res: Response) => {
     try {
-      const result: ResponseBuilder = await this.authService.googleLogin(
-        req.body
-      );
+      const sessionMeta = parseClientSessionMeta(req, "google");
+      const result: ResponseBuilder = await this.authService.googleLogin(req.body, sessionMeta);
       if (result.status !== CONSTANCE.FAIL) {
         res.status(result.code).json(result);
       } else {
@@ -208,12 +244,13 @@ export class authController {
           error: "refresh_token is required.",
         });
       }
-      const userId = refreshTokenService.validateRefreshToken(refresh_token);
+      const touchMeta = parseClientSessionMeta(req);
+      const userId = await refreshTokenService.validateRefreshToken(refresh_token);
       const userDoc = await userModel.findById(userId).lean();
       if (!userDoc) {
         return res.status(401).json({ status: CONSTANCE.FAIL, error: "Invalid refresh token." });
       }
-      const newRefresh = refreshTokenService.rotateRefreshToken(refresh_token);
+      const rotated = await refreshTokenService.rotateRefreshToken(refresh_token, touchMeta);
       const access_token = refreshTokenService.issueAccessToken(
         String(userDoc._id),
         String(userDoc.account_type)
@@ -222,7 +259,8 @@ export class authController {
         status: CONSTANCE.SUCCESS,
         data: {
           access_token,
-          refresh_token: newRefresh,
+          refresh_token: rotated.refreshToken,
+          session_id: rotated.sessionId,
           account_type: userDoc.account_type,
         },
       });
@@ -231,6 +269,103 @@ export class authController {
       return res.status(401).json({
         status: CONSTANCE.FAIL,
         error: error?.message || "Invalid refresh token.",
+      });
+    }
+  };
+
+  public registerSession = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id ?? "");
+      const accountType = String(req["authUser"]?.account_type ?? "");
+      const sessionMeta = parseClientSessionMeta(req, "password");
+      const issued = await refreshTokenService.issueRefreshToken(userId, sessionMeta);
+      const access_token = refreshTokenService.issueAccessToken(userId, accountType);
+      return res.status(200).json({
+        status: CONSTANCE.SUCCESS,
+        data: {
+          access_token,
+          refresh_token: issued.refreshToken,
+          session_id: issued.sessionId,
+          account_type: accountType,
+        },
+      });
+    } catch (error) {
+      this.logger.error(error);
+      return res.status(500).json({
+        status: CONSTANCE.FAIL,
+        error: (error as Error)?.message || "Could not register session.",
+      });
+    }
+  };
+
+  public listSessions = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id ?? "");
+      const currentSessionId = String(req.headers["x-nq-session-id"] || "").trim() || undefined;
+      const sessions = await authSessionService.listForUser(userId, currentSessionId);
+      return res.status(200).json({ status: CONSTANCE.SUCCESS, data: { sessions } });
+    } catch (error) {
+      this.logger.error(error);
+      return res.status(500).json({
+        status: CONSTANCE.FAIL,
+        error: (error as Error)?.message || "Could not load sessions.",
+      });
+    }
+  };
+
+  public revokeSession = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id ?? "");
+      const sessionId = String(req.body?.sessionId ?? req.body?.session_id ?? "").trim();
+      if (!sessionId) {
+        return res.status(400).json({ status: CONSTANCE.FAIL, error: "sessionId is required." });
+      }
+      const currentSessionId = String(req.headers["x-nq-session-id"] || "").trim();
+      const ok = await authSessionService.revokeSessionForUser(userId, sessionId);
+      if (!ok) {
+        return res.status(404).json({ status: CONSTANCE.FAIL, error: "Session not found." });
+      }
+      if (currentSessionId && currentSessionId === sessionId) {
+        const refresh_token = String(req.body?.refresh_token ?? "").trim();
+        if (refresh_token) await refreshTokenService.revokeRefreshToken(refresh_token);
+      }
+      return res.status(200).json({ status: CONSTANCE.SUCCESS, data: { revoked: true } });
+    } catch (error) {
+      this.logger.error(error);
+      return res.status(500).json({
+        status: CONSTANCE.FAIL,
+        error: (error as Error)?.message || "Could not revoke session.",
+      });
+    }
+  };
+
+  public revokeOtherSessions = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id ?? "");
+      const keepSessionId = String(req.headers["x-nq-session-id"] || "").trim() || undefined;
+      const count = await authSessionService.revokeAllExcept(userId, keepSessionId);
+      return res.status(200).json({ status: CONSTANCE.SUCCESS, data: { revokedCount: count } });
+    } catch (error) {
+      this.logger.error(error);
+      return res.status(500).json({
+        status: CONSTANCE.FAIL,
+        error: (error as Error)?.message || "Could not revoke sessions.",
+      });
+    }
+  };
+
+  public logout = async (req: Request, res: Response) => {
+    try {
+      const refresh_token = String(req.body?.refresh_token ?? "").trim();
+      if (refresh_token) {
+        await refreshTokenService.revokeRefreshToken(refresh_token);
+      }
+      return res.status(200).json({ status: CONSTANCE.SUCCESS, data: { loggedOut: true } });
+    } catch (error) {
+      this.logger.error(error);
+      return res.status(500).json({
+        status: CONSTANCE.FAIL,
+        error: (error as Error)?.message || "Logout failed.",
       });
     }
   };
