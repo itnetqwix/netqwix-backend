@@ -11,12 +11,10 @@ import {
 
 export class AuthorizeMiddleware {
   public authorizeUser = async (req, res, next) => {
-    const { byPassRoute } = req;
-    console.log(`route --- `, req.path)
+    const byPassRoute = Array.isArray(req.byPassRoute) ? req.byPassRoute : [];
     const isRouteExist = !(
       byPassRoute.includes(req.url) || byPassRoute.includes(req.path)
-      );
-      console.log(`isRouteExist --- `, isRouteExist)
+    );
 
       const bypasswithoutAuth = ["/get-availability"]
 
