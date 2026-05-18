@@ -35,6 +35,7 @@ import { logPrecallCheckOps, logCallQualityOps } from "../ops/opsCallLogger";
 import { NotificationsService } from "../notifications/notificationsService";
 import {
   notifySessionUser,
+  shouldSkipDuplicateNotify,
   INSTANT_NOTIFICATION,
 } from "../session/sessionNotificationService";
 
@@ -1221,6 +1222,20 @@ const listenNotificationEvents = (socket) => {
   try {
     socket.on(EVENTS.PUSH_NOTIFICATIONS.ON_SEND, async (payload: any) => {
       const { title, description, senderId, receiverId, bookingInfo, type } = payload;
+      const bookingId =
+        bookingInfo?.bookingId ?? bookingInfo?.lessonId ?? bookingInfo?._id ?? "";
+      if (
+        receiverId &&
+        title &&
+        (await shouldSkipDuplicateNotify(
+          String(receiverId),
+          `client_send:${title}`,
+          String(bookingId),
+          title
+        ))
+      ) {
+        return;
+      }
       const toUserSocketId = MemCache.getDetail(
         process.env.SOCKET_CONFIG,
         receiverId
@@ -1624,7 +1639,8 @@ const listenInstantLessonEvents = (socket) => {
         clearInstantLessonTimers(lessonId);
         scheduleInstantLessonJoinExpiry(lessonId, coachId, traineeId, acceptedAt);
 
-        if (emitBookingStatusUpdatedDelegate) {
+        /** Instant lessons use INSTANT_LESSON_PHASE + notifySessionUser — avoid stacked "Session confirmed" pushes. */
+        if (emitBookingStatusUpdatedDelegate && !updatedBooking.is_instant) {
           void emitBookingStatusUpdatedDelegate(updatedBooking);
         }
 
@@ -1976,6 +1992,12 @@ async function persistBookingCreatedNotification(
       : `${traineeName} booked a session with you. Open Session requests to confirm.`;
 
   const bookingId = socketPayload.bookingId as string;
+  const kind = bookingType === "instant" ? "booking_created_instant" : "booking_created_scheduled";
+  if (
+    await shouldSkipDuplicateNotify(trainerId, kind, bookingId, title)
+  ) {
+    return;
+  }
   const doc = await notification.create({
     title,
     description,
@@ -2113,7 +2135,9 @@ export const emitBookingStatusUpdated = async (bookingData: any) => {
 
     console.log(`[BOOKING] [${new Date().toISOString()}] Booking status updated: ${payload.bookingId}, status: ${status}, trainer: ${trainerId}, trainee: ${traineeId}`);
 
-    if (status === "confirmed" && traineeId) {
+    const isInstant = bookingData?.is_instant === true;
+
+    if (status === "confirmed" && traineeId && !isInstant) {
       const trainer = await user.findById(trainerId).select("fullname").lean();
       const n = INSTANT_NOTIFICATION.scheduledConfirmed((trainer as any)?.fullname);
       void notifySessionUser(
@@ -2127,7 +2151,7 @@ export const emitBookingStatusUpdated = async (bookingData: any) => {
         },
         ioInstance
       );
-    } else if (status === "canceled" || status === "cancel") {
+    } else if ((status === "canceled" || status === "cancel") && !isInstant) {
       const n = INSTANT_NOTIFICATION.scheduledCancelled("Your session");
       if (traineeId) {
         void notifySessionUser(
