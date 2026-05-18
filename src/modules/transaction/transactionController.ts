@@ -15,8 +15,16 @@ export class transactionController {
 
   public createPaymentIntent = async (req: Request, res: Response) => {
     try {
-      const { amount } = req.body;
-      if (!amount) {
+      const { amount, couponCode } = req.body;
+      const amountNum = Number(amount);
+      const hasCoupon =
+        typeof couponCode === "string" && couponCode.trim().length > 0;
+      if (
+        amount == null ||
+        Number.isNaN(amountNum) ||
+        amountNum < 0 ||
+        (amountNum === 0 && !hasCoupon)
+      ) {
         return res.send({
           status: CONSTANCE.BAD_DATA,
           msg: "Invalid amount provided amount should be a positive number",
