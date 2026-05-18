@@ -187,7 +187,7 @@ export async function reconcileProcessingRefundTransfers(): Promise<number> {
 }
 
 export function formatRefundTransferForApi(rt: any) {
-  if (!rt) return null;
+  if (!rt?.destination || !rt?.status) return null;
   return {
     destination: rt.destination,
     status: rt.status,

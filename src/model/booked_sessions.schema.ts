@@ -2,6 +2,34 @@ import { model as Model, Schema } from "mongoose";
 import { Tables } from "../config/tables";
 import { BOOKED_SESSIONS_STATUS } from "../config/constance";
 
+/** Only set on the booking after a refund is initiated — omit on new bookings. */
+const refundTransferSchema = new Schema(
+    {
+        destination: {
+            type: String,
+            enum: ["wallet", "card", "bank"],
+            required: true,
+        },
+        status: {
+            type: String,
+            enum: ["pending", "processing", "completed", "failed"],
+            required: true,
+        },
+        amount_minor: { type: Number },
+        initiated_at: { type: Date },
+        expected_by: { type: Date },
+        completed_at: { type: Date, default: null },
+        stripe_refund_id: { type: String, default: null },
+        payout_request_id: {
+            type: Schema.Types.ObjectId,
+            ref: Tables.payout_requests,
+            default: null,
+        },
+        failure_reason: { type: String, default: null },
+    },
+    { _id: false }
+);
+
 const bookedSessionsSchema: Schema = new Schema(
     {
         trainer_id: {
@@ -167,27 +195,8 @@ const bookedSessionsSchema: Schema = new Schema(
         ],
         /** Refund payout timeline (wallet / card / bank) for trainee visibility. */
         refund_transfer: {
-            destination: {
-                type: String,
-                enum: ["wallet", "card", "bank"],
-                default: null,
-            },
-            status: {
-                type: String,
-                enum: ["pending", "processing", "completed", "failed"],
-                default: null,
-            },
-            amount_minor: { type: Number, default: null },
-            initiated_at: { type: Date, default: null },
-            expected_by: { type: Date, default: null },
-            completed_at: { type: Date, default: null },
-            stripe_refund_id: { type: String, default: null },
-            payout_request_id: {
-                type: Schema.Types.ObjectId,
-                ref: Tables.payout_requests,
-                default: null,
-            },
-            failure_reason: { type: String, default: null },
+            type: refundTransferSchema,
+            required: false,
         },
     },
     { timestamps: true }
