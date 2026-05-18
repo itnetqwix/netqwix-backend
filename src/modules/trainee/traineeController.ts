@@ -312,14 +312,20 @@ export class traineeController {
           req["body"],
           req["authUser"]["_id"]
         );
+      if (result.code !== 200) {
+        return res.status(result.code).json({
+          status: CONSTANCE.FAIL,
+          error: result.error || result.msg || "Booking failed",
+        });
+      }
       return res
-        .status(result.code)
-        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+        .status(200)
+        .json({ status: CONSTANCE.SUCCESS, data: result.result });
     } catch (err) {
       this.logger.error(err);
       return res
-        .status(err.code)
-        .send({ status: CONSTANCE.FAIL, error: err.error });
+        .status(err.code || 500)
+        .json({ status: CONSTANCE.FAIL, error: err.error || err.message });
     }
   };
 

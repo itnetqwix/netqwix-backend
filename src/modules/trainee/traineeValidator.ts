@@ -151,12 +151,16 @@ export class bookInstantMeetingModal extends model {
     } = body;
     this.trainer_id = trainer_id;
     this.booked_date = booked_date;
-    this.duration = duration;
+    this.duration =
+      duration != null && duration !== "" ? Number(duration) : undefined;
     this.coupon_code = coupon_code;
+    this.charging_price =
+      charging_price != null && charging_price !== ""
+        ? Number(charging_price)
+        : undefined;
     this.payment_intent_id = payment_intent_id;
     this.payment_method = payment_method;
     this.pin_session_token = pin_session_token;
-    this.charging_price = charging_price;
   }
 }
 

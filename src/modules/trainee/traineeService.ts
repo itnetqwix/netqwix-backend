@@ -728,7 +728,6 @@ export class TraineeService {
 
       let promoDiscountAmount = 0;
       let appliedPromoCode: string | null = null;
-      const promoMadeFree = payload.charging_price != null && Number(payload.charging_price) === 0;
 
       if (payload.coupon_code && typeof payload.coupon_code === "string" && payload.coupon_code.trim()) {
         const promoService = new PromoCodeService();
@@ -742,6 +741,10 @@ export class TraineeService {
         if (promoResult.valid) {
           promoDiscountAmount = promoResult.discount_amount!;
           appliedPromoCode = payload.coupon_code.trim().toUpperCase();
+        } else {
+          return ResponseBuilder.badRequest(
+            promoResult.reason || "Invalid or expired promo code."
+          );
         }
       }
 
@@ -782,10 +785,19 @@ export class TraineeService {
         return ResponseBuilder.badRequest(conflictMsg);
       }
 
-      const basePrice = payload.charging_price != null && payload.charging_price > 0
-        ? payload.charging_price
-        : expectedPrice;
+      /** Pre-discount list price; never use a post-payment / post-promo client amount as the base. */
+      const basePrice = expectedPrice;
       const chargingPrice = Number(Math.max(basePrice - promoDiscountAmount, 0).toFixed(2));
+
+      if (chargingPrice > 0 && hourlyRate > 0) {
+        const paidViaCard = Boolean(payload.payment_intent_id);
+        const paidViaWallet = payload.payment_method === "wallet";
+        if (!paidViaCard && !paidViaWallet) {
+          return ResponseBuilder.badRequest(
+            "Payment is required before booking. Complete payment or apply a valid promo code."
+          );
+        }
+      }
 
       const bookingFields: Record<string, any> = {
         trainer_id,
