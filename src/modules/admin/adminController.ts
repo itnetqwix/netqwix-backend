@@ -298,6 +298,25 @@ export class AdminController {
     }
   };
 
+  public getBookingSessionDetail = async (req: Request, res: Response) => {
+    try {
+      const at = String(req["authUser"]?.account_type ?? "").trim().toLowerCase();
+      if (at !== String(AccountType.ADMIN).toLowerCase()) {
+        return res.status(403).json({ status: CONSTANCE.FAIL, error: "Only admin can access booking detail" });
+      }
+      const bookingId = String(req.params.bookingId);
+      const { sessionDetailService } = require("../session/sessionDetailService");
+      const detail = await sessionDetailService.getSessionDetailForAdmin(bookingId);
+      if (!detail) {
+        return res.status(404).json({ status: CONSTANCE.FAIL, error: "Booking not found" });
+      }
+      return res.status(200).json({ status: CONSTANCE.SUCCESS, data: detail });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
   /** Trainers & trainees with an active Socket.IO connection (same source as ADMIN_ONLINE_USERS). */
   public getOnlineUsers = async (req: Request, res: Response) => {
     try {

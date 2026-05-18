@@ -59,6 +59,38 @@ const aiService = new AIService();
       }
     });
     void verificationSlaJob.start();
+
+    const instantRefundJob = cron.schedule("*/5 * * * *", () => {
+      try {
+        const {
+          processPendingInstantRefunds,
+        } = require("../modules/wallet/instantLessonRefundService");
+        void processPendingInstantRefunds();
+      } catch (err) {
+        console.log("err on instant refund job:", err);
+      }
+    });
+    void instantRefundJob.start();
+
+    const scheduledNoShowJob = cron.schedule("*/5 * * * *", () => {
+      try {
+        const { processScheduledNoShowRefunds } = require("./scheduledNoShowJob");
+        void processScheduledNoShowRefunds();
+      } catch (err) {
+        console.log("err on scheduled no-show job:", err);
+      }
+    });
+    void scheduledNoShowJob.start();
+
+    const instantRecoveryJob = cron.schedule("* * * * *", () => {
+      try {
+        const { recoverExpiredInstantLessons } = require("./instantLessonRecoveryJob");
+        void recoverExpiredInstantLessons();
+      } catch (err) {
+        console.log("err on instant recovery job:", err);
+      }
+    });
+    void instantRecoveryJob.start();
   };
 
 const meetingConfirmationJob = async () => {

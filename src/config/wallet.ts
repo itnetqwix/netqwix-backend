@@ -3,7 +3,7 @@ export const WALLET_CONFIG = {
   /** Master switch for wallet APIs */
   enabled: process.env.WALLET_ENABLED !== "false",
   /** Escrow hold on booking/extension (platform charge, delayed transfer) */
-  escrowEnabled: process.env.WALLET_ESCROW_ENABLED === "true",
+  escrowEnabled: process.env.WALLET_ESCROW_ENABLED !== "false",
   /** Allow paying from wallet balance */
   walletPayEnabled: process.env.WALLET_PAY_ENABLED !== "false",
   defaultCurrency: "USD",

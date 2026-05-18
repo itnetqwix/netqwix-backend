@@ -47,6 +47,7 @@ route.post("/trainer-verifications/:userId/reject", trainerReviewAdminController
 
 route.get("/dashboard-metrics", adminController.getDashboardMetrics);
 route.get("/online-users", adminController.getOnlineUsers);
+route.get("/booking/:bookingId", adminController.getBookingSessionDetail);
 
 route.get("/finance/ledger", adminFinanceController.getLedger);
 route.get("/finance/escrow", adminFinanceController.getEscrowHolds);

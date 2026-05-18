@@ -842,6 +842,30 @@ export class userController {
     }
   };
 
+  public getSessionDetail = async (req: any, res: Response) => {
+    try {
+      if (!req["authUser"]) return;
+      const userId = String(req["authUser"]?._id);
+      const accountType = req["authUser"]?.account_type;
+      const bookingId = String(req.params.bookingId);
+      const { sessionDetailService } = require("../session/sessionDetailService");
+      const detail = await sessionDetailService.getSessionDetailForUser(
+        bookingId,
+        userId,
+        accountType
+      );
+      if (!detail) {
+        return res.status(404).json({ success: 0, message: "Session not found." });
+      }
+      return res.status(CONSTANCE.RES_CODE.success).json({ status: CONSTANCE.SUCCESS, data: detail });
+    } catch (error) {
+      res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
+        success: 0,
+        message: Message.internal,
+      });
+    }
+  };
+
   public getAllBookingById = async (req: any, res: Response) => {
     try {
       if (req["authUser"]) {
@@ -1098,7 +1122,54 @@ export class userController {
       const result: ResponseBuilder =
         await this.userService.getAllLatestOnlineUser();
       if (result.status !== CONSTANCE.FAIL) {
-        res.status(result.code).json(result);
+        const rows = Array.isArray(result.result) ? result.result : [];
+        const { isUserOnline } = require("../socket/socket.service");
+        const {
+          isTrainerInWeeklyAvailabilityNow,
+          checkInstantLessonEligibility,
+        } = require("../trainee/instantEligibilityService");
+        const traineeId = req.authUser?._id ? String(req.authUser._id) : null;
+        const enriched = await Promise.all(
+          rows.map(async (row: any) => {
+            const trainerId = String(
+              row.trainer_info?._id || row.trainer_id || ""
+            );
+            if (!trainerId) return row;
+            const inAvail = await isTrainerInWeeklyAvailabilityNow(trainerId);
+            const tz =
+              row.trainer_info?.extraInfo?.availabilityInfo?.timeZone ||
+              row.trainer_info?.time_zone ||
+              inAvail.timezone;
+            let instant_eligible_15 = false;
+            let instant_eligible_30 = false;
+            let instant_ineligible_reasons: string[] = [];
+            if (traineeId) {
+              const e15 = await checkInstantLessonEligibility({
+                trainerId,
+                traineeId,
+                durationMinutes: 15,
+              });
+              const e30 = await checkInstantLessonEligibility({
+                trainerId,
+                traineeId,
+                durationMinutes: 30,
+              });
+              instant_eligible_15 = e15.eligible;
+              instant_eligible_30 = e30.eligible;
+              if (!e15.eligible) instant_ineligible_reasons = e15.reasons;
+            }
+            return {
+              ...row,
+              is_online: isUserOnline(trainerId),
+              in_availability_now: inAvail.ok,
+              trainer_timezone: tz,
+              instant_eligible_15,
+              instant_eligible_30,
+              instant_ineligible_reasons,
+            };
+          })
+        );
+        res.status(result.code).json({ ...result, result: enriched });
       } else {
         res.status(result.code).json({
           status: result.status,

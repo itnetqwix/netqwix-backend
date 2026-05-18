@@ -97,6 +97,43 @@ const bookedSessionsSchema: Schema = new Schema(
             type: Date,
             default: null,
         },
+        /** Lesson length in minutes (instant: 15 or 30). */
+        duration_minutes: {
+            type: Number,
+            default: null,
+        },
+        /** Instant lifecycle phase (server-authoritative). */
+        instant_phase: {
+            type: String,
+            enum: [
+                "pending_accept",
+                "pending_join",
+                "active",
+                "completed",
+                "cancelled",
+            ],
+            default: null,
+        },
+        requested_at: {
+            type: Date,
+            default: null,
+        },
+        accept_deadline_at: {
+            type: Date,
+            default: null,
+        },
+        join_deadline_at: {
+            type: Date,
+            default: null,
+        },
+        both_joined_at: {
+            type: Date,
+            default: null,
+        },
+        refund_reason: {
+            type: String,
+            default: null,
+        },
         coupon_code: {
             type: String,
             default: null,

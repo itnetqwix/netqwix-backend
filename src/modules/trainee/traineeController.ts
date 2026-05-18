@@ -469,4 +469,26 @@ export class traineeController {
       return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
     }
   };
+
+  public getInstantLessonEligibility = async (req: any, res: Response) => {
+    try {
+      const trainerId = String(req.query.trainerId || req.query.trainer_id || "");
+      const durationMinutes = Number(req.query.durationMinutes || req.query.duration || 30);
+      if (!trainerId) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "trainerId is required" });
+      }
+      const result = await this.traineeService.getInstantLessonEligibility(
+        trainerId,
+        String(req.authUser._id),
+        durationMinutes
+      );
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ message: result.error });
+      }
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
 }

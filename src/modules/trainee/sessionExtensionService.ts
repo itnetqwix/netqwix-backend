@@ -3,7 +3,9 @@ import { BOOKED_SESSIONS_STATUS, CONSTANCE } from "../../config/constance";
 import { SESSION_EXTENSION } from "../../config/sessionExtension";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { StripeHelper } from "../../helpers/stripe";
-import { checkTrainerBookingConflict } from "../../Utils/bookingConflict";
+import { checkBothPartiesBookingConflict } from "../../Utils/bookingConflict";
+import { INSTANT_BUFFER_AFTER_SESSION_MS } from "../../config/instantLesson";
+import { isTrainerInWeeklyAvailabilityNow } from "./instantEligibilityService";
 import booked_session from "../../model/booked_sessions.schema";
 import user from "../../model/user.schema";
 import { DateFormat } from "../../Utils/dateFormat";
@@ -20,6 +22,9 @@ function getEffectiveEnd(booking: any): Date {
 }
 
 function getOriginalDurationMinutes(booking: any): number {
+  if (booking.duration_minutes && [15, 30].includes(Number(booking.duration_minutes))) {
+    return Number(booking.duration_minutes);
+  }
   if (booking.start_time && booking.end_time) {
     const ms =
       new Date(booking.end_time).getTime() - new Date(booking.start_time).getTime();
@@ -159,12 +164,35 @@ export class SessionExtensionService {
         effectiveEnd.getTime() + minutes * 60 * 1000
       ).toISOString();
 
+      if (booking.is_instant) {
+        const avail = await isTrainerInWeeklyAvailabilityNow(
+          String(booking.trainer_id),
+          new Date()
+        );
+        if (!avail.ok) {
+          return ResponseBuilder.data(
+            {
+              allowed: false,
+              reason: "Coach is outside availability hours; extension not available.",
+              amount,
+              minutes,
+            },
+            "EXTENSION_QUOTE"
+          );
+        }
+      }
+
       const conflictStart = booking.start_time
         ? new Date(booking.start_time)
         : new Date(booking.booked_date);
-      const conflictEnd = new Date(effectiveEnd.getTime() + minutes * 60 * 1000);
-      const conflictMsg = await checkTrainerBookingConflict(
+      const conflictEnd = new Date(
+        effectiveEnd.getTime() +
+          minutes * 60 * 1000 +
+          INSTANT_BUFFER_AFTER_SESSION_MS
+      );
+      const conflictMsg = await checkBothPartiesBookingConflict(
         String(booking.trainer_id),
+        String(booking.trainee_id),
         conflictStart,
         conflictEnd,
         String(sessionId)
@@ -335,10 +363,12 @@ export class SessionExtensionService {
         ? new Date(booking.start_time)
         : new Date(booking.booked_date);
 
-      const conflictMsg = await checkTrainerBookingConflict(
+      const conflictEnd = new Date(newEnd.getTime() + INSTANT_BUFFER_AFTER_SESSION_MS);
+      const conflictMsg = await checkBothPartiesBookingConflict(
         String(booking.trainer_id),
+        String(booking.trainee_id),
         conflictStart,
-        newEnd,
+        conflictEnd,
         String(sessionId)
       );
       if (conflictMsg) {

@@ -27,8 +27,17 @@ import { DateTime } from "luxon";
 import SMSService from "../../services/sms-service";
 import { timeZoneAbbreviations } from "../../Utils/constant";
 import { PromoCodeService } from "../promo-code/promoCodeService";
-import { checkTrainerBookingConflict } from "../../Utils/bookingConflict";
+import {
+  checkBothPartiesBookingConflict,
+  checkTrainerBookingConflict,
+} from "../../Utils/bookingConflict";
 import { scheduleInstantLessonAcceptExpiry } from "../../helpers/instantLessonExpiry";
+import {
+  computeInstantReservationWindowMs,
+  INSTANT_PHASE,
+  isInstantAllowedDuration,
+} from "../../config/instantLesson";
+import { instantEligibilityService } from "./instantEligibilityService";
 
 export class TraineeService {
   public log = log.getLogger();
@@ -300,7 +309,26 @@ export class TraineeService {
         result = result.filter((row) => isUserOnline(String(row._id)));
       }
 
-      return ResponseBuilder.data(result, l10n.t("GET_ALL_SLOTS"));
+      const { isUserOnline } = require("../socket/socket.service");
+      const { isTrainerInWeeklyAvailabilityNow } = require("./instantEligibilityService");
+      const enriched = await Promise.all(
+        result.map(async (row: any) => {
+          const trainerId = String(row._id || row.trainer_id);
+          const inAvail = await isTrainerInWeeklyAvailabilityNow(trainerId);
+          const tz =
+            row.extraInfo?.availabilityInfo?.timeZone ||
+            (row as { time_zone?: string }).time_zone ||
+            inAvail.timezone;
+          return {
+            ...row,
+            is_online: isUserOnline(trainerId),
+            in_availability_now: inAvail.ok,
+            trainer_timezone: tz,
+          };
+        })
+      );
+
+      return ResponseBuilder.data(enriched, l10n.t("GET_ALL_SLOTS"));
     } catch (err) {
       console.error(`Error getting slots of all trainers:`, err);
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
@@ -630,10 +658,22 @@ export class TraineeService {
     }
   }
 
+  public async getInstantLessonEligibility(
+    trainerId: string,
+    traineeId: string,
+    durationMinutes: number
+  ): Promise<ResponseBuilder> {
+    const result = await instantEligibilityService.checkInstantLessonEligibility({
+      trainerId,
+      traineeId,
+      durationMinutes: Number(durationMinutes) || 30,
+    });
+    return ResponseBuilder.data(result, "Instant lesson eligibility");
+  }
+
   /**
-   * Book an instant meeting. Does not depend on trainer schedule or timezone.
-   * Uses server UTC "now" so the trainee can request at any time and the trainer
-   * receives the request in upcoming lessons regardless of timezone.
+   * Book an instant meeting. Trainer must be online, available, and in weekly slot;
+   * both parties must have a clear reservation window (lesson + accept + join + buffer).
    */
   public async bookInstantMeeting(
     payload: bookInstantMeetingModal,
@@ -641,18 +681,48 @@ export class TraineeService {
   ): Promise<ResponseBuilder> {
     const { trainer_id, duration: durationMinutes } = payload;
     try {
+      const duration = durationMinutes && isInstantAllowedDuration(Number(durationMinutes))
+        ? Number(durationMinutes)
+        : 30;
+
+      if (!isInstantAllowedDuration(duration)) {
+        return ResponseBuilder.badRequest(
+          "Instant lessons are only available for 15 or 30 minutes."
+        );
+      }
+
+      const eligibility = await instantEligibilityService.checkInstantLessonEligibility({
+        trainerId: trainer_id,
+        traineeId: _id,
+        durationMinutes: duration,
+      });
+      if (!eligibility.eligible) {
+        const { recordOpsEvent } = require("../ops/opsEventService");
+        recordOpsEvent({
+          category: "instant_lesson",
+          severity: "warning",
+          event_type: "INSTANT_LESSON_ELIGIBILITY_DENIED",
+          user_id: _id,
+          related_user_id: trainer_id,
+          title: "Instant lesson not eligible",
+          summary: eligibility.reasons.join(" "),
+          payload: { reasons: eligibility.reasons, duration },
+          source: "server",
+        });
+        return ResponseBuilder.badRequest(eligibility.reasons.join(" "));
+      }
+
       // Look up the trainer to verify hourly rate and enforce payment
       const trainerDoc = await user.findById(trainer_id).select("extraInfo.hourly_rate stripe_account_id commission").lean();
       const hourlyRate = Number(trainerDoc?.extraInfo?.hourly_rate ?? 0);
 
-      // Use server UTC "now" so instant lesson works for any trainee/trainer timezone
       const nowUtc = new Date();
       const booked_date = payload.booked_date ? new Date(payload.booked_date) : nowUtc;
-
-      // Duration in minutes (15, 30, 60, 120). Default 30.
-      const duration = durationMinutes && [15, 30, 60, 120].includes(Number(durationMinutes))
-        ? Number(durationMinutes)
-        : 30;
+      const requestedAt = nowUtc;
+      const acceptDeadlineAt = new Date(
+        requestedAt.getTime() + 2 * 60 * 1000
+      );
+      const reservationMs = computeInstantReservationWindowMs(duration);
 
       const expectedPrice = Number(((hourlyRate / 60) * duration).toFixed(2));
 
@@ -687,12 +757,15 @@ export class TraineeService {
         CONSTANCE.INSTANT_MEETING_TIME_FORMAT
       );
 
-      // Set start_time/end_time (Date) so getScheduledMeetings, active sessions, and timers
-      // match the selected instant-lesson duration window.
       const start_time = new Date(booked_date);
-      const end_time = new Date(start_time.getTime() + duration * 60 * 1000);
+      const end_time = new Date(start_time.getTime() + reservationMs);
 
-      const conflictMsg = await checkTrainerBookingConflict(trainer_id, start_time, end_time);
+      const conflictMsg = await checkBothPartiesBookingConflict(
+        trainer_id,
+        _id,
+        start_time,
+        end_time
+      );
       if (conflictMsg) {
         const { recordOpsEvent } = require("../ops/opsEventService");
         recordOpsEvent({
@@ -724,6 +797,10 @@ export class TraineeService {
         start_time,
         end_time,
         is_instant: true,
+        duration_minutes: duration,
+        instant_phase: INSTANT_PHASE.PENDING_ACCEPT,
+        requested_at: requestedAt,
+        accept_deadline_at: acceptDeadlineAt,
       };
       if (payload.payment_intent_id) bookingFields.payment_intent_id = payload.payment_intent_id;
       if (basePrice > 0) bookingFields.original_amount = String(basePrice);
@@ -805,7 +882,7 @@ export class TraineeService {
         String(bookingData._id),
         String(trainer_id),
         String(_id),
-        bookingData.createdAt ? new Date(bookingData.createdAt) : new Date()
+        requestedAt
       );
 
       // Emit booking created event for instant lesson (trainer sees in upcoming / gets popup)
@@ -833,7 +910,13 @@ export class TraineeService {
 
       // Return booking id so frontend can use it as lessonId for socket INSTANT_LESSON.REQUEST
       return ResponseBuilder.data(
-        { bookingId: bookingData._id, booking: bookingData },
+        {
+          bookingId: bookingData._id,
+          booking: bookingData,
+          acceptDeadlineAt: acceptDeadlineAt.toISOString(),
+          totalWindowMinutes: eligibility.totalWindowMinutes,
+          instantPhase: INSTANT_PHASE.PENDING_ACCEPT,
+        },
         l10n.t("INSTANT_MEETING_BOOKED")
       );
     } catch (err) {

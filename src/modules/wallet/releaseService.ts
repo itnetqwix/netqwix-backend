@@ -14,21 +14,32 @@ export class ReleaseService {
     const booking = await booked_session.findById(sessionId).lean();
     if (!booking) return { eligible: false, reason: "Session not found" };
 
+    const ratings = (booking as any).ratings || {};
+    const traineeRated = ratings?.trainee?.sessionRating != null;
+    const trainerRated = ratings?.trainer?.sessionRating != null;
+
     if (booking.status === BOOKED_SESSIONS_STATUS.completed) {
-      return { eligible: true };
+      if (traineeRated && trainerRated) return { eligible: true };
+      return { eligible: false, reason: "Both parties must submit session ratings" };
     }
 
+    let timerEnded = false;
     try {
       const { getLessonTimerSnapshot } = require("../socket/socket.service");
       const timer = getLessonTimerSnapshot(sessionId);
-      if (timer?.status === "ended") {
-        return { eligible: true };
-      }
+      if (timer?.status === "ended") timerEnded = true;
     } catch {
       /* socket optional */
     }
 
-    return { eligible: false, reason: "Session not completed" };
+    if (!timerEnded) {
+      return { eligible: false, reason: "Lesson timer has not ended" };
+    }
+    if (!traineeRated || !trainerRated) {
+      return { eligible: false, reason: "Both parties must submit session ratings" };
+    }
+
+    return { eligible: true };
   }
 
   async releaseHold(holdId: string, reason: string, adminId?: string) {

@@ -37,6 +37,11 @@ route.post(
   V.validate(bookInstantMeetingModal),
   traineeC.bookInstantMeeting
 );
+route.get(
+  "/instant-lesson/eligibility",
+  traineeMiddleware.isTrainee,
+  traineeC.getInstantLessonEligibility
+);
 
 // update profile
 route.put("/profile", traineeC.updateProfile);
