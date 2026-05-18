@@ -842,7 +842,10 @@ export const handleSocketEvents = (socket, connections = {}) => {
             // Calculate duration from start_time and end_time (Date objects) if available
             // Otherwise calculate from session_start_time and session_end_time (string HH:mm)
             let durationSeconds = 30 * 60; // default 30 minutes
-            if (bookedSession.start_time && bookedSession.end_time) {
+            if (bookedSession.is_instant && bookedSession.duration_minutes) {
+              const mins = Number(bookedSession.duration_minutes);
+              if (mins > 0) durationSeconds = mins * 60;
+            } else if (bookedSession.start_time && bookedSession.end_time) {
               durationSeconds = Math.floor((bookedSession.end_time.getTime() - bookedSession.start_time.getTime()) / 1000);
             } else if (bookedSession.session_start_time && bookedSession.session_end_time) {
               // Parse HH:mm strings and calculate duration

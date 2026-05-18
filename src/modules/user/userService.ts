@@ -684,6 +684,12 @@ export class UserService {
               extended_end_time:1,
               trainee_clip: 1,
               is_instant: { $ifNull: ["$is_instant", false] },
+              duration_minutes: 1,
+              instant_phase: 1,
+              accept_deadline_at: 1,
+              join_deadline_at: 1,
+              accepted_at: 1,
+              both_joined_at: 1,
             },
           },
           {
