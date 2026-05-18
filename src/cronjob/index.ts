@@ -91,6 +91,18 @@ const aiService = new AIService();
       }
     });
     void instantRecoveryJob.start();
+
+    const refundTransferReconcileJob = cron.schedule("*/10 * * * *", () => {
+      try {
+        const {
+          reconcileProcessingRefundTransfers,
+        } = require("../modules/wallet/refundTransferService");
+        void reconcileProcessingRefundTransfers();
+      } catch (err) {
+        console.log("err on refund transfer reconcile job:", err);
+      }
+    });
+    void refundTransferReconcileJob.start();
   };
 
 const meetingConfirmationJob = async () => {

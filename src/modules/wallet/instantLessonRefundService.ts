@@ -23,14 +23,30 @@ export async function refundSessionEscrow(
       .findOne({ session_id: sessionId, status: { $in: ["held", "disputed"] } })
       .lean();
 
+    let stripeRefundId: string | null = null;
+
     if (hold && WALLET_CONFIG.escrowEnabled) {
       await releaseService.refundHold(String(hold._id), reason);
     } else if (booking.payment_intent_id) {
       const stripe = require("stripe")(process.env.STRIPE_SECRET);
       try {
-        await stripe.refunds.create({ payment_intent: booking.payment_intent_id });
+        const stripeRefund = await stripe.refunds.create({
+          payment_intent: booking.payment_intent_id,
+        });
+        stripeRefundId = stripeRefund?.id ?? null;
       } catch (stripeErr: any) {
         console.error("[refundSessionEscrow] Stripe refund failed", stripeErr?.message);
+      }
+      try {
+        const { recordRefundTransfer } = require("./refundTransferService");
+        await recordRefundTransfer({
+          sessionId,
+          fundingSource: "card",
+          stripeRefundId,
+          traineeId: String(booking.trainee_id),
+        });
+      } catch (e) {
+        console.error("[refundSessionEscrow] recordRefundTransfer", e);
       }
     }
 

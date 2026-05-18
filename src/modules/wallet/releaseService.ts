@@ -200,9 +200,10 @@ export class ReleaseService {
         ],
       });
     } else if (hold.stripe_payment_intent_id) {
-      await stripe.refunds.create({
+      const stripeRefund = await stripe.refunds.create({
         payment_intent: hold.stripe_payment_intent_id,
       });
+      (hold as any)._stripeRefundId = stripeRefund?.id;
     }
 
     hold.status = "refunded";
@@ -216,6 +217,19 @@ export class ReleaseService {
       admin_id: adminId as any,
       reason,
     });
+
+    try {
+      const { recordRefundTransfer } = require("./refundTransferService");
+      await recordRefundTransfer({
+        sessionId: String(hold.session_id),
+        amountMinor: hold.gross_minor,
+        fundingSource: hold.funding_source === "wallet" ? "wallet" : "card",
+        stripeRefundId: (hold as any)._stripeRefundId ?? null,
+        traineeId: String(hold.trainee_id),
+      });
+    } catch (e) {
+      console.error("[refundHold] recordRefundTransfer", e);
+    }
 
     return hold;
   }

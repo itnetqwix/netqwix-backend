@@ -165,6 +165,30 @@ const bookedSessionsSchema: Schema = new Schema(
                 requested_by: { type: Schema.Types.ObjectId, ref: "user" },
             },
         ],
+        /** Refund payout timeline (wallet / card / bank) for trainee visibility. */
+        refund_transfer: {
+            destination: {
+                type: String,
+                enum: ["wallet", "card", "bank"],
+                default: null,
+            },
+            status: {
+                type: String,
+                enum: ["pending", "processing", "completed", "failed"],
+                default: null,
+            },
+            amount_minor: { type: Number, default: null },
+            initiated_at: { type: Date, default: null },
+            expected_by: { type: Date, default: null },
+            completed_at: { type: Date, default: null },
+            stripe_refund_id: { type: String, default: null },
+            payout_request_id: {
+                type: Schema.Types.ObjectId,
+                ref: Tables.payout_requests,
+                default: null,
+            },
+            failure_reason: { type: String, default: null },
+        },
     },
     { timestamps: true }
 );

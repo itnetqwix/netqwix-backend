@@ -1,7 +1,10 @@
 import mongoose from "mongoose";
 import booked_session from "../../model/booked_sessions.schema";
 import escrow_holds from "../../model/escrow_holds.schema";
+import user from "../../model/user.schema";
 import { INSTANT_REFUND_REASON } from "../../config/instantLesson";
+import { formatRefundTransferForApi } from "../wallet/refundTransferService";
+import { opsEventService } from "../ops/opsEventService";
 
 async function loadSessionAggregate(bookingId: string) {
   if (!mongoose.isValidObjectId(bookingId)) return null;
@@ -46,6 +49,43 @@ function formatUser(u: any) {
   };
 }
 
+async function normalizeExtensions(extensions: any[], includeAllStatuses: boolean) {
+  if (!Array.isArray(extensions) || extensions.length === 0) return [];
+
+  const userIds = [
+    ...new Set(
+      extensions
+        .map((e) => e.requested_by)
+        .filter((id) => id && mongoose.isValidObjectId(String(id)))
+        .map((id) => String(id))
+    ),
+  ];
+
+  const users =
+    userIds.length > 0
+      ? await user
+          .find({ _id: { $in: userIds } })
+          .select("fullname")
+          .lean()
+      : [];
+
+  const nameById = new Map(users.map((u) => [String(u._id), (u as any).fullname]));
+
+  return extensions
+    .filter((e) => includeAllStatuses || e.status === "applied")
+    .map((e) => ({
+      minutes: e.minutes,
+      amount: e.amount,
+      status: e.status,
+      requested_at: e.requested_at,
+      applied_at: e.applied_at ?? null,
+      requested_by: e.requested_by ? String(e.requested_by) : null,
+      requested_by_name: e.requested_by
+        ? nameById.get(String(e.requested_by)) ?? null
+        : null,
+    }));
+}
+
 export async function getSessionDetailForUser(
   bookingId: string,
   userId: string,
@@ -58,16 +98,37 @@ export async function getSessionDetailForUser(
   const ownerId = isTrainer ? String(row.trainer_id) : String(row.trainee_id);
   if (ownerId !== String(userId)) return null;
 
-  return buildDetailPayload(row, { includePrivateIds: false });
+  return buildDetailPayload(row, { includePrivateIds: false, includeAllExtensionStatuses: false });
 }
 
 export async function getSessionDetailForAdmin(bookingId: string) {
   const row = await loadSessionAggregate(bookingId);
   if (!row) return null;
-  return buildDetailPayload(row, { includePrivateIds: true });
+
+  const payload = await buildDetailPayload(row, {
+    includePrivateIds: true,
+    includeAllExtensionStatuses: true,
+  });
+
+  const opsEvents = await opsEventService.listBySession(bookingId, 15);
+  return {
+    ...payload,
+    ops_events: opsEvents.map((e: any) => ({
+      _id: String(e._id),
+      event_id: e.event_id,
+      category: e.category,
+      severity: e.severity,
+      title: e.title,
+      summary: e.summary,
+      createdAt: e.createdAt,
+    })),
+  };
 }
 
-async function buildDetailPayload(row: any, opts: { includePrivateIds: boolean }) {
+async function buildDetailPayload(
+  row: any,
+  opts: { includePrivateIds: boolean; includeAllExtensionStatuses: boolean }
+) {
   const hold = await escrow_holds
     .findOne({ session_id: String(row._id) })
     .sort({ createdAt: -1 })
@@ -82,6 +143,13 @@ async function buildDetailPayload(row: any, opts: { includePrivateIds: boolean }
     [INSTANT_REFUND_REASON.JOIN_EXPIRED]: "Join window expired",
     [INSTANT_REFUND_REASON.NO_SHOW]: "No-show",
   };
+
+  const extensions = await normalizeExtensions(
+    row.extensions ?? [],
+    opts.includeAllExtensionStatuses
+  );
+
+  const refundTransfer = formatRefundTransferForApi(row.refund_transfer);
 
   return {
     session: {
@@ -112,9 +180,17 @@ async function buildDetailPayload(row: any, opts: { includePrivateIds: boolean }
         : null,
       ratings: row.ratings ?? null,
       total_extended_minutes: row.total_extended_minutes ?? 0,
-      extensions: row.extensions ?? [],
+      extensions,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+    },
+    refund: {
+      status: row.refund_status ?? null,
+      reason: row.refund_reason ?? null,
+      reason_label: row.refund_reason
+        ? refundReasonLabels[row.refund_reason] || row.refund_reason
+        : null,
+      transfer: refundTransfer,
     },
     trainer,
     trainee,
