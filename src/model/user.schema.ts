@@ -92,6 +92,16 @@ const userSchema: Schema = new Schema(
       type: String,
       default: null,
     },
+    /** IANA zone (e.g. America/New_York) for availability display and scheduling context. */
+    time_zone: {
+      type: String,
+      default: "America/New_York",
+    },
+    /** BCP 47 language tag for app UI (e.g. en, es). */
+    preferred_locale: {
+      type: String,
+      default: "en",
+    },
     status: {
       type: String,
       enum: ["pending", "approved", "rejected"],

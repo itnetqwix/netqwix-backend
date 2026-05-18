@@ -5,6 +5,7 @@ import { EVENTS } from "../../config/constance";
 import { AuthMiddleware } from "../auth/authMiddleware";
 import { MemCache } from "../../Utils/memCache";
 import { AdminService } from "../admin/adminService";
+import user from "../../model/user.schema";
 
 export class SocketInit {
   private static readonly ADMIN_ROOM = "admin-presence";
@@ -35,7 +36,7 @@ export class SocketInit {
     for (const { userData } of this.connectedUsers.values()) {
       const doc = this.flattenUserDoc(userData);
       if (!doc?._id) continue;
-      const at = String(doc.account_type || "").toLowerCase();
+      const at = String(doc.account_type ?? "").trim().toLowerCase();
       if (at !== "trainer" && at !== "trainee") continue;
       const id = String(doc._id);
       if (seen.has(id)) continue;
@@ -124,14 +125,38 @@ export class SocketInit {
         socket.emit(EVENTS.ON_CONNECT, {
           msg: "Welcome, Socket Connect Successfully, socket",
         });
-        
-        // Store the complete user data
+
         const userId = String(socket.user._id);
+
+        /**
+         * Always attach a **lean** user for presence + downstream handlers.
+         * Some Mongoose document shapes (esp. after auth middleware `findOne`) omit or
+         * mis-serialize `account_type` via `toObject()`, which would drop trainers from
+         * `ADMIN_ONLINE_USERS` / `online_user` registration even though the JWT is valid.
+         */
+        try {
+          const leanUser = await user
+            .findById(userId)
+            .select("-password -subscriptionId")
+            .lean();
+          if (leanUser) {
+            socket.user = leanUser as any;
+          }
+        } catch (reloadErr) {
+          this.logger.info(
+            `[socket] User lean reload failed (non-fatal): ${String(reloadErr)}`
+          );
+        }
+
         this.connectedUsers.set(userId, { socketId: socket.id, userData: socket.user });
         MemCache.setDetail(process.env.SOCKET_CONFIG, userId, socket.id);
         this.logger.info(`[MemCache] ✅ Socket registered: userId=${userId} socketId=${socket.id}`);
 
-        const accountType = String(this.flattenUserDoc(socket.user)?.account_type || "").toLowerCase();
+        const accountType = String(
+          this.flattenUserDoc(socket.user)?.account_type ?? ""
+        )
+          .trim()
+          .toLowerCase();
         if (accountType === "admin") {
           await socket.join(SocketInit.ADMIN_ROOM);
           void this.pushDashboardMetrics(io);

@@ -186,6 +186,8 @@ export const UPDATE_FIELDS = {
     "category",
     "wallet_amount",
     "extraInfo",
+    "time_zone",
+    "preferred_locale",
   ],
 };
 export const allowedImageExtensions = [".jpg", ".jpeg", ".png"];
