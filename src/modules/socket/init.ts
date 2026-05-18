@@ -18,6 +18,13 @@ export class SocketInit {
 
   private flattenUserDoc(userData: any): any {
     if (!userData) return null;
+    if (typeof userData.toObject === "function") {
+      try {
+        return userData.toObject();
+      } catch {
+        /* fall through */
+      }
+    }
     return userData._doc ? userData._doc : userData;
   }
 

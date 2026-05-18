@@ -75,7 +75,8 @@ export async function removeUserFromActivePresence(userId: string) {
   const uid = String(userId);
   if (!activeUsers[uid]) return;
 
-  const wasTrainer = activeUsers[uid]?.account_type === "Trainer";
+  const wasTrainer =
+    String(activeUsers[uid]?.account_type || "").trim().toLowerCase() === "trainer";
   delete activeUsers[uid];
 
   user.findByIdAndUpdate(uid, { lastSeen: new Date() }).catch(() => {});
@@ -417,41 +418,58 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
   }, remainingMs);
 };
 
+/** Socket user may be a Mongoose document or plain object — avoid relying on `_doc`. */
+function socketAttachedUserId(socket: any): string {
+  const u = socket?.user;
+  if (!u) return "";
+  const id = u._id ?? u._doc?._id;
+  return id != null ? String(id) : "";
+}
+
+/** While connected, refresh `online_user.last_activity_time` so the 2h cron does not drop live trainers. */
+const lastTrainerOnlineUserPing = new Map<string, number>();
+const TRAINER_ONLINE_USER_PING_MS = 60_000;
+
 // Update user's activity status
 async function updateUserActivity(socket) {
   try {
-    const userId = String(socket.user._id);
-    const accountType = socket?.user?._doc?.account_type;
-    const userDoc = await user.findById(userId).select("showAsOnline account_type").lean();
+    const userId = socketAttachedUserId(socket);
+    if (!userId) return;
+
+    const userDoc = await user
+      .findById(userId)
+      .select("-password -subscriptionId")
+      .lean();
+    if (!userDoc) return;
+
+    const role = String((userDoc as any).account_type || "").trim().toLowerCase();
     const showAsOnline = (userDoc as any)?.showAsOnline !== false;
 
-    if (accountType === "Trainer") {
+    if (role === "trainer") {
       if (!showAsOnline) {
         delete activeUsers[userId];
         return;
       }
-      activeUsers[userId] = { ...socket.user._doc };
-      if (socket.user._doc._id) {
-        const trainerId = String(socket.user._doc._id);
-        const checkIfUserIsAlreadyAdded = await onlineUser.findOne({
-          trainer_id: trainerId,
-        });
+      activeUsers[userId] = { ...(userDoc as any) };
+      const trainerId = String((userDoc as any)._id);
+      const checkIfUserIsAlreadyAdded = await onlineUser.findOne({
+        trainer_id: trainerId,
+      });
 
-        if (checkIfUserIsAlreadyAdded) {
-          await onlineUser.updateOne(
-            { trainer_id: trainerId },
-            { $set: { last_activity_time: Date.now() } }
-          );
-        } else {
-          await new onlineUser({
-            trainer_id: trainerId,
-            last_activity_time: Date.now(),
-          }).save();
-        }
-        void touchUserPresence(trainerId);
+      if (checkIfUserIsAlreadyAdded) {
+        await onlineUser.updateOne(
+          { trainer_id: trainerId },
+          { $set: { last_activity_time: new Date() } }
+        );
+      } else {
+        await new onlineUser({
+          trainer_id: trainerId,
+          last_activity_time: new Date(),
+        }).save();
       }
-    } else if (accountType === "Trainee") {
-      activeUsers[userId] = { ...socket.user._doc };
+      void touchUserPresence(trainerId);
+    } else if (role === "trainee") {
+      activeUsers[userId] = { ...(userDoc as any) };
       void touchUserPresence(userId);
     } else {
       return;
@@ -473,7 +491,8 @@ async function updateUserActivity(socket) {
     socket.on("disconnect", async () => {
       if (!activeUsers[userId]) return;
 
-      const wasTrainer = activeUsers[userId]?.account_type === "Trainer";
+      const wasTrainer =
+        String(activeUsers[userId]?.account_type || "").trim().toLowerCase() === "trainer";
 
       delete activeUsers[userId];
 
@@ -489,7 +508,7 @@ async function updateUserActivity(socket) {
         try {
           await onlineUser.updateOne(
             { trainer_id: userId },
-            { $set: { last_activity_time: Date.now() } },
+            { $set: { last_activity_time: new Date() } },
             { upsert: true }
           );
         } catch (error) {
@@ -527,8 +546,9 @@ export const handleSocketEvents = (socket, connections = {}) => {
   socket.on("disconnect", () => {
     socketHeartbeats.delete(socketId);
     
-    const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
-    const userId = socket?.user?._doc?._id || socket?.user?._id;
+    const accountTypeRaw =
+      socket?.user?._doc?.account_type || socket?.user?.account_type;
+    const userId = socketAttachedUserId(socket);
     if (!userId) return;
 
     socket.rooms.forEach((roomName) => {
@@ -537,7 +557,10 @@ export const handleSocketEvents = (socket, connections = {}) => {
       const session = lessonSessions.get(sessionId);
       if (!session) return;
 
-      const role = accountType === "Trainer" ? "trainer" : "trainee";
+      const role =
+        String(accountTypeRaw || "").trim().toLowerCase() === "trainer"
+          ? "trainer"
+          : "trainee";
       const key = `${sessionId}:${String(userId)}`;
       const existing = pendingLessonDisconnectTimers.get(key);
       if (existing) clearTimeout(existing);
@@ -562,8 +585,19 @@ export const handleSocketEvents = (socket, connections = {}) => {
   // Heartbeat handler: clients send this periodically to prove they're alive
   socket.on("HEARTBEAT", () => {
     socketHeartbeats.set(socketId, Date.now());
-    const uid = socket?.user?._doc?._id || socket?.user?._id;
-    if (uid) void touchUserPresence(String(uid));
+    const uid = socketAttachedUserId(socket);
+    if (uid) void touchUserPresence(uid);
+    const au = activeUsers[uid];
+    if (au && String(au.account_type || "").trim().toLowerCase() === "trainer") {
+      const now = Date.now();
+      const last = lastTrainerOnlineUserPing.get(uid) || 0;
+      if (now - last >= TRAINER_ONLINE_USER_PING_MS) {
+        lastTrainerOnlineUserPing.set(uid, now);
+        void onlineUser
+          .updateOne({ trainer_id: uid }, { $set: { last_activity_time: new Date() } })
+          .catch(() => undefined);
+      }
+    }
   });
 
   socket.on(EVENTS.JOIN_ROOM, async (socketReq, request) => {
