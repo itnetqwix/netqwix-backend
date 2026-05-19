@@ -161,7 +161,12 @@ type LessonSessionState = {
   trainerLeftPaused?: boolean; // true when timer was auto-paused because trainer disconnected
   warningTimeoutId?: NodeJS.Timeout | null;
   endTimeoutId?: NodeJS.Timeout | null;
+  isInstant?: boolean;
+  coachFirstJoinedAt?: number | null;
+  userFirstJoinedAt?: number | null;
 };
+
+const TRAINEE_LATE_AUTO_START_MS = 120_000;
 
 const lessonSessions: Map<string, LessonSessionState> = new Map();
 
@@ -180,6 +185,53 @@ function cancelLessonDisconnectGrace(sessionId: string, userId: string) {
 
 function lessonRoomEmit(roomName: string, event: string, payload: unknown) {
   if (ioInstance) ioInstance.to(roomName).emit(event, payload);
+}
+
+function startLessonTimerInRoom(
+  socket: any,
+  roomName: string,
+  session: LessonSessionState,
+  reason: string
+) {
+  if (session.status === "running") return;
+  if (!session.coachJoined || !session.userJoined) return;
+
+  const now = Date.now();
+  session.startedAt = now;
+  session.status = "running";
+
+  const timerPayload = {
+    sessionId: session.sessionId,
+    startedAt: session.startedAt,
+    duration: session.duration,
+    remainingSeconds: session.remainingSeconds,
+    reason,
+  };
+
+  if (ioInstance) ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
+  else socket.nsp.to(roomName).emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
+
+  emitLessonStateSync(socket, roomName, session);
+  scheduleLessonEnd(socket, roomName, session);
+  console.log(
+    `[TIMER] Auto-started session ${session.sessionId} (${reason}), remaining ${session.remainingSeconds}s`
+  );
+}
+
+function maybeAutoStartLessonTimer(socket: any, roomName: string, session: LessonSessionState) {
+  if (session.status !== "waiting") return;
+  if (!session.coachJoined || !session.userJoined) return;
+
+  if (session.isInstant) {
+    startLessonTimerInRoom(socket, roomName, session, "instant_both_joined");
+    return;
+  }
+
+  const coachAt = session.coachFirstJoinedAt;
+  const userAt = session.userFirstJoinedAt;
+  if (coachAt != null && userAt != null && userAt - coachAt >= TRAINEE_LATE_AUTO_START_MS) {
+    startLessonTimerInRoom(socket, roomName, session, "scheduled_trainee_late");
+  }
 }
 
 function finalizeLessonParticipantDisconnect(
@@ -873,6 +925,9 @@ export const handleSocketEvents = (socket, connections = {}) => {
               status: "waiting",
               warningTimeoutId: null,
               endTimeoutId: null,
+              isInstant: !!bookedSession.is_instant,
+              coachFirstJoinedAt: null,
+              userFirstJoinedAt: null,
             };
             lessonSessions.set(sessionId, session);
             console.log(`[TIMER] Session ${sessionId} initialized with duration ${session.duration}s`);
@@ -889,6 +944,9 @@ export const handleSocketEvents = (socket, connections = {}) => {
         
         if (accountType === "Trainer") {
           session.coachJoined = true;
+          if (session.coachFirstJoinedAt == null) {
+            session.coachFirstJoinedAt = Date.now();
+          }
           console.log(`[TIMER] Trainer ${userId} joined session ${sessionId}. Coach joined: ${session.coachJoined}, User joined: ${session.userJoined}`);
           socket.to(roomName).emit("PARTICIPANT_STATUS_CHANGED", {
             sessionId,
@@ -898,6 +956,9 @@ export const handleSocketEvents = (socket, connections = {}) => {
           });
         } else {
           session.userJoined = true;
+          if (session.userFirstJoinedAt == null) {
+            session.userFirstJoinedAt = Date.now();
+          }
           console.log(`[TIMER] Trainee ${userId} joined session ${sessionId}. Coach joined: ${session.coachJoined}, User joined: ${session.userJoined}`);
           socket.to(roomName).emit("PARTICIPANT_STATUS_CHANGED", {
             sessionId,
@@ -906,6 +967,8 @@ export const handleSocketEvents = (socket, connections = {}) => {
             userId,
           });
         }
+
+        maybeAutoStartLessonTimer(socket, roomName, session);
         
         // Notify the other party that someone joined (if they're connected)
         const otherSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, userInfo?.to_user);
@@ -1064,22 +1127,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
     if (session.status === "running") return;
 
     const roomName = `session:${sessionId}`;
-    const now = Date.now();
-    session.startedAt = now;
-    session.status = "running";
-
-    const timerPayload = {
-      sessionId: session.sessionId,
-      startedAt: session.startedAt,
-      duration: session.duration,
-      remainingSeconds: session.remainingSeconds,
-    };
-
-    if (ioInstance) ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
-    else socket.nsp.to(roomName).emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
-
-    emitLessonStateSync(socket, roomName, session);
-    scheduleLessonEnd(socket, roomName, session);
+    startLessonTimerInRoom(socket, roomName, session, "trainer_manual_start");
   });
 
   socket.on("LESSON_TIMER_PAUSE_REQUEST", ({ sessionId }) => {

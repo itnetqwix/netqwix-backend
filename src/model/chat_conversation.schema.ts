@@ -10,6 +10,20 @@ const chatConversationSchema: Schema = new Schema(
     groupName: { type: String, default: null },
     groupAvatar: { type: String, default: null },
     groupAdmin: { type: Schema.Types.ObjectId, ref: Tables.user, default: null },
+    groupDescription: { type: String, default: "" },
+    archivedBy: [{ type: Schema.Types.ObjectId, ref: Tables.user }],
+    pendingInvites: [
+      {
+        userId: { type: Schema.Types.ObjectId, ref: Tables.user },
+        invitedBy: { type: Schema.Types.ObjectId, ref: Tables.user },
+        status: {
+          type: String,
+          enum: ["pending", "accepted", "declined"],
+          default: "pending",
+        },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
     lastMessage: { type: String, default: "" },
     lastMessageAt: { type: Date, default: null },
     lastMessageSenderId: {

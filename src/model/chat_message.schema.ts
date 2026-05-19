@@ -34,6 +34,13 @@ const chatMessageSchema: Schema = new Schema(
     },
     deliveredAt: { type: Date, default: null },
     readAt: { type: Date, default: null },
+    replyToMessageId: {
+      type: Schema.Types.ObjectId,
+      ref: Tables.chat_message,
+      default: null,
+    },
+    editedAt: { type: Date, default: null },
+    deletedForAll: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
