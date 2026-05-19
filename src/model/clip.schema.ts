@@ -29,6 +29,24 @@ const clipSchema: Schema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "user",
     },
+    shared_from_user_id: {
+      type: Schema.Types.ObjectId,
+      ref: "user",
+      default: null,
+    },
+    shared_at: {
+      type: Date,
+      default: null,
+    },
+    source_clip_id: {
+      type: Schema.Types.ObjectId,
+      ref: Tables.clip,
+      default: null,
+    },
+    file_size_bytes: {
+      type: Number,
+      default: 0,
+    },
     user_type: {
       type: String,
       enum: ["Trainer", "Trainee", "Admin"],

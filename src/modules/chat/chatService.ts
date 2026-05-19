@@ -31,12 +31,18 @@ export class ChatService {
     });
   }
 
-  public async getConversations(userId: string): Promise<ResponseBuilder> {
+  public async getConversations(
+    userId: string,
+    archivedOnly = false
+  ): Promise<ResponseBuilder> {
     try {
-      const conversations = await ChatConversation.find({
-        participants: userId,
-        archivedBy: { $nin: [userId] },
-      })
+      const filter: Record<string, unknown> = { participants: userId };
+      if (archivedOnly) {
+        filter.archivedBy = userId;
+      } else {
+        filter.archivedBy = { $nin: [userId] };
+      }
+      const conversations = await ChatConversation.find(filter)
         .populate("participants", "fullname profile_picture email account_type")
         .sort({ lastMessageAt: -1 })
         .lean();
@@ -355,6 +361,28 @@ export class ChatService {
           conversationId: String(msg.conversationId),
         });
       }
+      const rb = new ResponseBuilder();
+      rb.code = 200;
+      rb.result = { ok: true };
+      return rb;
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  public async unarchiveConversation(
+    userId: string,
+    conversationId: string
+  ): Promise<ResponseBuilder> {
+    try {
+      const conv = await ChatConversation.findOne({
+        _id: conversationId,
+        participants: userId,
+      });
+      if (!conv) return ResponseBuilder.badRequest("Conversation not found.");
+      const archived: any[] = (conv as any).archivedBy ?? [];
+      (conv as any).archivedBy = archived.filter((id) => String(id) !== String(userId));
+      await conv.save();
       const rb = new ResponseBuilder();
       rb.code = 200;
       rb.result = { ok: true };

@@ -27,6 +27,7 @@ import user from "../../model/user.schema";
 import { AccountType } from "../auth/authEnum";
 import { s3, S3_BUCKET } from "../../Utils/s3Client";
 import { recordUserActivity, UserActivityEvent } from "../../helpers/userActivity";
+import { storageService } from "../storage/storageService";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -211,10 +212,9 @@ export class commonService {
         // Object to track users who need emails and their thumbnails with titles
         const usersToEmail: Record<string, { thumbnails: { url: string, title: string }[], isNewUser: boolean }> = {};
 
-        // Enforce role-based restrictions for uploads-to-others (friends sharing flow):
-        // - Trainee can upload only to trainee
-        // - Trainer can upload only to trainee
-        if (shareOptions?.type === shareWithConstants.myFriends) {
+        const sharingWithFriends = shareOptions?.type === shareWithConstants.myFriends;
+        let uploaderFriendSet: Set<string> | null = null;
+        if (sharingWithFriends) {
           const uploaderType = req?.authUser?.account_type;
           if (![AccountType.TRAINER, AccountType.TRAINEE].includes(uploaderType)) {
             return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
@@ -222,27 +222,29 @@ export class commonService {
               message: "Only trainer or trainee accounts can share clips to friends.",
             });
           }
-
-          const targetUsers = await user.find(
-            { _id: { $in: processedUserIds } },
-            { _id: 1, account_type: 1 }
-          );
-
-          if (targetUsers.length !== processedUserIds.length) {
+          const uploaderDoc: any = await user.findById(req.authUser._id).select("friends").lean();
+          uploaderFriendSet = new Set((uploaderDoc?.friends ?? []).map((id: any) => String(id)));
+          const notFriends = processedUserIds.filter((id) => !uploaderFriendSet!.has(String(id)));
+          if (notFriends.length) {
             return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
               success: 0,
-              message: "One or more selected users were not found.",
+              message: "You can only share clips with friends on your friends list.",
             });
           }
+        }
 
-          const hasInvalidTarget = targetUsers.some(
-            (targetUser: any) => targetUser?.account_type !== AccountType.TRAINEE
-          );
-
-          if (hasInvalidTarget) {
+        const totalUploadBytes = (req.body.clips as any[]).reduce(
+          (sum, c) => sum + Number(c.fileSizeBytes ?? c.file_size_bytes ?? 0),
+          0
+        );
+        for (const uid of processedUserIds) {
+          const quota = await storageService.assertQuota(String(uid), totalUploadBytes);
+          if (!quota.ok) {
             return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
               success: 0,
-              message: "You can upload clips only to trainee accounts.",
+              message: quota.message,
+              usedBytes: quota.usedBytes,
+              quotaBytes: quota.quotaBytes,
             });
           }
         }
@@ -263,8 +265,22 @@ export class commonService {
 
           // Save clips for all users
           const savedClips = [];
+          const sharerId = req.authUser._id;
+          const estimatedBytes = Number(clipData.fileSizeBytes ?? clipData.file_size_bytes ?? 0);
           for (const userId of processedUserIds) {
-            const clipObj = new clip({ ...clipPayload, user_id: userId });
+            const isRecipientCopy =
+              sharingWithFriends && String(userId) !== String(sharerId);
+            const clipObj = new clip({
+              ...clipPayload,
+              user_id: userId,
+              file_size_bytes: estimatedBytes,
+              ...(isRecipientCopy
+                ? {
+                    shared_from_user_id: sharerId,
+                    shared_at: new Date(),
+                  }
+                : {}),
+            });
             await clipObj.save();
             void recordUserActivity(String(userId), UserActivityEvent.CLIP_CREATED, {
               clipId: String(clipObj._id),
@@ -488,13 +504,20 @@ export class commonService {
     try {
       const trainee_id = req.body.trainee_id ?? null;
 
+      const ownerId = new mongoose.Types.ObjectId(trainee_id ?? req?.authUser?._id);
       var clips = await clip.aggregate([
         {
           $match: {
-            user_id: {
-              $in: [new mongoose.Types.ObjectId(trainee_id ?? req?.authUser?._id)]
-            },
-            $or: [{ status: true }, { status: { $exists: false } }],
+            user_id: { $in: [ownerId] },
+            $and: [
+              { $or: [{ status: true }, { status: { $exists: false } }] },
+              {
+                $or: [
+                  { shared_from_user_id: null },
+                  { shared_from_user_id: { $exists: false } },
+                ],
+              },
+            ],
           },
         },
         {
@@ -507,6 +530,43 @@ export class commonService {
         },
       ]);
 
+      return res.status(CONSTANCE.RES_CODE.success).json({ data: clips });
+    } catch (error) {
+      res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
+        success: 0,
+        message: Message.internal,
+      });
+    }
+  }
+
+  public async getSharedClips(req: any, res: Response) {
+    try {
+      const userId = new mongoose.Types.ObjectId(req?.authUser?._id);
+      const clips = await clip.aggregate([
+        {
+          $match: {
+            user_id: userId,
+            shared_from_user_id: { $ne: null, $exists: true },
+            $or: [{ status: true }, { status: { $exists: false } }],
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "shared_from_user_id",
+            foreignField: "_id",
+            as: "sharer",
+            pipeline: [{ $project: { fullname: 1, profile_picture: 1 } }],
+          },
+        },
+        { $unwind: { path: "$sharer", preserveNullAndEmptyArrays: true } },
+        {
+          $group: {
+            _id: "$category",
+            clips: { $push: "$$ROOT" },
+          },
+        },
+      ]);
       return res.status(CONSTANCE.RES_CODE.success).json({ data: clips });
     } catch (error) {
       res.status(CONSTANCE.RES_CODE.error.internalServerError).json({

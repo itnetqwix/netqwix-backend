@@ -8,8 +8,12 @@ export class ChatController {
 
   public getConversations = async (req: Request, res: Response) => {
     try {
+      const archivedOnly =
+        String(req.query.archived ?? "").toLowerCase() === "true" ||
+        String(req.query.archived ?? "") === "1";
       const result = await this.chatService.getConversations(
-        req["authUser"]["_id"]
+        req["authUser"]["_id"],
+        archivedOnly
       );
       return res
         .status(result.code)
@@ -97,6 +101,19 @@ export class ChatController {
     try {
       const { conversationId } = req.body;
       const result = await this.chatService.archiveConversation(
+        req["authUser"]["_id"],
+        conversationId
+      );
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public unarchiveConversation = async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.body;
+      const result = await this.chatService.unarchiveConversation(
         req["authUser"]["_id"],
         conversationId
       );

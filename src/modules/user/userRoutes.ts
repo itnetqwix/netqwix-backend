@@ -5,6 +5,7 @@ import { signUpModel, updateBookedStatusModal, updateRatings } from "./userValid
 import { IsValidMongoId } from "../../middleware/isValidToken.middleware";
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
 import { userMiddleware } from './userMiddleware';
+import { storageController } from "../storage/storageController";
 
 const isValidMongoMiddleware = new IsValidMongoId();
 const route: Router = Router();
@@ -55,6 +56,9 @@ route.get(
   "/me",
   userC.getMe
 );
+
+route.get("/storage", storageController.getStorage);
+route.post("/storage/checkout", storageController.createCheckout);
 
 route.put("/me/chat-public-key", userC.setChatPublicKey);
 route.get(

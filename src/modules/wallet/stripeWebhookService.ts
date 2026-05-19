@@ -1,6 +1,7 @@
 import stripe_webhook_events from "../../model/stripe_webhook_events.schema";
 import { topUpService } from "./topUpService";
 import { escrowService } from "./escrowService";
+import { storageService } from "../storage/storageService";
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
@@ -44,6 +45,8 @@ export class StripeWebhookService {
         const kind = pi.metadata?.kind;
         if (kind === "wallet_topup") {
           await topUpService.completeTopUpFromWebhook(pi.id, event.id);
+        } else if (kind === "storage_one_time") {
+          await storageService.handlePaymentIntentSucceeded(pi);
         } else if (
           kind === "session_extension" ||
           kind === "session_booking" ||
@@ -66,6 +69,13 @@ export class StripeWebhookService {
             });
           }
         }
+      }
+
+      if (
+        event.type === "customer.subscription.updated" ||
+        event.type === "customer.subscription.deleted"
+      ) {
+        await storageService.handleSubscriptionUpdated(event.data.object);
       }
 
       await stripe_webhook_events.updateOne(

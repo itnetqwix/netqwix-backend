@@ -102,6 +102,28 @@ const userSchema: Schema = new Schema(
       type: String,
       default: "en",
     },
+    storage_plan: {
+      type: String,
+      enum: ["free", "plus_5gb", "pro_10gb", "max_25gb"],
+      default: "free",
+    },
+    storage_quota_bytes: {
+      type: Number,
+      default: 2 * 1024 * 1024 * 1024,
+    },
+    storage_used_bytes: {
+      type: Number,
+      default: 0,
+    },
+    storage_stripe_subscription_id: {
+      type: String,
+      default: null,
+    },
+    storage_billing_interval: {
+      type: String,
+      enum: ["monthly", "yearly", "one_time", null],
+      default: null,
+    },
     status: {
       type: String,
       enum: ["pending", "approved", "rejected"],
