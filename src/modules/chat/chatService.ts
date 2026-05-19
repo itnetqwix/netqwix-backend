@@ -1,11 +1,36 @@
 import ChatConversation from "../../model/chat_conversation.schema";
 import ChatMessage from "../../model/chat_message.schema";
+import user from "../../model/user.schema";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { checkChatPolicy, getChatPolicyInfo } from "./chatPolicy";
 import { EVENTS } from "../../config/constance";
 import { getIo, isUserOnline } from "../socket/socket.service";
 
 export class ChatService {
+  private async assertAllFriends(
+    userId: string,
+    otherIds: string[]
+  ): Promise<string | null> {
+    if (!otherIds.length) return null;
+    const doc: any = await user.findById(userId).select("friends").lean();
+    if (!doc) return "User not found.";
+    const friendSet = new Set((doc.friends ?? []).map((id: any) => String(id)));
+    const notFriend = otherIds.find((id) => !friendSet.has(String(id)));
+    if (notFriend) return "You can only add friends to a group.";
+    return null;
+  }
+
+  private async getGroupForParticipant(
+    conversationId: string,
+    userId: string
+  ): Promise<any | null> {
+    return ChatConversation.findOne({
+      _id: conversationId,
+      isGroup: true,
+      participants: userId,
+    });
+  }
+
   public async getConversations(userId: string): Promise<ResponseBuilder> {
     try {
       const conversations = await ChatConversation.find({
@@ -18,11 +43,17 @@ export class ChatService {
 
       const withUnread = await Promise.all(
         conversations.map(async (c: any) => {
-          const unreadCount = await ChatMessage.countDocuments({
-            conversationId: c._id,
-            receiverId: userId,
-            isRead: false,
-          });
+          const unreadCount = c.isGroup
+            ? await ChatMessage.countDocuments({
+                conversationId: c._id,
+                senderId: { $ne: userId },
+                isRead: false,
+              })
+            : await ChatMessage.countDocuments({
+                conversationId: c._id,
+                receiverId: userId,
+                isRead: false,
+              });
           const participants = (c.participants ?? []).map((p: any) => {
             const pid = String(p?._id ?? p);
             return {
@@ -64,13 +95,21 @@ export class ChatService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
+        .populate("senderId", "fullname profile_picture")
         .lean();
 
       const now = new Date();
-      await ChatMessage.updateMany(
-        { conversationId, receiverId: userId, isRead: false },
-        { isRead: true, status: "read", readAt: now }
-      );
+      if (conversation.isGroup) {
+        await ChatMessage.updateMany(
+          { conversationId, senderId: { $ne: userId }, isRead: false },
+          { isRead: true, status: "read", readAt: now }
+        );
+      } else {
+        await ChatMessage.updateMany(
+          { conversationId, receiverId: userId, isRead: false },
+          { isRead: true, status: "read", readAt: now }
+        );
+      }
 
       const rb = new ResponseBuilder();
       rb.code = 200;
@@ -409,6 +448,8 @@ export class ChatService {
       if (uniqueOthers.length < 2) {
         return ResponseBuilder.badRequest("A group needs at least 2 friends to invite.");
       }
+      const friendErr = await this.assertAllFriends(creatorId, uniqueOthers);
+      if (friendErr) return ResponseBuilder.badRequest(friendErr);
       const conversation = await ChatConversation.create({
         participants: [creatorId],
         isGroup: true,
@@ -485,6 +526,245 @@ export class ChatService {
       const rb = new ResponseBuilder();
       rb.code = 200;
       rb.result = conv;
+      return rb;
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  public async getGroupDetail(
+    conversationId: string,
+    userId: string
+  ): Promise<ResponseBuilder> {
+    try {
+      const conv: any = await ChatConversation.findOne({
+        _id: conversationId,
+        isGroup: true,
+        participants: userId,
+      })
+        .populate("participants", "fullname profile_picture email account_type")
+        .lean();
+      if (!conv) return ResponseBuilder.badRequest("Group not found.");
+      const rb = new ResponseBuilder();
+      rb.code = 200;
+      rb.result = {
+        ...conv,
+        isAdmin: String(conv.groupAdmin) === String(userId),
+      };
+      return rb;
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  public async getGroupMembers(
+    conversationId: string,
+    userId: string,
+    search = "",
+    page = 1,
+    limit = 50
+  ): Promise<ResponseBuilder> {
+    try {
+      const conv: any = await this.getGroupForParticipant(conversationId, userId);
+      if (!conv) return ResponseBuilder.badRequest("Group not found.");
+      const populated = await ChatConversation.findById(conversationId)
+        .populate("participants", "fullname profile_picture email account_type")
+        .lean();
+      let members = (populated?.participants ?? []).map((p: any) => ({
+        ...p,
+        isAdmin: String(populated?.groupAdmin) === String(p?._id ?? p),
+      }));
+      const q = search.trim().toLowerCase();
+      if (q) {
+        members = members.filter((m: any) =>
+          String(m?.fullname ?? "").toLowerCase().includes(q)
+        );
+      }
+      const skip = (page - 1) * limit;
+      const paged = members.slice(skip, skip + limit);
+      const rb = new ResponseBuilder();
+      rb.code = 200;
+      rb.result = {
+        members: paged,
+        total: members.length,
+        groupAdmin: populated?.groupAdmin,
+        groupName: populated?.groupName,
+        groupDescription: populated?.groupDescription ?? "",
+        groupAvatar: populated?.groupAvatar,
+        pendingInvites: populated?.pendingInvites ?? [],
+      };
+      return rb;
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  public async inviteToGroup(
+    conversationId: string,
+    userId: string,
+    participantIds: string[]
+  ): Promise<ResponseBuilder> {
+    try {
+      const conv: any = await this.getGroupForParticipant(conversationId, userId);
+      if (!conv) return ResponseBuilder.badRequest("Group not found.");
+      const uniqueOthers = Array.from(
+        new Set(participantIds.map(String).filter((id) => id !== String(userId)))
+      );
+      if (!uniqueOthers.length) {
+        return ResponseBuilder.badRequest("Select at least one friend to invite.");
+      }
+      const friendErr = await this.assertAllFriends(userId, uniqueOthers);
+      if (friendErr) return ResponseBuilder.badRequest(friendErr);
+      const invites: any[] = conv.pendingInvites ?? [];
+      const participantSet = new Set(
+        (conv.participants ?? []).map((p: any) => String(p))
+      );
+      for (const uid of uniqueOthers) {
+        if (participantSet.has(uid)) continue;
+        const existing = invites.find(
+          (i) => String(i.userId) === uid && i.status === "pending"
+        );
+        if (!existing) {
+          invites.push({
+            userId: uid,
+            invitedBy: userId,
+            status: "pending",
+            createdAt: new Date(),
+          });
+        }
+      }
+      conv.pendingInvites = invites;
+      await conv.save();
+      const populated = await ChatConversation.findById(conversationId).populate(
+        "participants",
+        "fullname profile_picture email account_type"
+      );
+      const rb = new ResponseBuilder();
+      rb.code = 200;
+      rb.result = populated;
+      return rb;
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  public async removeGroupMember(
+    conversationId: string,
+    adminId: string,
+    memberId: string
+  ): Promise<ResponseBuilder> {
+    try {
+      const conv: any = await this.getGroupForParticipant(conversationId, adminId);
+      if (!conv) return ResponseBuilder.badRequest("Group not found.");
+      if (String(conv.groupAdmin) !== String(adminId)) {
+        return ResponseBuilder.badRequest("Only the group admin can remove members.");
+      }
+      if (String(memberId) === String(adminId)) {
+        return ResponseBuilder.badRequest("Use Exit group to leave as admin.");
+      }
+      conv.participants = (conv.participants ?? []).filter(
+        (p: any) => String(p) !== String(memberId)
+      );
+      conv.pendingInvites = (conv.pendingInvites ?? []).filter(
+        (i: any) => String(i.userId) !== String(memberId)
+      );
+      await conv.save();
+      const rb = new ResponseBuilder();
+      rb.code = 200;
+      rb.result = conv;
+      return rb;
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  public async exitGroup(
+    conversationId: string,
+    userId: string
+  ): Promise<ResponseBuilder> {
+    try {
+      const conv: any = await this.getGroupForParticipant(conversationId, userId);
+      if (!conv) return ResponseBuilder.badRequest("Group not found.");
+      const isAdmin = String(conv.groupAdmin) === String(userId);
+      const others = (conv.participants ?? []).filter(
+        (p: any) => String(p) !== String(userId)
+      );
+      if (isAdmin && others.length > 0) {
+        conv.groupAdmin = others[0];
+      }
+      conv.participants = others;
+      conv.pendingInvites = (conv.pendingInvites ?? []).filter(
+        (i: any) => String(i.userId) !== String(userId)
+      );
+      if (!conv.participants.length) {
+        await ChatMessage.deleteMany({ conversationId });
+        await ChatConversation.findByIdAndDelete(conversationId);
+        const rb = new ResponseBuilder();
+        rb.code = 200;
+        rb.result = { deleted: true };
+        return rb;
+      }
+      await conv.save();
+      const rb = new ResponseBuilder();
+      rb.code = 200;
+      rb.result = { deleted: false, conversation: conv };
+      return rb;
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  public async updateGroup(
+    conversationId: string,
+    userId: string,
+    patch: { groupName?: string; groupDescription?: string; groupAvatar?: string | null }
+  ): Promise<ResponseBuilder> {
+    try {
+      const conv: any = await ChatConversation.findOne({
+        _id: conversationId,
+        isGroup: true,
+        participants: userId,
+      });
+      if (!conv) return ResponseBuilder.badRequest("Group not found.");
+      if (String(conv.groupAdmin) !== String(userId)) {
+        return ResponseBuilder.badRequest("Only the group admin can update group info.");
+      }
+      if (patch.groupName?.trim()) conv.groupName = patch.groupName.trim();
+      if (patch.groupDescription !== undefined) {
+        conv.groupDescription = patch.groupDescription;
+      }
+      if (patch.groupAvatar !== undefined) conv.groupAvatar = patch.groupAvatar;
+      await conv.save();
+      const populated = await ChatConversation.findById(conversationId)
+        .populate("participants", "fullname profile_picture email account_type")
+        .lean();
+      const rb = new ResponseBuilder();
+      rb.code = 200;
+      rb.result = populated;
+      return rb;
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  public async deleteGroup(
+    conversationId: string,
+    adminId: string
+  ): Promise<ResponseBuilder> {
+    try {
+      const conv: any = await ChatConversation.findOne({
+        _id: conversationId,
+        isGroup: true,
+      });
+      if (!conv) return ResponseBuilder.badRequest("Group not found.");
+      if (String(conv.groupAdmin) !== String(adminId)) {
+        return ResponseBuilder.badRequest("Only the group admin can delete this group.");
+      }
+      await ChatMessage.deleteMany({ conversationId });
+      await ChatConversation.findByIdAndDelete(conversationId);
+      const rb = new ResponseBuilder();
+      rb.code = 200;
+      rb.result = { ok: true };
       return rb;
     } catch (err) {
       return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");

@@ -70,6 +70,13 @@ route.post("/chat-delete-conversation", chatC.deleteConversation);
 route.post("/chat-clear", chatC.clearConversation);
 route.get("/chat-group-invites", chatC.getGroupInvites);
 route.post("/chat-group-invite-respond", chatC.respondGroupInvite);
+route.get("/chat-group/:conversationId", chatC.getGroupDetail);
+route.get("/chat-group/:conversationId/members", chatC.getGroupMembers);
+route.post("/chat-group/:conversationId/invite", chatC.inviteToGroup);
+route.post("/chat-group/:conversationId/remove-member", chatC.removeGroupMember);
+route.post("/chat-group/:conversationId/exit", chatC.exitGroup);
+route.post("/chat-group/:conversationId/delete", chatC.deleteGroup);
+route.post("/chat-group/:conversationId/update", chatC.updateGroup);
 route.get("/chat-policy", chatC.getChatPolicy);
 route.get("/chat-flagged", (req, res, next) => {
   const { assertAdminUser } = require("../admin/adminPermission");

@@ -240,6 +240,115 @@ export class ChatController {
     }
   };
 
+  public getGroupDetail = async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.params;
+      const result = await this.chatService.getGroupDetail(
+        conversationId,
+        req["authUser"]["_id"]
+      );
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public getGroupMembers = async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.params;
+      const search = String(req.query.search ?? "");
+      const page = Number(req.query.page) || 1;
+      const limit = Math.min(Number(req.query.limit) || 50, 100);
+      const result = await this.chatService.getGroupMembers(
+        conversationId,
+        req["authUser"]["_id"],
+        search,
+        page,
+        limit
+      );
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public inviteToGroup = async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.params;
+      const { participantIds } = req.body;
+      if (!Array.isArray(participantIds) || !participantIds.length) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "participantIds required" });
+      }
+      const result = await this.chatService.inviteToGroup(
+        conversationId,
+        req["authUser"]["_id"],
+        participantIds
+      );
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public removeGroupMember = async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.params;
+      const { memberId } = req.body;
+      if (!memberId) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "memberId required" });
+      }
+      const result = await this.chatService.removeGroupMember(
+        conversationId,
+        req["authUser"]["_id"],
+        memberId
+      );
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public exitGroup = async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.params;
+      const result = await this.chatService.exitGroup(
+        conversationId,
+        req["authUser"]["_id"]
+      );
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public updateGroup = async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.params;
+      const { groupName, groupDescription, groupAvatar } = req.body;
+      const result = await this.chatService.updateGroup(
+        conversationId,
+        req["authUser"]["_id"],
+        { groupName, groupDescription, groupAvatar }
+      );
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public deleteGroup = async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.params;
+      const result = await this.chatService.deleteGroup(
+        conversationId,
+        req["authUser"]["_id"]
+      );
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
   public getOrCreateConversation = async (req: Request, res: Response) => {
     try {
       const participantId = req.body.otherUserId || req.body.participantId;
