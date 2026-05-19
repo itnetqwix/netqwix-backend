@@ -52,8 +52,18 @@ webpush.setVapidDetails(
 let activeUsers: Record<string, any> = {};
 let ioInstance: any = null; // Store io instance for emitting events from services
 
+/**
+ * True when the user has an active Socket.IO session on this server.
+ * Uses in-memory presence first, then MemCache + live socket (covers reconnect races).
+ */
 export function isUserOnline(userId: string): boolean {
-  return !!activeUsers[String(userId)];
+  const uid = String(userId);
+  if (activeUsers[uid]) return true;
+  if (!ioInstance || !process.env.SOCKET_CONFIG) return false;
+  const socketId = MemCache.getDetail(process.env.SOCKET_CONFIG, uid);
+  if (!socketId) return false;
+  const sock = ioInstance.sockets?.sockets?.get(String(socketId));
+  return !!sock?.connected;
 }
 
 export function getActiveUserIds(): string[] {
@@ -73,15 +83,29 @@ function broadcastUserStatus(userId: string, status: "online" | "offline") {
 
 export async function removeUserFromActivePresence(userId: string) {
   const uid = String(userId);
-  if (!activeUsers[uid]) return;
-
+  const wasInMemory = !!activeUsers[uid];
   const wasTrainer =
+    wasInMemory &&
     String(activeUsers[uid]?.account_type || "").trim().toLowerCase() === "trainer";
-  delete activeUsers[uid];
+
+  if (wasInMemory) {
+    delete activeUsers[uid];
+  }
 
   user.findByIdAndUpdate(uid, { lastSeen: new Date() }).catch(() => {});
 
-  if (wasTrainer) {
+  // Always clear DB row for trainers so `/user/all-online-user` does not show stale coaches.
+  let trainerRole = wasTrainer;
+  if (!wasInMemory) {
+    try {
+      const doc = await user.findById(uid).select("account_type").lean();
+      trainerRole =
+        String((doc as any)?.account_type || "").trim().toLowerCase() === "trainer";
+    } catch {
+      trainerRole = false;
+    }
+  }
+  if (trainerRole) {
     try {
       await onlineUser.deleteOne({ trainer_id: uid });
     } catch (error) {
@@ -89,7 +113,9 @@ export async function removeUserFromActivePresence(userId: string) {
     }
   }
 
-  broadcastUserStatus(uid, "offline");
+  if (wasInMemory) {
+    broadcastUserStatus(uid, "offline");
+  }
 }
 
 export async function applyAvailabilityForConnectedUser(userId: string) {
@@ -540,38 +566,6 @@ async function updateUserActivity(socket) {
       userId,
     });
 
-    socket.on("disconnect", async () => {
-      if (!activeUsers[userId]) return;
-
-      const wasTrainer =
-        String(activeUsers[userId]?.account_type || "").trim().toLowerCase() === "trainer";
-
-      delete activeUsers[userId];
-
-      user.findByIdAndUpdate(userId, { lastSeen: new Date() }).catch(() => {});
-
-      socket.broadcast.emit("userStatus", {
-        user: activeUsers,
-        status: "offline",
-        userId,
-      });
-
-      if (wasTrainer) {
-        try {
-          await onlineUser.updateOne(
-            { trainer_id: userId },
-            { $set: { last_activity_time: new Date() } },
-            { upsert: true }
-          );
-        } catch (error) {
-          console.error("Error updating last_activity_time on disconnect:", error);
-        }
-      }
-
-      // Lesson leave / timer pause / PARTICIPANT_LEFT are handled in handleSocketEvents
-      // with a reconnect grace period (see finalizeLessonParticipantDisconnect).
-    });
-
     // Listen for any event to update the user's last activity time
     socket.on("userInteraction", () => {
       if (activeUsers[userId]) {
@@ -590,9 +584,16 @@ const HEARTBEAT_TIMEOUT_MS = 30000;
 
 export const handleSocketEvents = (socket, connections = {}) => {
   const socketId = socket.id;
-  
+  const presenceUserId = socketAttachedUserId(socket);
+
   // Initialize heartbeat tracking for this socket
   socketHeartbeats.set(socketId, Date.now());
+
+  if (presenceUserId) {
+    socket.on("disconnect", async () => {
+      await removeUserFromActivePresence(presenceUserId);
+    });
+  }
 
   // Cleanup heartbeat tracking on disconnect
   socket.on("disconnect", () => {
@@ -639,6 +640,9 @@ export const handleSocketEvents = (socket, connections = {}) => {
     socketHeartbeats.set(socketId, Date.now());
     const uid = socketAttachedUserId(socket);
     if (uid) void touchUserPresence(uid);
+    if (uid && !activeUsers[uid]) {
+      void updateUserActivity(socket);
+    }
     const au = activeUsers[uid];
     if (au && String(au.account_type || "").trim().toLowerCase() === "trainer") {
       const now = Date.now();

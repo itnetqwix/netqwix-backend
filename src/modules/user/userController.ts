@@ -1158,9 +1158,10 @@ export class userController {
               instant_eligible_30 = e30.eligible;
               if (!e15.eligible) instant_ineligible_reasons = e15.reasons;
             }
+            const live = isUserOnline(trainerId);
             return {
               ...row,
-              is_online: isUserOnline(trainerId),
+              is_online: live,
               in_availability_now: inAvail.ok,
               trainer_timezone: tz,
               instant_eligible_15,
@@ -1169,7 +1170,8 @@ export class userController {
             };
           })
         );
-        res.status(result.code).json({ ...result, result: enriched });
+        const liveOnly = enriched.filter((row: any) => row?.is_online === true);
+        res.status(result.code).json({ ...result, result: liveOnly });
       } else {
         res.status(result.code).json({
           status: result.status,

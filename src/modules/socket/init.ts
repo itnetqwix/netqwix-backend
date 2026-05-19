@@ -1,6 +1,10 @@
 import type { Server } from "socket.io";
 import { log } from "../../../logger";
-import { handleSocketEvents, setIoInstance } from "./socket.service";
+import {
+  applyAvailabilityForConnectedUser,
+  handleSocketEvents,
+  setIoInstance,
+} from "./socket.service";
 import { EVENTS } from "../../config/constance";
 import { AuthMiddleware } from "../auth/authMiddleware";
 import { MemCache } from "../../Utils/memCache";
@@ -166,7 +170,8 @@ export class SocketInit {
         
         // Handle socket events
         handleSocketEvents(socket);
-        
+        void applyAvailabilityForConnectedUser(userId);
+
         // Handle disconnect event
         onDisconnect(socket, io);
         
