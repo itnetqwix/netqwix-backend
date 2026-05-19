@@ -1186,11 +1186,25 @@ export const handleSocketEvents = (socket, connections = {}) => {
     scheduleLessonEnd(socket, roomName, session);
   });
 
-  // socket.on(EVENTS.VIDEO_CALL.ON_ANSWER, (data) => {
-  //     // Broadcast the answer to the other connected peers
-  //     console.log(`on answer --- `, data);
-  //     socket.broadcast.emit('answer', data);
-  // });
+  socket.on(EVENTS.VIDEO_CALL.ON_ANSWER, ({ answer, userInfo }) => {
+    const toUserId = MemCache.getDetail(
+      process.env.SOCKET_CONFIG,
+      userInfo?.to_user
+    );
+    console.log("[VideoCall:ON_ANSWER]", {
+      from_user: userInfo?.from_user,
+      to_user: userInfo?.to_user,
+      toUserSocketMapped: !!toUserId,
+    });
+    if (!toUserId) {
+      console.warn("[VideoCall:ON_ANSWER] Target socket missing", {
+        from_user: userInfo?.from_user,
+        to_user: userInfo?.to_user,
+      });
+      return;
+    }
+    socket.to(toUserId).emit("answer", answer);
+  });
 
   socket.on(EVENTS.VIDEO_CALL.ON_ICE_CANDIDATE, (data) => {
     const { userInfo } = data;
