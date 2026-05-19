@@ -89,6 +89,7 @@ export class EVENTS {
   public static readonly TOGGLE_FULL_SCREEN = "TOGGLE_FULL_SCREEN";
   public static readonly TOGGLE_LOCK_MODE = "TOGGLE_LOCK_MODE";
   public static readonly ON_VIDEO_ZOOM_PAN = "ON_VIDEO_ZOOM_PAN";
+  public static readonly MEETING_TILE_LAYOUT = "MEETING_TILE_LAYOUT";
   public static readonly ON_VIDEO_PLAY_PAUSE = "ON_VIDEO_PLAY_PAUSE";
   public static readonly ON_VIDEO_TIME = "ON_VIDEO_TIME";
   public static readonly VIDEO_CALL = {

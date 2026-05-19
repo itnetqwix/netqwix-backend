@@ -1128,10 +1128,12 @@ export const handleSocketEvents = (socket, connections = {}) => {
       socket.emit("LESSON_TIMER_ERROR", { message: "Both participants must be connected before starting timer." });
       return;
     }
+    // Idempotent: instant lessons auto-start via maybeAutoStartLessonTimer; manual request is a no-op when running.
     if (session.status === "running") return;
 
     const roomName = `session:${sessionId}`;
-    startLessonTimerInRoom(socket, roomName, session, "trainer_manual_start");
+    const reason = session.isInstant ? "instant_trainer_start_request" : "trainer_manual_start";
+    startLessonTimerInRoom(socket, roomName, session, reason);
   });
 
   socket.on("LESSON_TIMER_PAUSE_REQUEST", ({ sessionId }) => {
@@ -1306,7 +1308,8 @@ export const handleSocketEvents = (socket, connections = {}) => {
   stopDrawEvent(socket);
   listenShowVideoEvent(socket);
   listenCallEndEvent(socket);
-  listenVideoPositionEvent(socket)
+  listenVideoPositionEvent(socket);
+  listenMeetingTileLayoutEvent(socket);
   listenPlayPauseVideoEvent(socket);
   listenVideoTimeEvent(socket);
   listenVideoShowEvent(socket);
@@ -2431,6 +2434,29 @@ const listenVideoPositionEvent = (socket) => {
     });
   } catch (err) {
     console.error(`Error while listening to video position event:`, err);
+    throw err;
+  }
+};
+
+const listenMeetingTileLayoutEvent = (socket) => {
+  try {
+    socket.on(EVENTS.MEETING_TILE_LAYOUT, async (socketReq) => {
+      const { userInfo, sessionId } = socketReq || {};
+      if (sessionId && mongoose.isValidObjectId(sessionId)) {
+        const roomName = `session:${sessionId}`;
+        socket.to(roomName).emit(EVENTS.MEETING_TILE_LAYOUT, socketReq);
+      } else {
+        const toUserSocketId = MemCache.getDetail(
+          process.env.SOCKET_CONFIG,
+          userInfo?.to_user
+        );
+        if (toUserSocketId) {
+          socket.to(toUserSocketId).emit(EVENTS.MEETING_TILE_LAYOUT, socketReq);
+        }
+      }
+    });
+  } catch (err) {
+    console.error(`Error while listening to meeting tile layout:`, err);
     throw err;
   }
 };
