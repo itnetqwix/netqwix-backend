@@ -1951,12 +1951,26 @@ const listenBookingEvents = (socket) => {
 // Chat Event Handlers
 const listenChatEvents = (socket) => {
   const ChatMessage = require("../../model/chat_message.schema").default;
+  const ChatConversation = require("../../model/chat_conversation.schema").default;
+
+  const getChatUserId = () => socketAttachedUserId(socket);
+
+  const getConversationForSocketUser = async (conversationId: any) => {
+    const userId = getChatUserId();
+    if (!userId || !mongoose.isValidObjectId(conversationId)) return null;
+    return ChatConversation.findOne({
+      _id: conversationId,
+      participants: userId,
+    }).lean();
+  };
 
   try {
-    socket.on(EVENTS.CHAT.JOIN, (payload: any) => {
+    socket.on(EVENTS.CHAT.JOIN, async (payload: any) => {
       try {
         const { conversationId } = payload || {};
         if (!conversationId) return;
+        const conversation = await getConversationForSocketUser(conversationId);
+        if (!conversation) return;
         socket.join(`chat:${conversationId}`);
       } catch (_err) {
         /* intentionally quiet */
@@ -1977,6 +1991,10 @@ const listenChatEvents = (socket) => {
       try {
         const { conversationId, receiverId, senderId, _id } = payload || {};
         if (!conversationId) return;
+        const userId = getChatUserId();
+        if (!userId || String(senderId || "") !== userId) return;
+        const conversation = await getConversationForSocketUser(conversationId);
+        if (!conversation) return;
 
         socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.MESSAGE, payload);
 
@@ -2010,6 +2028,8 @@ const listenChatEvents = (socket) => {
       try {
         const { messageIds, conversationId } = payload || {};
         if (!messageIds?.length || !conversationId) return;
+        const conversation = await getConversationForSocketUser(conversationId);
+        if (!conversation) return;
         const validIds = messageIds.filter((id: string) => mongoose.isValidObjectId(id));
         if (validIds.length) {
           await ChatMessage.updateMany(
@@ -2028,16 +2048,24 @@ const listenChatEvents = (socket) => {
 
     socket.on(EVENTS.CHAT.READ, async (payload: any) => {
       try {
-        const { conversationId, readerId } = payload || {};
+        const { conversationId } = payload || {};
         if (!conversationId) return;
+        const readerId = getChatUserId();
+        if (!readerId) return;
+        const conversation = await getConversationForSocketUser(conversationId);
+        if (!conversation) return;
         const now = new Date();
-        await ChatMessage.updateMany(
-          { conversationId, receiverId: readerId || socket?.user?._doc?._id, isRead: false },
-          { isRead: true, status: "read", readAt: now }
-        );
+        const readFilter = conversation.isGroup
+          ? { conversationId, senderId: { $ne: readerId }, isRead: false }
+          : { conversationId, receiverId: readerId, isRead: false };
+        await ChatMessage.updateMany(readFilter, {
+          isRead: true,
+          status: "read",
+          readAt: now,
+        });
         socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.READ, {
           conversationId,
-          readerId: readerId || String(socket?.user?._doc?._id),
+          readerId,
           readAt: now.toISOString(),
         });
       } catch (_err) {
@@ -2045,20 +2073,26 @@ const listenChatEvents = (socket) => {
       }
     });
 
-    socket.on(EVENTS.CHAT.TYPING, (payload: any) => {
+    socket.on(EVENTS.CHAT.TYPING, async (payload: any) => {
       try {
         const { conversationId, userId } = payload || {};
-        if (!conversationId) return;
+        const socketUserId = getChatUserId();
+        if (!conversationId || !socketUserId || String(userId || "") !== socketUserId) return;
+        const conversation = await getConversationForSocketUser(conversationId);
+        if (!conversation) return;
         socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.TYPING, { conversationId, userId });
       } catch (_err) {
         /* intentionally quiet */
       }
     });
 
-    socket.on(EVENTS.CHAT.STOP_TYPING, (payload: any) => {
+    socket.on(EVENTS.CHAT.STOP_TYPING, async (payload: any) => {
       try {
         const { conversationId, userId } = payload || {};
-        if (!conversationId) return;
+        const socketUserId = getChatUserId();
+        if (!conversationId || !socketUserId || String(userId || "") !== socketUserId) return;
+        const conversation = await getConversationForSocketUser(conversationId);
+        if (!conversation) return;
         socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.STOP_TYPING, { conversationId, userId });
       } catch (_err) {
         /* intentionally quiet */

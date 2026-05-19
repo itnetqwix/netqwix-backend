@@ -642,13 +642,18 @@ export class commonService {
           message: "Invalid ID",
         });
       }
-      var clips = await clip.findByIdAndUpdate(id, { $set: { status: false } });
+      const ownerId = new mongoose.Types.ObjectId(req?.authUser?._id);
+      var clips = await clip.findOneAndUpdate(
+        { _id: id, user_id: ownerId },
+        { $set: { status: false } }
+      );
       if (!clips) {
         return res.status(CONSTANCE.RES_CODE.error.notFound).json({
           success: 0,
           message: Message.notFoundData,
         });
       }
+      await storageService.syncUsedBytes(String(ownerId));
       return res.status(CONSTANCE.RES_CODE.success).json({
         success: 1,
         message: "Clip deleted Successfully",
