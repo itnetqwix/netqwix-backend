@@ -39,6 +39,8 @@ import {
 } from "../../config/instantLesson";
 import { instantEligibilityService } from "./instantEligibilityService";
 
+const stripe = require("stripe")(process.env.STRIPE_SECRET);
+
 export class TraineeService {
   public log = log.getLogger();
 
@@ -479,6 +481,30 @@ export class TraineeService {
 
       const finalPrice = Number(Math.max(originalPrice - promoDiscountAmount, 0).toFixed(2));
 
+      if (finalPrice > 0) {
+        const paidViaWallet = payload.payment_method === "wallet";
+        const paidViaCard = Boolean(payload.payment_intent_id);
+        if (!paidViaWallet && !paidViaCard) {
+          return ResponseBuilder.badRequest(
+            "Payment is required before booking. Complete payment or apply a valid promo code."
+          );
+        }
+        if (paidViaCard && !paidViaWallet) {
+          try {
+            const intent = await stripe.paymentIntents.retrieve(payload.payment_intent_id);
+            if (intent.status !== "succeeded") {
+              return ResponseBuilder.badRequest("Payment has not completed.", 400);
+            }
+            const expectedMinor = Math.round(finalPrice * 100);
+            if (Number(intent.amount) < expectedMinor) {
+              return ResponseBuilder.badRequest("Payment amount does not cover this booking.", 400);
+            }
+          } catch (_paymentErr: any) {
+            return ResponseBuilder.badRequest("Unable to verify booking payment.", 400);
+          }
+        }
+      }
+
       const bookingId = new mongoose.Types.ObjectId();
       if (payload.payment_method === "wallet" && finalPrice > 0) {
         const { walletPaymentService } = require("../wallet/walletPaymentService");
@@ -616,7 +642,7 @@ export class TraineeService {
 
       try {
         const { WALLET_CONFIG } = require("../../config/wallet");
-        if (WALLET_CONFIG.escrowEnabled && finalPrice > 0) {
+        if (WALLET_CONFIG.escrowEnabled && finalPrice > 0 && payload.payment_method !== "wallet") {
           const { escrowService } = require("../wallet/escrowService");
           await escrowService.createCardEscrowRecord({
             sessionId: String(bookingData._id),
@@ -624,7 +650,7 @@ export class TraineeService {
             trainerId: String(payload.trainer_id),
             grossMinor: Math.round(finalPrice * 100),
             platformFeeMinor: 0,
-            fundingSource: payload.payment_intent_id ? "card" : "wallet",
+            fundingSource: "card",
             stripePaymentIntentId: payload.payment_intent_id,
             kind: "booking",
             idempotencyKey: `book:escrow:${bookingData._id}`,
@@ -846,7 +872,7 @@ export class TraineeService {
 
       try {
         const { WALLET_CONFIG } = require("../../config/wallet");
-        if (WALLET_CONFIG.escrowEnabled && chargingPrice > 0) {
+        if (WALLET_CONFIG.escrowEnabled && chargingPrice > 0 && payload.payment_method !== "wallet") {
           const { escrowService } = require("../wallet/escrowService");
           await escrowService.createCardEscrowRecord({
             sessionId: String(bookingData._id),
@@ -854,7 +880,7 @@ export class TraineeService {
             trainerId: String(trainer_id),
             grossMinor: Math.round(chargingPrice * 100),
             platformFeeMinor: 0,
-            fundingSource: payload.payment_intent_id ? "card" : "wallet",
+            fundingSource: "card",
             stripePaymentIntentId: payload.payment_intent_id,
             kind: "booking",
             idempotencyKey: `instant:escrow:${bookingData._id}`,

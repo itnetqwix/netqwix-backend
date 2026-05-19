@@ -47,9 +47,14 @@ export class StorageService {
       {
         $match: {
           user_id: new mongoose.Types.ObjectId(userId),
-          $or: [
-            { shared_from_user_id: null },
-            { shared_from_user_id: { $exists: false } },
+          $or: [{ status: true }, { status: { $exists: false } }],
+          $and: [
+            {
+              $or: [
+                { shared_from_user_id: null },
+                { shared_from_user_id: { $exists: false } },
+              ],
+            },
           ],
         },
       },
@@ -61,9 +66,9 @@ export class StorageService {
   }
 
   async assertQuota(userId: string, additionalBytes: number) {
-    const u: any = await user.findById(userId).select("storage_quota_bytes storage_used_bytes").lean();
+    const u: any = await user.findById(userId).select("storage_quota_bytes").lean();
     if (!u) return { ok: false, message: "User not found." };
-    const used = u.storage_used_bytes ?? 0;
+    const used = await this.syncUsedBytes(userId);
     const quota = u.storage_quota_bytes ?? STORAGE_PLANS.free.quotaBytes;
     if (used + additionalBytes > quota) {
       return {

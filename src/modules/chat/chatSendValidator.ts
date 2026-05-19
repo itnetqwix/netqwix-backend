@@ -1,5 +1,5 @@
 const MAX_TEXT_LENGTH = 8000;
-const ALLOWED_TYPES = new Set(["text", "image", "video", "audio", "file", "location"]);
+const ALLOWED_TYPES = new Set(["text", "image", "video", "audio", "file", "location", "voice"]);
 
 export function validateChatSendBody(body: Record<string, unknown>): string | null {
   const type = String(body?.type ?? "text").toLowerCase();

@@ -106,6 +106,16 @@ export class EscrowService {
 
   async createCardEscrowRecord(params: EscrowCreateParams) {
     /** Card-funded escrow: funds on platform via Stripe PI; ledger records liability in escrow_held */
+    if ((params.kind ?? "booking") === "booking") {
+      const existing = await escrow_holds.findOne({
+        session_id: params.sessionId,
+        kind: "booking",
+        status: "held",
+        gross_minor: params.grossMinor,
+      });
+      if (existing) return existing;
+    }
+
     const trainer = await user.findById(params.trainerId).select("commission").lean();
     const commissionRate = Number(trainer?.commission ?? 0.15);
     const { platformFeeMinor, trainerNetMinor } = this.computeFees(

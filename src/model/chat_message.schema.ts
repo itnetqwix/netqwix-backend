@@ -17,12 +17,12 @@ const chatMessageSchema: Schema = new Schema(
     receiverId: {
       type: Schema.Types.ObjectId,
       ref: Tables.user,
-      required: true,
+      default: null,
     },
     content: { type: String, default: "" },
     type: {
       type: String,
-      enum: ["text", "image", "video", "voice", "system"],
+      enum: ["text", "image", "video", "audio", "file", "location", "voice", "system"],
       default: "text",
     },
     mediaUrl: { type: String, default: null },

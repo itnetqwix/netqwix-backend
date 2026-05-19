@@ -158,8 +158,15 @@ export class ChatService {
         return ResponseBuilder.badRequest("Conversation not found.");
       }
       const isGroup = conversation.isGroup;
-      const actualReceiverId = isGroup ? null : receiverId;
-      const finalReceiverId = actualReceiverId ?? receiverId;
+      const finalReceiverId = isGroup
+        ? null
+        : receiverId ||
+          (conversation.participants ?? [])
+            .map((participant: any) => String(participant?._id ?? participant))
+            .find((participantId: string) => participantId !== String(senderId));
+      if (!isGroup && !finalReceiverId) {
+        return ResponseBuilder.badRequest("receiverId is required.");
+      }
       if (!isGroup && finalReceiverId) {
         const { isChatBlocked } = require("../../helpers/chatBlockCheck");
         if (await isChatBlocked(senderId, finalReceiverId)) {
