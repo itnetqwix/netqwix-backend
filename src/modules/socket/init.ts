@@ -20,6 +20,7 @@ export class SocketInit {
   private metricsPushTimer: ReturnType<typeof setInterval> | null = null;
 
   private connectedUsers = new Map<string, { socketId: string; userData: any }>(); // Updated to store userId and complete user data
+  private connectedSocketsByUser = new Map<string, Map<string, any>>();
 
   private flattenUserDoc(userData: any): any {
     if (!userData) return null;
@@ -152,6 +153,10 @@ export class SocketInit {
           );
         }
 
+        const socketsForUser =
+          this.connectedSocketsByUser.get(userId) ?? new Map<string, any>();
+        socketsForUser.set(socket.id, socket.user);
+        this.connectedSocketsByUser.set(userId, socketsForUser);
         this.connectedUsers.set(userId, { socketId: socket.id, userData: socket.user });
         MemCache.setDetail(process.env.SOCKET_CONFIG, userId, socket.id);
         this.logger.info(`[MemCache] ✅ Socket registered: userId=${userId} socketId=${socket.id}`);
@@ -191,9 +196,25 @@ export class SocketInit {
         const userId = String(socket.user._id);
         this.logger.info(`User Disconnected ---> ${userId}`);
         
-        // Remove the user from the connected users map
-        this.connectedUsers.delete(userId);
-        MemCache.deleteDetail(process.env.SOCKET_CONFIG, userId);
+        const socketsForUser = this.connectedSocketsByUser.get(userId);
+        socketsForUser?.delete(socket.id);
+
+        if (socketsForUser?.size) {
+          const entries = Array.from(socketsForUser.entries());
+          const [nextSocketId, nextUserData] = entries[entries.length - 1];
+          this.connectedUsers.set(userId, {
+            socketId: nextSocketId,
+            userData: nextUserData,
+          });
+          MemCache.setDetail(process.env.SOCKET_CONFIG, userId, nextSocketId);
+        } else {
+          this.connectedSocketsByUser.delete(userId);
+          this.connectedUsers.delete(userId);
+          const currentSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, userId);
+          if (!currentSocketId || String(currentSocketId) === socket.id) {
+            MemCache.deleteDetail(process.env.SOCKET_CONFIG, userId);
+          }
+        }
 
         this.emitTrainerTraineePresence(io);
 
