@@ -51,6 +51,7 @@ webpush.setVapidDetails(
 
 let activeUsers: Record<string, any> = {};
 let ioInstance: any = null; // Store io instance for emitting events from services
+const activeSocketIdsByUser: Map<string, Set<string>> = new Map();
 
 /**
  * True when the user has an active Socket.IO session on this server.
@@ -79,6 +80,38 @@ function broadcastUserStatus(userId: string, status: "online" | "offline") {
   };
   ioInstance.emit("userStatus", payload);
   ioInstance.emit("onlineUser", payload);
+}
+
+function trackPresenceSocket(userId: string, socketId: string) {
+  const uid = String(userId);
+  const sockets = activeSocketIdsByUser.get(uid) ?? new Set<string>();
+  sockets.add(String(socketId));
+  activeSocketIdsByUser.set(uid, sockets);
+}
+
+function untrackPresenceSocket(userId: string, socketId: string): number {
+  const uid = String(userId);
+  const sockets = activeSocketIdsByUser.get(uid);
+  if (!sockets) return 0;
+  sockets.delete(String(socketId));
+  if (!sockets.size) {
+    activeSocketIdsByUser.delete(uid);
+    return 0;
+  }
+  return sockets.size;
+}
+
+function hasConnectedUserInRoom(userId: string, roomName: string): boolean {
+  if (!ioInstance) return false;
+  const roomSocketIds = ioInstance.sockets?.adapter?.rooms?.get(roomName);
+  if (!roomSocketIds) return false;
+  for (const sid of roomSocketIds) {
+    const sock = ioInstance.sockets?.sockets?.get(String(sid));
+    if (sock?.connected && socketAttachedUserId(sock) === String(userId)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export async function removeUserFromActivePresence(userId: string) {
@@ -266,6 +299,10 @@ function finalizeLessonParticipantDisconnect(
   role: "trainer" | "trainee",
   disconnectedUserId: string,
 ) {
+  if (hasConnectedUserInRoom(disconnectedUserId, roomName)) {
+    return;
+  }
+
   const session = lessonSessions.get(sessionId);
   if (!session) return;
 
@@ -590,7 +627,9 @@ export const handleSocketEvents = (socket, connections = {}) => {
   socketHeartbeats.set(socketId, Date.now());
 
   if (presenceUserId) {
+    trackPresenceSocket(presenceUserId, socketId);
     socket.on("disconnect", async () => {
+      if (untrackPresenceSocket(presenceUserId, socketId) > 0) return;
       await removeUserFromActivePresence(presenceUserId);
     });
   }
@@ -1678,6 +1717,10 @@ const listenInstantLessonEvents = (socket) => {
           callback?.({ ok: false, error: "missing_fields" });
           return;
         }
+        if (socketAttachedUserId(socket) !== String(coachId)) {
+          callback?.({ ok: false, error: "unauthorized" });
+          return;
+        }
 
         const booking = await booked_session.findById(lessonId).lean();
         if (
@@ -1819,6 +1862,9 @@ const listenInstantLessonEvents = (socket) => {
         const { lessonId, coachId, traineeId } = payload;
         
         if (!lessonId || !coachId || !traineeId) {
+          return;
+        }
+        if (socketAttachedUserId(socket) !== String(coachId)) {
           return;
         }
 

@@ -12,6 +12,13 @@ const chatConversationSchema: Schema = new Schema(
     groupAdmin: { type: Schema.Types.ObjectId, ref: Tables.user, default: null },
     groupDescription: { type: String, default: "" },
     archivedBy: [{ type: Schema.Types.ObjectId, ref: Tables.user }],
+    deletedBy: [{ type: Schema.Types.ObjectId, ref: Tables.user }],
+    clearedBy: [
+      {
+        userId: { type: Schema.Types.ObjectId, ref: Tables.user },
+        clearedAt: { type: Date, default: Date.now },
+      },
+    ],
     pendingInvites: [
       {
         userId: { type: Schema.Types.ObjectId, ref: Tables.user },
