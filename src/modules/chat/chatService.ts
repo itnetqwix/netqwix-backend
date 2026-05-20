@@ -7,6 +7,13 @@ import { EVENTS } from "../../config/constance";
 import { getIo, isUserOnline } from "../socket/socket.service";
 
 export class ChatService {
+  private getConversationClearedAt(conversation: any, userId: string): Date | null {
+    const cleared = (conversation?.clearedBy ?? []).find(
+      (entry: any) => String(entry?.userId) === String(userId)
+    );
+    return cleared?.clearedAt ? new Date(cleared.clearedAt) : null;
+  }
+
   private async assertAllFriends(
     userId: string,
     otherIds: string[]
@@ -36,7 +43,10 @@ export class ChatService {
     archivedOnly = false
   ): Promise<ResponseBuilder> {
     try {
-      const filter: Record<string, unknown> = { participants: userId };
+      const filter: Record<string, unknown> = {
+        participants: userId,
+        deletedBy: { $nin: [userId] },
+      };
       if (archivedOnly) {
         filter.archivedBy = userId;
       } else {
@@ -49,16 +59,20 @@ export class ChatService {
 
       const withUnread = await Promise.all(
         conversations.map(async (c: any) => {
+          const visibleAfter = this.getConversationClearedAt(c, userId);
+          const visibleFilter = visibleAfter ? { createdAt: { $gt: visibleAfter } } : {};
           const unreadCount = c.isGroup
             ? await ChatMessage.countDocuments({
                 conversationId: c._id,
                 senderId: { $ne: userId },
                 isRead: false,
+                ...visibleFilter,
               })
             : await ChatMessage.countDocuments({
                 conversationId: c._id,
                 receiverId: userId,
                 isRead: false,
+                ...visibleFilter,
               });
           const participants = (c.participants ?? []).map((p: any) => {
             const pid = String(p?._id ?? p);
@@ -89,14 +103,18 @@ export class ChatService {
       const conversation = await ChatConversation.findOne({
         _id: conversationId,
         participants: userId,
+        deletedBy: { $nin: [userId] },
       });
       if (!conversation) {
         return ResponseBuilder.badRequest("Conversation not found.");
       }
       const skip = (page - 1) * limit;
+      const visibleAfter = this.getConversationClearedAt(conversation, userId);
+      const visibleFilter = visibleAfter ? { createdAt: { $gt: visibleAfter } } : {};
       const messages = await ChatMessage.find({
         conversationId,
         deletedForAll: { $ne: true },
+        ...visibleFilter,
       })
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -107,12 +125,12 @@ export class ChatService {
       const now = new Date();
       if (conversation.isGroup) {
         await ChatMessage.updateMany(
-          { conversationId, senderId: { $ne: userId }, isRead: false },
+          { conversationId, senderId: { $ne: userId }, isRead: false, ...visibleFilter },
           { isRead: true, status: "read", readAt: now }
         );
       } else {
         await ChatMessage.updateMany(
-          { conversationId, receiverId: userId, isRead: false },
+          { conversationId, receiverId: userId, isRead: false, ...visibleFilter },
           { isRead: true, status: "read", readAt: now }
         );
       }
@@ -198,11 +216,21 @@ export class ChatService {
         checkChatPolicy(senderId, finalReceiverId, content, String(conversation._id), String(message._id)).catch(() => {});
       }
 
-      await ChatConversation.findByIdAndUpdate(conversation._id, {
-        lastMessage: type === "text" ? content : `[${type}]`,
-        lastMessageAt: new Date(),
-        lastMessageSenderId: senderId,
-      });
+      await ChatConversation.findByIdAndUpdate(
+        conversation._id,
+        {
+          $set: {
+            lastMessage: type === "text" ? content : `[${type}]`,
+            lastMessageAt: new Date(),
+            lastMessageSenderId: senderId,
+          },
+          $pull: {
+            deletedBy: {
+              $in: (conversation.participants ?? []).map((id: any) => String(id)),
+            },
+          },
+        }
+      );
 
       const msgPayload: any =
         typeof (message as any)?.toObject === "function"
@@ -378,6 +406,7 @@ export class ChatService {
       const conv = await ChatConversation.findOne({
         _id: conversationId,
         participants: userId,
+        deletedBy: { $nin: [userId] },
       });
       if (!conv) return ResponseBuilder.badRequest("Conversation not found.");
       const archived: any[] = (conv as any).archivedBy ?? [];
@@ -400,6 +429,7 @@ export class ChatService {
       const conv = await ChatConversation.findOne({
         _id: conversationId,
         participants: userId,
+        deletedBy: { $nin: [userId] },
       });
       if (!conv) return ResponseBuilder.badRequest("Conversation not found.");
       const archived: any[] = (conv as any).archivedBy ?? [];
@@ -427,8 +457,10 @@ export class ChatService {
         participants: userId,
       });
       if (!conv) return ResponseBuilder.badRequest("Conversation not found.");
-      await ChatMessage.deleteMany({ conversationId });
-      await ChatConversation.findByIdAndDelete(conversationId);
+      await ChatConversation.findByIdAndUpdate(conversationId, {
+        $addToSet: { deletedBy: userId },
+        $pull: { archivedBy: userId },
+      });
       const rb = new ResponseBuilder();
       rb.code = 200;
       rb.result = { ok: true };
@@ -446,13 +478,17 @@ export class ChatService {
       const conv = await ChatConversation.findOne({
         _id: conversationId,
         participants: userId,
+        deletedBy: { $nin: [userId] },
       });
       if (!conv) return ResponseBuilder.badRequest("Conversation not found.");
-      await ChatMessage.deleteMany({ conversationId });
-      await ChatConversation.findByIdAndUpdate(conversationId, {
-        lastMessage: "",
-        lastMessageAt: null,
-      });
+      await ChatConversation.updateOne(
+        { _id: conversationId },
+        { $pull: { clearedBy: { userId } } }
+      );
+      await ChatConversation.updateOne(
+        { _id: conversationId },
+        { $push: { clearedBy: { userId, clearedAt: new Date() } } }
+      );
       const rb = new ResponseBuilder();
       rb.code = 200;
       rb.result = { ok: true };
