@@ -51,6 +51,7 @@ webpush.setVapidDetails(
 
 let activeUsers: Record<string, any> = {};
 let ioInstance: any = null; // Store io instance for emitting events from services
+const hiddenPresenceUsers = new Set<string>();
 
 /**
  * True when the user has an active Socket.IO session on this server.
@@ -58,12 +59,18 @@ let ioInstance: any = null; // Store io instance for emitting events from servic
  */
 export function isUserOnline(userId: string): boolean {
   const uid = String(userId);
+  if (hiddenPresenceUsers.has(uid)) return false;
   if (activeUsers[uid]) return true;
   if (!ioInstance || !process.env.SOCKET_CONFIG) return false;
   const socketId = MemCache.getDetail(process.env.SOCKET_CONFIG, uid);
   if (!socketId) return false;
   const sock = ioInstance.sockets?.sockets?.get(String(socketId));
   return !!sock?.connected;
+}
+
+export function isCurrentUserSocket(userId: string, socketId: string): boolean {
+  const currentSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, String(userId));
+  return !!currentSocketId && String(currentSocketId) === String(socketId);
 }
 
 export function getActiveUserIds(): string[] {
@@ -130,10 +137,12 @@ export async function applyAvailabilityForConnectedUser(userId: string) {
 
   const userDoc = await user.findById(uid).select("showAsOnline account_type").lean();
   if ((userDoc as any)?.showAsOnline === false) {
+    hiddenPresenceUsers.add(uid);
     await removeUserFromActivePresence(uid);
     return;
   }
 
+  hiddenPresenceUsers.delete(uid);
   await updateUserActivity(socket);
 }
 /** Set once `emitBookingStatusUpdated` is defined (handlers above need a late binding). */
@@ -523,11 +532,15 @@ async function updateUserActivity(socket) {
     const role = String((userDoc as any).account_type || "").trim().toLowerCase();
     const showAsOnline = (userDoc as any)?.showAsOnline !== false;
 
+    if (!showAsOnline) {
+      hiddenPresenceUsers.add(userId);
+      await removeUserFromActivePresence(userId);
+      return;
+    }
+
+    hiddenPresenceUsers.delete(userId);
+
     if (role === "trainer") {
-      if (!showAsOnline) {
-        delete activeUsers[userId];
-        return;
-      }
       activeUsers[userId] = { ...(userDoc as any) };
       const trainerId = String((userDoc as any)._id);
       const checkIfUserIsAlreadyAdded = await onlineUser.findOne({
@@ -591,7 +604,9 @@ export const handleSocketEvents = (socket, connections = {}) => {
 
   if (presenceUserId) {
     socket.on("disconnect", async () => {
-      await removeUserFromActivePresence(presenceUserId);
+      if (isCurrentUserSocket(presenceUserId, socketId)) {
+        await removeUserFromActivePresence(presenceUserId);
+      }
     });
   }
 
