@@ -3,6 +3,7 @@ import { log } from "../../../logger";
 import {
   applyAvailabilityForConnectedUser,
   handleSocketEvents,
+  isCurrentUserSocket,
   setIoInstance,
 } from "./socket.service";
 import { EVENTS } from "../../config/constance";
@@ -190,6 +191,13 @@ export class SocketInit {
       socket.on("disconnect", async () => {
         const userId = String(socket.user._id);
         this.logger.info(`User Disconnected ---> ${userId}`);
+
+        if (!isCurrentUserSocket(userId, socket.id)) {
+          this.logger.info(
+            `[MemCache] Ignoring stale socket disconnect: userId=${userId} socketId=${socket.id}`
+          );
+          return;
+        }
         
         // Remove the user from the connected users map
         this.connectedUsers.delete(userId);
