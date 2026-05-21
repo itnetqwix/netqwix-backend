@@ -9,8 +9,10 @@ import {
   checkSlotExistModal,
 } from "./traineeValidator";
 import {
+  sessionExtensionCancelModal,
   sessionExtensionConfirmModal,
   sessionExtensionPaymentIntentModal,
+  sessionExtensionRequestModal,
 } from "./sessionExtensionValidator";
 import { TraineeMiddleware } from "./traineeMiddleware";
 
@@ -58,6 +60,18 @@ route.get(
   "/session-extension/quote",
   traineeMiddleware.isTrainee,
   traineeC.getSessionExtensionQuote
+);
+route.post(
+  "/session-extension/request",
+  traineeMiddleware.isTrainee,
+  V.validate(sessionExtensionRequestModal),
+  traineeC.requestSessionExtension
+);
+route.post(
+  "/session-extension/cancel-request",
+  traineeMiddleware.isTrainee,
+  V.validate(sessionExtensionCancelModal),
+  traineeC.cancelSessionExtensionRequest
 );
 route.post(
   "/session-extension/create-payment-intent",

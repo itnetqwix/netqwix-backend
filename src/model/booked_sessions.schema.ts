@@ -193,6 +193,39 @@ const bookedSessionsSchema: Schema = new Schema(
                 requested_by: { type: Schema.Types.ObjectId, ref: "user" },
             },
         ],
+        /**
+         * Live trainer-approval workflow for paid extensions. A trainee's request
+         * lives here from "pending" -> "accepted" -> "paid"; an entry that ends as
+         * "paid" is mirrored into `extensions[]` once the timer is applied.
+         */
+        extension_requests: [
+            {
+                minutes: { type: Number, required: true },
+                amount: { type: Number, required: true },
+                status: {
+                    type: String,
+                    enum: [
+                        "pending",
+                        "accepted",
+                        "rejected",
+                        "paid",
+                        "cancelled",
+                        "expired",
+                    ],
+                    default: "pending",
+                },
+                requested_by: { type: Schema.Types.ObjectId, ref: "user" },
+                requested_at: { type: Date, default: Date.now },
+                decided_by: { type: Schema.Types.ObjectId, ref: "user", default: null },
+                decided_at: { type: Date, default: null },
+                expires_at: { type: Date, default: null },
+                payment_intent_id: { type: String, default: null },
+                /** Index into `extensions[]` once the request is fully applied. */
+                extension_index: { type: Number, default: null },
+                /** Free-text terminal reason (e.g. "trainer_offline_timeout"). */
+                terminal_reason: { type: String, default: null },
+            },
+        ],
         /** Refund payout timeline (wallet / card / bank) for trainee visibility. */
         refund_transfer: {
             type: refundTransferSchema,
@@ -206,6 +239,11 @@ bookedSessionsSchema.index(
     { "extensions.payment_intent_id": 1 },
     { sparse: true }
 );
+bookedSessionsSchema.index(
+    { "extension_requests.payment_intent_id": 1 },
+    { sparse: true }
+);
+bookedSessionsSchema.index({ "extension_requests.status": 1, "extension_requests.expires_at": 1 });
 
 // Add indexes for performance optimization
 bookedSessionsSchema.index({ createdAt: -1 }); // For sorting by creation date

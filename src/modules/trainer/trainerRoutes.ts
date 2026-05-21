@@ -7,6 +7,7 @@ import {
 } from "./trainerValidator/updateSlotsValidator";
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
 import { TrainerMiddleware } from "./trainerMiddleware";
+import { sessionExtensionRespondModal } from "../trainee/sessionExtensionValidator";
 
 const route: Router = Router();
 const trainerC = new trainerController();
@@ -67,5 +68,13 @@ route.post("/get-trainee-clips", trainerC.traineeClips);
 route.put("/profile", trainerC.updateProfile);
 route.post("/create-money-request", trainerC.createMoneyRequest);
 route.get("/get-money-request", trainerC.getAllMoneyRequest);
+
+/** Two-party paid extension: trainer accepts/rejects a pending request. */
+route.post(
+  "/session-extension/respond",
+  trainerMiddleware.isTrainer,
+  V.validate(sessionExtensionRespondModal),
+  trainerC.respondToSessionExtensionRequest
+);
 
 export const trainerRoute: Router = route;

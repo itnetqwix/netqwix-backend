@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { BOOKED_SESSIONS_STATUS, CONSTANCE } from "../../config/constance";
+import { BOOKED_SESSIONS_STATUS, CONSTANCE, EVENTS } from "../../config/constance";
 import { SESSION_EXTENSION } from "../../config/sessionExtension";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { StripeHelper } from "../../helpers/stripe";
@@ -12,6 +12,62 @@ import { DateFormat } from "../../Utils/dateFormat";
 import { isAllowedExtensionMinutes } from "./sessionExtensionValidator";
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
+
+/** In-process auto-reject / auto-expire timers, keyed by `${sessionId}:${requestId}`.
+ *  Kept here (not in Mongo) so a restart simply falls back to the row's `expires_at`
+ *  field being honored on the next request. */
+const extensionRequestTimers = new Map<string, NodeJS.Timeout>();
+
+function clearExtensionTimer(sessionId: string, requestId: string) {
+  const key = `${sessionId}:${requestId}`;
+  const t = extensionRequestTimers.get(key);
+  if (t) {
+    clearTimeout(t);
+    extensionRequestTimers.delete(key);
+  }
+}
+
+function scheduleExtensionTimer(
+  sessionId: string,
+  requestId: string,
+  delayMs: number,
+  cb: () => Promise<void> | void
+) {
+  clearExtensionTimer(sessionId, requestId);
+  if (delayMs <= 0) {
+    void cb();
+    return;
+  }
+  const handle = setTimeout(async () => {
+    extensionRequestTimers.delete(`${sessionId}:${requestId}`);
+    try {
+      await cb();
+    } catch (err) {
+      console.warn("[sessionExtension] auto-timer callback failed", err);
+    }
+  }, delayMs);
+  extensionRequestTimers.set(`${sessionId}:${requestId}`, handle);
+}
+
+function findRequestById(booking: any, requestId: string) {
+  const list = Array.isArray(booking?.extension_requests)
+    ? booking.extension_requests
+    : [];
+  return list.find((r: any) => String(r._id) === String(requestId)) || null;
+}
+
+function asPendingSnapshot(reqDoc: any) {
+  if (!reqDoc) return null;
+  return {
+    requestId: String(reqDoc._id),
+    status: reqDoc.status,
+    minutes: Number(reqDoc.minutes),
+    amount: Number(reqDoc.amount),
+    requestedAt: new Date(reqDoc.requested_at).toISOString(),
+    expiresAt: reqDoc.expires_at ? new Date(reqDoc.expires_at).toISOString() : null,
+    requestedBy: String(reqDoc.requested_by),
+  };
+}
 
 function getEffectiveEnd(booking: any): Date {
   const ext = booking.extended_end_time ? new Date(booking.extended_end_time) : null;
@@ -73,11 +129,21 @@ function validateExtensionEligibility(
   if (!isAllowedExtensionMinutes(minutes)) {
     return { allowed: false, reason: "Invalid extension duration." };
   }
-  if (!booking.is_instant) {
-    return { allowed: false, reason: "Extensions are only available for instant lessons." };
-  }
   if (booking.status !== BOOKED_SESSIONS_STATUS.confirm) {
     return { allowed: false, reason: "Session must be confirmed before extending." };
+  }
+  /** Block when another request is still in flight so the trainee can't open
+   *  two payment intents for the same pause. The caller is responsible for
+   *  surfacing the existing request to the UI. */
+  const liveReq = (booking.extension_requests || []).find((r: any) =>
+    ["pending", "accepted"].includes(r.status)
+  );
+  if (liveReq) {
+    return {
+      allowed: false,
+      reason: "An extension request is already in progress for this session.",
+      liveRequestId: String(liveReq._id),
+    };
   }
 
   const extensions = Array.isArray(booking.extensions) ? booking.extensions : [];
@@ -164,22 +230,23 @@ export class SessionExtensionService {
         effectiveEnd.getTime() + minutes * 60 * 1000
       ).toISOString();
 
-      if (booking.is_instant) {
-        const avail = await isTrainerInWeeklyAvailabilityNow(
-          String(booking.trainer_id),
-          new Date()
+      /** Both instant and scheduled lessons honor the trainer's weekly availability
+       *  — if the proposed extension window crosses outside their schedule, reject
+       *  here so the UI doesn't bother the trainer with an impossible request. */
+      const avail = await isTrainerInWeeklyAvailabilityNow(
+        String(booking.trainer_id),
+        new Date()
+      );
+      if (!avail.ok) {
+        return ResponseBuilder.data(
+          {
+            allowed: false,
+            reason: "Coach is outside availability hours; extension not available.",
+            amount,
+            minutes,
+          },
+          "EXTENSION_QUOTE"
         );
-        if (!avail.ok) {
-          return ResponseBuilder.data(
-            {
-              allowed: false,
-              reason: "Coach is outside availability hours; extension not available.",
-              amount,
-              minutes,
-            },
-            "EXTENSION_QUOTE"
-          );
-        }
       }
 
       const conflictStart = booking.start_time
@@ -233,6 +300,7 @@ export class SessionExtensionService {
     body: {
       sessionId: string;
       minutes: number;
+      requestId?: string;
       couponCode?: string;
       customer?: string;
       _userId: string;
@@ -240,26 +308,71 @@ export class SessionExtensionService {
     }
   ) {
     try {
-      const quoteRes = await this.getQuote(body.sessionId, body.minutes, body._userId);
-      if (quoteRes.code !== 200) {
-        return quoteRes;
-      }
-      const quote = quoteRes.result as any;
-      if (!quote?.allowed) {
-        return ResponseBuilder.badRequest(quote?.reason || "Extension not allowed.", 400);
-      }
-
       const booking = await booked_session
         .findById(body.sessionId)
-        .select("trainer_id")
+        .select("trainer_id trainee_id extension_requests")
         .lean();
+      if (!booking || String(booking.trainee_id) !== String(body._userId)) {
+        return ResponseBuilder.badRequest("Session not found.", 404);
+      }
+
+      let approvedAmount: number | null = null;
+
+      if (body.requestId) {
+        const reqDoc = findRequestById(booking, body.requestId);
+        if (!reqDoc) {
+          return ResponseBuilder.badRequest("Extension request not found.", 404);
+        }
+        if (String(reqDoc.requested_by) !== String(body._userId)) {
+          return ResponseBuilder.badRequest("Extension request not found.", 404);
+        }
+        if (reqDoc.status !== "accepted") {
+          return ResponseBuilder.badRequest(
+            `Extension request is ${reqDoc.status}; cannot start payment.`,
+            400
+          );
+        }
+        if (reqDoc.expires_at && new Date(reqDoc.expires_at) < new Date()) {
+          return ResponseBuilder.badRequest(
+            "Extension request expired before payment started.",
+            400
+          );
+        }
+        if (Number(reqDoc.minutes) !== Number(body.minutes)) {
+          return ResponseBuilder.badRequest(
+            "Minutes do not match the approved extension request.",
+            400
+          );
+        }
+        approvedAmount = Number(reqDoc.amount);
+      } else {
+        const quoteRes = await this.getQuote(body.sessionId, body.minutes, body._userId);
+        if (quoteRes.code !== 200) {
+          return quoteRes;
+        }
+        const quote = quoteRes.result as any;
+        if (!quote?.allowed) {
+          return ResponseBuilder.badRequest(quote?.reason || "Extension not allowed.", 400);
+        }
+        approvedAmount = Number(quote.amount);
+      }
+
       const trainer = await user
-        .findById(booking?.trainer_id)
+        .findById(booking.trainer_id)
         .select("stripe_account_id commission")
         .lean();
 
+      const { broadcastSessionExtensionEvent } = require("../socket/socket.service");
+      if (body.requestId) {
+        broadcastSessionExtensionEvent(
+          String(body.sessionId),
+          EVENTS.SESSION_EXTENSION.PAYMENT_STARTED,
+          { requestId: String(body.requestId), minutes: body.minutes }
+        );
+      }
+
       return this.stripeHelper.createPaymentIntent({
-        amount: quote.amount,
+        amount: approvedAmount,
         destination: trainer?.stripe_account_id,
         commission: trainer?.commission ?? "0",
         customer: body.customer,
@@ -268,7 +381,7 @@ export class SessionExtensionService {
         _userType: body._userType || "Trainee",
         _bookingType: "session_extension",
         sessionId: body.sessionId,
-        trainer_id: String(booking?.trainer_id),
+        trainer_id: String(booking.trainer_id),
       });
     } catch (err) {
       return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
@@ -279,6 +392,7 @@ export class SessionExtensionService {
     body: {
       sessionId: string;
       minutes: number;
+      requestId?: string;
       payment_intent_id?: string;
       payment_method?: string;
       pin_session_token?: string;
@@ -286,7 +400,7 @@ export class SessionExtensionService {
     }
   ) {
     try {
-      const { sessionId, minutes, payment_intent_id, payment_method, pin_session_token, _userId } =
+      const { sessionId, minutes, requestId, payment_intent_id, payment_method, pin_session_token, _userId } =
         body;
       const booking = await booked_session.findById(sessionId);
       if (!booking || String(booking.trainee_id) !== String(_userId)) {
@@ -307,15 +421,54 @@ export class SessionExtensionService {
         );
       }
 
+      /** When the new request-based workflow is used, verify the request was
+       *  accepted by the trainer and not expired/cancelled before we charge or
+       *  apply the extension. */
+      let approvedRequest: any = null;
+      if (requestId) {
+        approvedRequest = findRequestById(booking, requestId);
+        if (!approvedRequest) {
+          return ResponseBuilder.badRequest("Extension request not found.", 404);
+        }
+        if (String(approvedRequest.requested_by) !== String(_userId)) {
+          return ResponseBuilder.badRequest("Extension request not found.", 404);
+        }
+        if (approvedRequest.status !== "accepted") {
+          return ResponseBuilder.badRequest(
+            `Extension request is ${approvedRequest.status}; cannot confirm.`,
+            400
+          );
+        }
+        if (approvedRequest.expires_at && new Date(approvedRequest.expires_at) < new Date()) {
+          return ResponseBuilder.badRequest(
+            "Extension request expired before payment completed.",
+            400
+          );
+        }
+        if (Number(approvedRequest.minutes) !== Number(minutes)) {
+          return ResponseBuilder.badRequest(
+            "Minutes do not match the approved extension request.",
+            400
+          );
+        }
+      }
+
       const { getLessonTimerSnapshot } = require("../socket/socket.service");
       const timerState = getLessonTimerSnapshot(sessionId);
-      const eligibility = validateExtensionEligibility(
-        booking.toObject(),
-        minutes,
-        timerState
-      );
-      if (!eligibility.allowed) {
-        return ResponseBuilder.badRequest(eligibility.reason || "Extension not allowed.", 400);
+      /** When a `requestId` is provided we already validated eligibility at
+       *  `createRequest` time and the timer has been paused since; skip the
+       *  re-check so the in-window/grace gate doesn't trip after the pause. */
+      if (!approvedRequest) {
+        const eligibility = validateExtensionEligibility(
+          booking.toObject(),
+          minutes,
+          timerState
+        );
+        if (!eligibility.allowed) {
+          return ResponseBuilder.badRequest(eligibility.reason || "Extension not allowed.", 400);
+        }
+      } else if (!isAllowedExtensionMinutes(minutes)) {
+        return ResponseBuilder.badRequest("Invalid extension duration.", 400);
       }
 
       let extensionAmount = 0;
@@ -401,24 +554,392 @@ export class SessionExtensionService {
       booking.session_end_time = newEndHm;
       booking.amount = String(Number((prevAmount + extensionAmount).toFixed(2)));
 
+      const extensionIndex = (booking.extensions as any[]).length - 1;
+
+      if (requestId) {
+        const reqDoc = (booking.extension_requests as any).id?.(requestId)
+          || findRequestById(booking, requestId);
+        if (reqDoc) {
+          reqDoc.status = "paid";
+          reqDoc.payment_intent_id = payment_intent_id || reqDoc.payment_intent_id;
+          reqDoc.extension_index = extensionIndex;
+          reqDoc.decided_at = reqDoc.decided_at ?? new Date();
+        }
+        clearExtensionTimer(String(sessionId), String(requestId));
+      }
+
       await booking.save();
 
-      const { extendLessonTimer } = require("../socket/socket.service");
+      const { extendLessonTimer, setPendingExtensionRequest, broadcastSessionExtensionEvent } =
+        require("../socket/socket.service");
       extendLessonTimer(sessionId, minutes, {
         endTimeUtc: newEnd.toISOString(),
-        extensionId: String((booking.extensions as any[]).length - 1),
+        extensionId: String(extensionIndex),
       });
+      setPendingExtensionRequest(sessionId, null);
+      broadcastSessionExtensionEvent(
+        String(sessionId),
+        EVENTS.SESSION_EXTENSION.APPLIED,
+        {
+          requestId: requestId ? String(requestId) : null,
+          minutes,
+          amount: extensionAmount,
+          newEndTimeUtc: newEnd.toISOString(),
+          extensionIndex,
+        }
+      );
 
       return ResponseBuilder.data(
         {
           booking,
           extension: extensionEntry,
           newEndTimeUtc: newEnd.toISOString(),
+          requestId: requestId ? String(requestId) : null,
         },
         "EXTENSION_APPLIED"
       );
     } catch (err) {
       return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  /**
+   * Trainee asks the trainer to extend the lesson. Validates eligibility,
+   * creates a `pending` row, pauses the timer with reason `extension_pending`
+   * and broadcasts `SESSION_EXTENSION_REQUESTED`. Schedules an auto-reject
+   * timer so the timer can resume even if the trainer never answers.
+   */
+  public async createRequest(body: {
+    sessionId: string;
+    minutes: number;
+    _userId: string;
+  }) {
+    try {
+      const { sessionId, minutes, _userId } = body;
+      if (!mongoose.isValidObjectId(sessionId)) {
+        return ResponseBuilder.badRequest("Invalid session id.", 400);
+      }
+      if (!isAllowedExtensionMinutes(minutes)) {
+        return ResponseBuilder.badRequest("Invalid extension duration.", 400);
+      }
+
+      const booking = await booked_session.findById(sessionId);
+      if (!booking || String(booking.trainee_id) !== String(_userId)) {
+        return ResponseBuilder.badRequest("Session not found.", 404);
+      }
+
+      const { getLessonTimerSnapshot } = require("../socket/socket.service");
+      const timerState = getLessonTimerSnapshot(sessionId);
+      const eligibility = validateExtensionEligibility(
+        booking.toObject(),
+        minutes,
+        timerState
+      );
+      if (!eligibility.allowed) {
+        if ((eligibility as any).liveRequestId) {
+          const existing = findRequestById(booking, (eligibility as any).liveRequestId);
+          if (existing) {
+            return ResponseBuilder.data(
+              {
+                allowed: false,
+                reason: eligibility.reason,
+                request: asPendingSnapshot(existing),
+              },
+              "EXTENSION_REQUEST_EXISTS"
+            );
+          }
+        }
+        return ResponseBuilder.badRequest(eligibility.reason || "Extension not allowed.", 400);
+      }
+
+      /** Don't bother the trainer with an unbookable extension — surface the
+       *  schedule conflict / availability issue up front so the trainee can
+       *  pick a different duration or wait. */
+      const availability = await isTrainerInWeeklyAvailabilityNow(
+        String(booking.trainer_id),
+        new Date()
+      );
+      if (!availability.ok) {
+        return ResponseBuilder.badRequest(
+          "Coach is outside availability hours; extension not available.",
+          400
+        );
+      }
+
+      const effectiveEnd = getEffectiveEnd(booking);
+      const proposedEnd = new Date(effectiveEnd.getTime() + minutes * 60 * 1000);
+      const conflictStart = booking.start_time
+        ? new Date(booking.start_time)
+        : new Date(booking.booked_date);
+      const conflictEnd = new Date(
+        proposedEnd.getTime() + INSTANT_BUFFER_AFTER_SESSION_MS
+      );
+      const conflictMsg = await checkBothPartiesBookingConflict(
+        String(booking.trainer_id),
+        String(booking.trainee_id),
+        conflictStart,
+        conflictEnd,
+        String(sessionId)
+      );
+      if (conflictMsg) {
+        return ResponseBuilder.badRequest(conflictMsg, 409);
+      }
+
+      const trainer = await user
+        .findById(booking.trainer_id)
+        .select("extraInfo.hourly_rate")
+        .lean();
+      const hourlyRate = Number(trainer?.extraInfo?.hourly_rate ?? 0);
+      const amount = Number(((hourlyRate / 60) * minutes).toFixed(2));
+
+      const expiresAt = new Date(
+        Date.now() + SESSION_EXTENSION.REQUEST_AUTO_REJECT_SECONDS * 1000
+      );
+
+      booking.extension_requests = [
+        ...(booking.extension_requests || []),
+        {
+          minutes,
+          amount,
+          status: "pending",
+          requested_by: _userId,
+          requested_at: new Date(),
+          expires_at: expiresAt,
+        } as any,
+      ];
+
+      await booking.save();
+      const newReq = (booking.extension_requests as any[])[
+        (booking.extension_requests as any[]).length - 1
+      ];
+
+      const {
+        pauseLessonTimer,
+        setPendingExtensionRequest,
+        broadcastSessionExtensionEvent,
+      } = require("../socket/socket.service");
+
+      pauseLessonTimer(String(sessionId), "extension_pending");
+      const snapshot = asPendingSnapshot(newReq);
+      setPendingExtensionRequest(String(sessionId), snapshot);
+      broadcastSessionExtensionEvent(
+        String(sessionId),
+        EVENTS.SESSION_EXTENSION.REQUESTED,
+        {
+          request: snapshot,
+          trainerId: String(booking.trainer_id),
+          traineeId: String(booking.trainee_id),
+        }
+      );
+
+      scheduleExtensionTimer(
+        String(sessionId),
+        String(newReq._id),
+        SESSION_EXTENSION.REQUEST_AUTO_REJECT_SECONDS * 1000,
+        () => this.expireRequest(String(sessionId), String(newReq._id), "trainer_offline_timeout")
+      );
+
+      return ResponseBuilder.data(
+        { request: snapshot },
+        "EXTENSION_REQUESTED"
+      );
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  /**
+   * Trainer responds to a pending request. On `accept` the request flips to
+   * `accepted`, the pause reason becomes `extension_accepted`, and a fresh
+   * `expires_at` is set so the trainee has a bounded payment window. On
+   * `reject` the request is closed and the timer resumes immediately.
+   */
+  public async respondToRequest(body: {
+    sessionId: string;
+    requestId: string;
+    decision: "accept" | "reject";
+    _userId: string;
+  }) {
+    try {
+      const { sessionId, requestId, decision, _userId } = body;
+      const booking = await booked_session.findById(sessionId);
+      if (!booking) {
+        return ResponseBuilder.badRequest("Session not found.", 404);
+      }
+      if (String(booking.trainer_id) !== String(_userId)) {
+        return ResponseBuilder.badRequest("Only the trainer can respond.", 403);
+      }
+      const reqDoc = findRequestById(booking, requestId);
+      if (!reqDoc) {
+        return ResponseBuilder.badRequest("Extension request not found.", 404);
+      }
+      if (reqDoc.status !== "pending") {
+        return ResponseBuilder.badRequest(
+          `Extension request is ${reqDoc.status}; cannot respond.`,
+          400
+        );
+      }
+
+      clearExtensionTimer(String(sessionId), String(requestId));
+
+      reqDoc.decided_by = _userId;
+      reqDoc.decided_at = new Date();
+
+      const {
+        resumeLessonTimer,
+        setPendingExtensionRequest,
+        broadcastSessionExtensionEvent,
+        pauseLessonTimer,
+      } = require("../socket/socket.service");
+
+      if (decision === "reject") {
+        reqDoc.status = "rejected";
+        reqDoc.terminal_reason = "trainer_rejected";
+        await booking.save();
+        setPendingExtensionRequest(String(sessionId), null);
+        resumeLessonTimer(String(sessionId), "extension_rejected");
+        broadcastSessionExtensionEvent(
+          String(sessionId),
+          EVENTS.SESSION_EXTENSION.REJECTED,
+          { requestId: String(requestId), reason: "trainer_rejected" }
+        );
+        return ResponseBuilder.data(
+          { request: asPendingSnapshot(reqDoc) },
+          "EXTENSION_REJECTED"
+        );
+      }
+
+      // accept
+      reqDoc.status = "accepted";
+      const newExpiry = new Date(
+        Date.now() + SESSION_EXTENSION.PAYMENT_WINDOW_SECONDS * 1000
+      );
+      reqDoc.expires_at = newExpiry;
+      await booking.save();
+
+      const snapshot = asPendingSnapshot(reqDoc);
+      // Keep the timer paused but flip the reason so the UI can show
+      // "Awaiting payment from trainee" rather than "Awaiting trainer".
+      pauseLessonTimer(String(sessionId), "extension_accepted");
+      setPendingExtensionRequest(String(sessionId), snapshot);
+      broadcastSessionExtensionEvent(
+        String(sessionId),
+        EVENTS.SESSION_EXTENSION.ACCEPTED,
+        { request: snapshot }
+      );
+
+      scheduleExtensionTimer(
+        String(sessionId),
+        String(reqDoc._id),
+        SESSION_EXTENSION.PAYMENT_WINDOW_SECONDS * 1000,
+        () => this.expireRequest(String(sessionId), String(reqDoc._id), "payment_window_elapsed")
+      );
+
+      return ResponseBuilder.data(
+        { request: snapshot },
+        "EXTENSION_ACCEPTED"
+      );
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  /**
+   * Either party (trainee explicitly, or backend on payment failure) cancels
+   * a request that is still `pending` or `accepted`. Always resumes the timer.
+   */
+  public async cancelRequest(body: {
+    sessionId: string;
+    requestId: string;
+    reason?: string;
+    _userId: string;
+  }) {
+    try {
+      const { sessionId, requestId, reason, _userId } = body;
+      const booking = await booked_session.findById(sessionId);
+      if (!booking) {
+        return ResponseBuilder.badRequest("Session not found.", 404);
+      }
+      const reqDoc = findRequestById(booking, requestId);
+      if (!reqDoc) {
+        return ResponseBuilder.badRequest("Extension request not found.", 404);
+      }
+      const isParticipant =
+        String(booking.trainee_id) === String(_userId) ||
+        String(booking.trainer_id) === String(_userId);
+      if (!isParticipant) {
+        return ResponseBuilder.badRequest("Not a participant of this session.", 403);
+      }
+      if (!["pending", "accepted"].includes(reqDoc.status)) {
+        return ResponseBuilder.data(
+          { request: asPendingSnapshot(reqDoc) },
+          "EXTENSION_ALREADY_TERMINAL"
+        );
+      }
+
+      clearExtensionTimer(String(sessionId), String(requestId));
+      reqDoc.status = "cancelled";
+      reqDoc.decided_by = _userId;
+      reqDoc.decided_at = new Date();
+      reqDoc.terminal_reason = reason || "user_cancelled";
+      await booking.save();
+
+      const {
+        resumeLessonTimer,
+        setPendingExtensionRequest,
+        broadcastSessionExtensionEvent,
+      } = require("../socket/socket.service");
+
+      setPendingExtensionRequest(String(sessionId), null);
+      resumeLessonTimer(String(sessionId), "extension_cancelled");
+      broadcastSessionExtensionEvent(
+        String(sessionId),
+        EVENTS.SESSION_EXTENSION.CANCELLED,
+        { requestId: String(requestId), reason: reqDoc.terminal_reason }
+      );
+
+      return ResponseBuilder.data(
+        { request: asPendingSnapshot(reqDoc) },
+        "EXTENSION_CANCELLED"
+      );
+    } catch (err) {
+      return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
+    }
+  }
+
+  /** Internal helper used by the auto-reject / payment-window timers. */
+  private async expireRequest(
+    sessionId: string,
+    requestId: string,
+    reason: string
+  ) {
+    try {
+      const booking = await booked_session.findById(sessionId);
+      if (!booking) return;
+      const reqDoc = findRequestById(booking, requestId);
+      if (!reqDoc) return;
+      if (!["pending", "accepted"].includes(reqDoc.status)) return;
+
+      reqDoc.status = "expired";
+      reqDoc.terminal_reason = reason;
+      reqDoc.decided_at = new Date();
+      await booking.save();
+
+      const {
+        resumeLessonTimer,
+        setPendingExtensionRequest,
+        broadcastSessionExtensionEvent,
+      } = require("../socket/socket.service");
+
+      setPendingExtensionRequest(String(sessionId), null);
+      resumeLessonTimer(String(sessionId), `extension_expired:${reason}`);
+      broadcastSessionExtensionEvent(
+        String(sessionId),
+        EVENTS.SESSION_EXTENSION.EXPIRED,
+        { requestId, reason }
+      );
+    } catch (err) {
+      console.warn("[sessionExtension] expireRequest failed", err);
     }
   }
 }

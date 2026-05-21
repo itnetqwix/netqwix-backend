@@ -175,6 +175,18 @@ export const setIoInstance = (io: any) => {
   }, 10000); // Check every 10 seconds
 };
 
+/** Snapshot describing a paid extension request currently in flight. Pushed
+ *  through `LESSON_STATE_SYNC` so a reconnecting client can rebuild its UI. */
+export type PendingExtensionRequestSnapshot = {
+  requestId: string;
+  status: "pending" | "accepted";
+  minutes: number;
+  amount: number;
+  requestedAt: string;
+  expiresAt: string | null;
+  requestedBy: string;
+};
+
 // Lesson session state tracking - backend is authoritative for timer start
 type LessonSessionState = {
   sessionId: string; // booked_session._id
@@ -190,6 +202,13 @@ type LessonSessionState = {
   isInstant?: boolean;
   coachFirstJoinedAt?: number | null;
   userFirstJoinedAt?: number | null;
+  /** Human-readable reason for the current pause (e.g. "extension_pending",
+   *  "extension_accepted", "trainer_manual", "trainer_left"). */
+  pauseReason?: string | null;
+  /** Pre-pause status — used by `resumeLessonTimer` to know if the timer was
+   *  running or already in the grace window before the extension pause. */
+  preExtensionPauseStatus?: "running" | "paused" | "ended" | null;
+  pendingExtensionRequest?: PendingExtensionRequestSnapshot | null;
 };
 
 const TRAINEE_LATE_AUTO_START_MS = 120_000;
@@ -353,6 +372,8 @@ const emitLessonStateSync = (socket: any, roomName: string, session: LessonSessi
     remainingSeconds: session.remainingSeconds,
     trainerConnected: session.coachJoined,
     traineeConnected: session.userJoined,
+    pauseReason: session.pauseReason ?? null,
+    pendingExtensionRequest: session.pendingExtensionRequest ?? null,
   };
 
   if (ioInstance) ioInstance.to(roomName).emit("LESSON_STATE_SYNC", statePayload);
@@ -429,6 +450,12 @@ export function extendLessonTimer(
     }
   }
 
+  /** Clearing any in-flight extension state so the post-extend `LESSON_STATE_SYNC`
+   *  doesn't keep the trainee modal stuck in "awaiting trainer". */
+  session.pauseReason = null;
+  session.preExtensionPauseStatus = null;
+  session.pendingExtensionRequest = null;
+
   clearLessonTimeouts(session);
 
   const extendedPayload = {
@@ -449,19 +476,132 @@ export function extendLessonTimer(
   };
   ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
 
-  const statePayload = {
+  const stubSocket = { nsp: ioInstance.to(roomName) };
+  emitLessonStateSync(stubSocket, roomName, session);
+
+  scheduleLessonEnd(stubSocket, roomName, session);
+}
+
+/** Pause the lesson timer with a typed reason. Used by the paid-extension flow
+ *  while the trainee is awaiting trainer approval or completing payment so the
+ *  remaining time doesn't tick down during the modal interactions.
+ *
+ *  Idempotent: calling on an already-paused session updates the pauseReason but
+ *  preserves remainingSeconds. Note: when the timer was already paused because
+ *  the trainer disconnected we still flip the reason for UI feedback but
+ *  `trainerLeftPaused` stays true so the trainer-rejoin auto-resume path wins
+ *  over a later extension resume. */
+export function pauseLessonTimer(sessionId: string, reason: string) {
+  if (!ioInstance) return false;
+  const sid = String(sessionId);
+  const session = lessonSessions.get(sid);
+  if (!session) return false;
+  if (session.status === "ended") return false;
+
+  const roomName = `session:${sid}`;
+
+  if (session.status === "running" && session.startedAt != null) {
+    const elapsed = Math.floor((Date.now() - session.startedAt) / 1000);
+    session.remainingSeconds = Math.max(0, session.remainingSeconds - elapsed);
+    session.preExtensionPauseStatus = "running";
+  } else if (session.status === "paused") {
+    session.preExtensionPauseStatus = session.preExtensionPauseStatus ?? "paused";
+  }
+
+  session.startedAt = null;
+  session.status = "paused";
+  session.pauseReason = reason;
+  clearLessonTimeouts(session);
+
+  const pausedPayload = {
     sessionId: session.sessionId,
-    status: session.status,
+    remainingSeconds: session.remainingSeconds,
+    duration: session.duration,
+    reason,
+  };
+  ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.PAUSED, pausedPayload);
+  const stubSocket = { nsp: ioInstance.to(roomName) };
+  emitLessonStateSync(stubSocket, roomName, session);
+  return true;
+}
+
+/** Resume a timer that was previously paused via `pauseLessonTimer`.
+ *  Restores the prior running/ended state. If the timer had already hit 0 the
+ *  session is ended instead of resumed. */
+export function resumeLessonTimer(sessionId: string, reason: string) {
+  if (!ioInstance) return false;
+  const sid = String(sessionId);
+  const session = lessonSessions.get(sid);
+  if (!session) return false;
+  if (session.status !== "paused") return false;
+  if (session.trainerLeftPaused) {
+    // Don't fight the trainer-left auto-pause; the trainer's rejoin handler resumes it.
+    return false;
+  }
+
+  const roomName = `session:${sid}`;
+  const wasEnded = session.preExtensionPauseStatus === "ended" || session.remainingSeconds <= 0;
+  session.pauseReason = null;
+  session.preExtensionPauseStatus = null;
+
+  if (wasEnded) {
+    session.remainingSeconds = 0;
+    session.status = "ended";
+    const endedPayload = {
+      sessionId: session.sessionId,
+      endedAt: new Date().toISOString(),
+      reason,
+    };
+    ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.ENDED, endedPayload);
+    const stubSocket = { nsp: ioInstance.to(roomName) };
+    emitLessonStateSync(stubSocket, roomName, session);
+    lessonSessions.delete(sid);
+    return true;
+  }
+
+  session.startedAt = Date.now();
+  session.status = "running";
+  const resumedPayload = {
+    sessionId: session.sessionId,
     startedAt: session.startedAt,
     duration: session.duration,
     remainingSeconds: session.remainingSeconds,
-    trainerConnected: session.coachJoined,
-    traineeConnected: session.userJoined,
+    reason,
   };
-  ioInstance.to(roomName).emit("LESSON_STATE_SYNC", statePayload);
-
+  ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.RESUMED, resumedPayload);
   const stubSocket = { nsp: ioInstance.to(roomName) };
+  emitLessonStateSync(stubSocket, roomName, session);
   scheduleLessonEnd(stubSocket, roomName, session);
+  return true;
+}
+
+/** Attach (or detach with `null`) the snapshot describing the live extension
+ *  request. Pushed in the next `LESSON_STATE_SYNC` so reconnecting clients can
+ *  rebuild their UI without a separate REST call. */
+export function setPendingExtensionRequest(
+  sessionId: string,
+  snapshot: PendingExtensionRequestSnapshot | null
+) {
+  if (!ioInstance) return;
+  const sid = String(sessionId);
+  const session = lessonSessions.get(sid);
+  if (!session) return;
+  session.pendingExtensionRequest = snapshot;
+  const roomName = `session:${sid}`;
+  const stubSocket = { nsp: ioInstance.to(roomName) };
+  emitLessonStateSync(stubSocket, roomName, session);
+}
+
+/** Broadcast helper for the extension lifecycle. */
+export function broadcastSessionExtensionEvent(
+  sessionId: string,
+  event: string,
+  payload: Record<string, unknown>
+) {
+  if (!ioInstance) return;
+  const sid = String(sessionId);
+  const roomName = `session:${sid}`;
+  ioInstance.to(roomName).emit(event, { sessionId: sid, ...payload });
 }
 
 const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSessionState) => {

@@ -3,12 +3,37 @@ import { log } from "../../../logger";
 import { CONSTANCE, Message, UPDATE_FIELDS } from "../../config/constance";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { TrainerService } from "./trainerService";
+import { SessionExtensionService } from "../trainee/sessionExtensionService";
 import { Request, Response } from "express";
 import * as _ from "lodash";
 
 export class trainerController {
   public logger = log.getLogger();
   public trainerService = new TrainerService();
+  public sessionExtensionService = new SessionExtensionService();
+
+  public respondToSessionExtensionRequest = async (req: Request, res: Response) => {
+    try {
+      const result = await this.sessionExtensionService.respondToRequest({
+        sessionId: req.body.sessionId,
+        requestId: req.body.requestId,
+        decision: req.body.decision,
+        _userId: String(req["authUser"]?._id),
+      });
+      if (result.code >= 400) {
+        return res.status(result.code).send({
+          status: CONSTANCE.FAIL,
+          error: result.error || result.result,
+        });
+      }
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
 
   public updateSchedulingSlots = async (req: any, res: Response) => {
     const { _id } = req.authUser;

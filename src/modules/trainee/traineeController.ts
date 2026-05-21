@@ -456,12 +456,81 @@ export class traineeController {
       const result = await this.sessionExtensionService.confirmExtension({
         sessionId: req.body.sessionId,
         minutes: Number(req.body.minutes),
+        requestId: req.body.requestId,
         payment_intent_id: req.body.payment_intent_id,
         payment_method: req.body.payment_method,
         pin_session_token: req.body.pin_session_token,
         _userId: String(req["authUser"]?._id),
       });
-      if (result.code === 400 || result.code === 409) {
+      if (result.code === 400 || result.code === 409 || result.code === 404) {
+        return res.status(result.code).send({
+          status: CONSTANCE.FAIL,
+          error: result.error || result.result,
+        });
+      }
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public requestSessionExtension = async (req: Request, res: Response) => {
+    try {
+      const result = await this.sessionExtensionService.createRequest({
+        sessionId: req.body.sessionId,
+        minutes: Number(req.body.minutes),
+        _userId: String(req["authUser"]?._id),
+      });
+      if (result.code >= 400) {
+        return res.status(result.code).send({
+          status: CONSTANCE.FAIL,
+          error: result.error || result.result,
+        });
+      }
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public cancelSessionExtensionRequest = async (req: Request, res: Response) => {
+    try {
+      const result = await this.sessionExtensionService.cancelRequest({
+        sessionId: req.body.sessionId,
+        requestId: req.body.requestId,
+        reason: req.body.reason,
+        _userId: String(req["authUser"]?._id),
+      });
+      if (result.code >= 400) {
+        return res.status(result.code).send({
+          status: CONSTANCE.FAIL,
+          error: result.error || result.result,
+        });
+      }
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public respondToSessionExtensionRequest = async (req: Request, res: Response) => {
+    try {
+      const result = await this.sessionExtensionService.respondToRequest({
+        sessionId: req.body.sessionId,
+        requestId: req.body.requestId,
+        decision: req.body.decision,
+        _userId: String(req["authUser"]?._id),
+      });
+      if (result.code >= 400) {
         return res.status(result.code).send({
           status: CONSTANCE.FAIL,
           error: result.error || result.result,
