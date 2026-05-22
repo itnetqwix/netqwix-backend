@@ -100,8 +100,12 @@ export async function notifySessionUser(
   };
 
   try {
-    const { emitToUser } = require("../socket/socketEmit");
-    emitToUser(receiverId, EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, receivePayload);
+    const { publishSocketEventToUser } = require("../socket/socketEmit");
+    void publishSocketEventToUser(
+      receiverId,
+      EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE,
+      receivePayload
+    );
   } catch {
     /* optional */
   }

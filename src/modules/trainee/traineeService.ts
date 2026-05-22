@@ -288,7 +288,7 @@ export class TraineeService {
             trainer_id: "$_id",
             trainer_ratings: 1,
             avgRating: 1,
-            reviewCount: { $size: { $ifNull: ["$trainer_ratings", []] } } },
+            reviewCount: { $size: { $ifNull: ["$trainer_ratings", []] } },
             completedSessionCount: {
               $size: {
                 $filter: {
@@ -296,7 +296,7 @@ export class TraineeService {
                   as: "r",
                   cond: {
                     $in: [
-                      { $toLower: { $ifNull: ["$$r.status", ""] } } },
+                      { $toLower: { $ifNull: ["$$r.status", ""] } },
                       ["completed", "confirm", "confirmed"],
                     ],
                   },

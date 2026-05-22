@@ -46,9 +46,12 @@ import {
 } from "../session/sessionNotificationService";
 import {
   bindSocketIo,
-  emitToSession,
-  emitToUser,
-  emitToUsers,
+  publishSocketEventToChat,
+  publishSocketEventToRoom,
+  publishSocketEventToSession,
+  publishSocketEventToUser,
+  publishSocketEventToUsers,
+  publishSocketBroadcast,
 } from "./socketEmit";
 
 const pushService = new NotificationsService();
@@ -89,18 +92,18 @@ function relayPeerByUserId(
   payload: unknown
 ): boolean {
   if (!peerUserId) return false;
-  return emitToUser(String(peerUserId), event, payload);
+  void publishSocketEventToUser(String(peerUserId), event, payload);
+  return true;
 }
 
 function broadcastUserStatus(userId: string, status: "online" | "offline") {
-  if (!ioInstance) return;
   const payload = {
     user: activeUsers,
     status,
     userId: String(userId),
   };
-  ioInstance.emit("userStatus", payload);
-  ioInstance.emit("onlineUser", payload);
+  void publishSocketBroadcast("userStatus", payload);
+  void publishSocketBroadcast("onlineUser", payload);
 }
 
 export async function removeUserFromActivePresence(userId: string) {
@@ -261,7 +264,12 @@ function cancelLessonDisconnectGrace(sessionId: string, userId: string) {
 }
 
 function lessonRoomEmit(roomName: string, event: string, payload: unknown) {
-  if (ioInstance) ioInstance.to(roomName).emit(event, payload);
+  const sessionMatch = /^session:(.+)$/.exec(roomName);
+  if (sessionMatch) {
+    void publishSocketEventToSession(sessionMatch[1], event, payload);
+  } else {
+    void publishSocketEventToRoom(roomName, event, payload);
+  }
 }
 
 function startLessonTimerInRoom(
@@ -285,9 +293,7 @@ function startLessonTimerInRoom(
     reason,
   };
 
-  if (ioInstance) ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
-  else socket.nsp.to(roomName).emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
-
+  lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.STARTED, timerPayload);
   emitLessonStateSync(socket, roomName, session);
   scheduleLessonEnd(socket, roomName, session);
   console.log(
@@ -408,8 +414,7 @@ const emitLessonStateSync = (socket: any, roomName: string, session: LessonSessi
     pendingExtensionRequest: session.pendingExtensionRequest ?? null,
   };
 
-  if (ioInstance) ioInstance.to(roomName).emit("LESSON_STATE_SYNC", statePayload);
-  else socket.nsp.to(roomName).emit("LESSON_STATE_SYNC", statePayload);
+  lessonRoomEmit(roomName, "LESSON_STATE_SYNC", statePayload);
 };
 
 const clearLessonTimeouts = (session: LessonSessionState) => {
@@ -498,7 +503,7 @@ export function extendLessonTimer(
     endTimeUtc: meta?.endTimeUtc,
     extensionId: meta?.extensionId,
   };
-  ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.EXTENDED, extendedPayload);
+  lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.EXTENDED, extendedPayload);
 
   const timerPayload = {
     sessionId: session.sessionId,
@@ -506,9 +511,9 @@ export function extendLessonTimer(
     duration: session.duration,
     remainingSeconds: session.remainingSeconds,
   };
-  ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
+  lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.STARTED, timerPayload);
 
-  const stubSocket = { nsp: ioInstance.to(roomName) };
+  const stubSocket = { nsp: ioInstance?.to(roomName) };
   emitLessonStateSync(stubSocket, roomName, session);
 
   scheduleLessonEnd(stubSocket, roomName, session);
@@ -551,8 +556,8 @@ export function pauseLessonTimer(sessionId: string, reason: string) {
     duration: session.duration,
     reason,
   };
-  ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.PAUSED, pausedPayload);
-  const stubSocket = { nsp: ioInstance.to(roomName) };
+  lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.PAUSED, pausedPayload);
+  const stubSocket = { nsp: ioInstance?.to(roomName) };
   emitLessonStateSync(stubSocket, roomName, session);
   return true;
 }
@@ -584,8 +589,8 @@ export function resumeLessonTimer(sessionId: string, reason: string) {
       endedAt: new Date().toISOString(),
       reason,
     };
-    ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.ENDED, endedPayload);
-    const stubSocket = { nsp: ioInstance.to(roomName) };
+    lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.ENDED, endedPayload);
+    const stubSocket = { nsp: ioInstance?.to(roomName) };
     emitLessonStateSync(stubSocket, roomName, session);
     lessonSessionsDelete(sid);
     return true;
@@ -600,8 +605,8 @@ export function resumeLessonTimer(sessionId: string, reason: string) {
     remainingSeconds: session.remainingSeconds,
     reason,
   };
-  ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.RESUMED, resumedPayload);
-  const stubSocket = { nsp: ioInstance.to(roomName) };
+  lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.RESUMED, resumedPayload);
+  const stubSocket = { nsp: ioInstance?.to(roomName) };
   emitLessonStateSync(stubSocket, roomName, session);
   scheduleLessonEnd(stubSocket, roomName, session);
   return true;
@@ -620,7 +625,7 @@ export function setPendingExtensionRequest(
   if (!session) return;
   session.pendingExtensionRequest = snapshot;
   const roomName = `session:${sid}`;
-  const stubSocket = { nsp: ioInstance.to(roomName) };
+  const stubSocket = { nsp: ioInstance?.to(roomName) };
   emitLessonStateSync(stubSocket, roomName, session);
 }
 
@@ -631,7 +636,7 @@ export function broadcastSessionExtensionEvent(
   payload: Record<string, unknown>
 ) {
   const sid = String(sessionId);
-  emitToSession(sid, event, { sessionId: sid, ...payload });
+  void publishSocketEventToSession(sid, event, { sessionId: sid, ...payload });
 }
 
 const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSessionState) => {
@@ -644,8 +649,7 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
       sessionId: session.sessionId,
       endedAt: new Date().toISOString(),
     };
-    if (ioInstance) ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.ENDED, endedPayload);
-    else socket.nsp.to(roomName).emit(EVENTS.LESSON_TIMER.ENDED, endedPayload);
+    lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.ENDED, endedPayload);
     emitLessonStateSync(socket, roomName, session);
     lessonSessionsDelete(session.sessionId);
     return;
@@ -659,8 +663,7 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
       sessionId: session.sessionId,
       endedAt: new Date().toISOString(),
     };
-    if (ioInstance) ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.ENDED, endedPayload);
-    else socket.nsp.to(roomName).emit(EVENTS.LESSON_TIMER.ENDED, endedPayload);
+    lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.ENDED, endedPayload);
     emitLessonStateSync(socket, roomName, session);
     lessonSessionsDelete(session.sessionId);
   }, remainingMs);
@@ -998,7 +1001,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
       });
       return;
     }
-    emitToUser(String(userInfo.to_user), "offer", offer);
+    void publishSocketEventToUser(String(userInfo.to_user), "offer", offer);
     // TODO:for now broadcasting the event, it needs to send to specific user.
     // socket.broadcast.emit('offer', offer);
   });
@@ -1176,8 +1179,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
             remainingSeconds: session.remainingSeconds,
             reason: "trainer_rejoined",
           };
-          if (ioInstance) ioInstance.to(roomName).emit("LESSON_TIME_RESUMED", resumedPayload);
-          else socket.nsp.to(roomName).emit("LESSON_TIME_RESUMED", resumedPayload);
+          lessonRoomEmit(roomName, "LESSON_TIME_RESUMED", resumedPayload);
           scheduleLessonEnd(socket, roomName, session);
         }
 
@@ -1332,8 +1334,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
       remainingSeconds: session.remainingSeconds,
       duration: session.duration,
     };
-    if (ioInstance) ioInstance.to(roomName).emit("LESSON_TIME_PAUSED", pausedPayload);
-    else socket.nsp.to(roomName).emit("LESSON_TIME_PAUSED", pausedPayload);
+    lessonRoomEmit(roomName, "LESSON_TIME_PAUSED", pausedPayload);
     emitLessonStateSync(socket, roomName, session);
   });
 
@@ -1358,8 +1359,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
       duration: session.duration,
       remainingSeconds: session.remainingSeconds,
     };
-    if (ioInstance) ioInstance.to(roomName).emit("LESSON_TIME_RESUMED", resumedPayload);
-    else socket.nsp.to(roomName).emit("LESSON_TIME_RESUMED", resumedPayload);
+    lessonRoomEmit(roomName, "LESSON_TIME_RESUMED", resumedPayload);
     emitLessonStateSync(socket, roomName, session);
     scheduleLessonEnd(socket, roomName, session);
   });
@@ -1487,7 +1487,7 @@ const listenNotificationEvents = (socket) => {
       // console.log(newNotifications, 'newNotifications')
       const subscription = JSON.parse(receiver?.subscriptionId);
       // console.log(subscription, 'subscription')
-      emitToUser(receiverId, EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, {
+      void publishSocketEventToUser(receiverId, EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, {
         _id: newNotifications?._id,
         title: newNotifications?.title,
         description: newNotifications?.description,
@@ -1533,7 +1533,7 @@ async function emitInstantLessonExpire(
   _originatingSocket?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } }
 ) {
   const payload = { lessonId, coachId, traineeId };
-  emitToUsers([coachId, traineeId], EVENTS.INSTANT_LESSON.EXPIRE, payload);
+  void publishSocketEventToUsers([coachId, traineeId], EVENTS.INSTANT_LESSON.EXPIRE, payload);
   if (traineeId && !isUserOnline(traineeId)) {
     void pushService.sendPushNotification(
       traineeId,
@@ -1553,7 +1553,7 @@ function emitInstantLessonPhase(
   _originatingSocket?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } }
 ) {
   const payload = { lessonId, coachId, traineeId, phase, ...extra };
-  emitToUsers([coachId, traineeId], EVENTS.INSTANT_LESSON.PHASE, payload);
+  void publishSocketEventToUsers([coachId, traineeId], EVENTS.INSTANT_LESSON.PHASE, payload);
 }
 
 export async function runInstantLessonExpire(
@@ -2093,12 +2093,12 @@ const listenChatEvents = (socket) => {
         const { conversationId, receiverId, senderId, _id } = payload || {};
         if (!conversationId) return;
 
-        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.MESSAGE, payload);
+        void publishSocketEventToChat(conversationId, EVENTS.CHAT.MESSAGE, payload);
 
         if (receiverId) {
           const receiverSid = MemCache.getDetail(process.env.SOCKET_CONFIG, String(receiverId));
           if (receiverSid) {
-            socket.to(String(receiverSid)).emit(EVENTS.CHAT.MESSAGE, payload);
+            void publishSocketEventToUser(String(receiverId), EVENTS.CHAT.MESSAGE, payload);
             if (_id && mongoose.isValidObjectId(_id)) {
               await ChatMessage.findByIdAndUpdate(_id, { status: "delivered", deliveredAt: new Date() });
               socket.emit(EVENTS.CHAT.DELIVERED, { messageId: _id, conversationId });
@@ -2132,7 +2132,7 @@ const listenChatEvents = (socket) => {
             { status: "delivered", deliveredAt: new Date() }
           );
         }
-        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.DELIVERED, {
+        void publishSocketEventToChat(conversationId, EVENTS.CHAT.DELIVERED, {
           messageIds: validIds,
           conversationId,
         });
@@ -2150,7 +2150,7 @@ const listenChatEvents = (socket) => {
           { conversationId, receiverId: readerId || socket?.user?._doc?._id, isRead: false },
           { isRead: true, status: "read", readAt: now }
         );
-        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.READ, {
+        void publishSocketEventToChat(conversationId, EVENTS.CHAT.READ, {
           conversationId,
           readerId: readerId || String(socket?.user?._doc?._id),
           readAt: now.toISOString(),
@@ -2164,7 +2164,7 @@ const listenChatEvents = (socket) => {
       try {
         const { conversationId, userId } = payload || {};
         if (!conversationId) return;
-        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.TYPING, { conversationId, userId });
+        void publishSocketEventToChat(conversationId, EVENTS.CHAT.TYPING, { conversationId, userId });
       } catch (_err) {
         /* intentionally quiet */
       }
@@ -2174,7 +2174,7 @@ const listenChatEvents = (socket) => {
       try {
         const { conversationId, userId } = payload || {};
         if (!conversationId) return;
-        socket.to(`chat:${conversationId}`).emit(EVENTS.CHAT.STOP_TYPING, { conversationId, userId });
+        void publishSocketEventToChat(conversationId, EVENTS.CHAT.STOP_TYPING, { conversationId, userId });
       } catch (_err) {
         /* intentionally quiet */
       }
@@ -2234,7 +2234,7 @@ async function persistBookingCreatedNotification(
     bookingInfo: { bookingId, ...socketPayload },
   };
 
-  emitToUser(trainerId, EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, receivePayload);
+  void publishSocketEventToUser(trainerId, EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, receivePayload);
 
   if (trainer?.subscriptionId) {
     try {
@@ -2288,14 +2288,13 @@ export const emitBookingCreated = async (bookingData: any, bookingType: 'instant
       console.error("[BOOKING] Error persisting booking notification:", notifyErr);
     }
 
-    if (!ioInstance) {
-      console.warn("[BOOKING] ioInstance not set, cannot emit BOOKING_CREATED event");
-      return;
-    }
-
-    emitToUsers([trainerId, traineeId], EVENTS.BOOKING.CREATED, payload);
+    void publishSocketEventToUsers(
+      [trainerId, traineeId],
+      EVENTS.BOOKING.CREATED,
+      payload
+    );
     console.log(
-      `[BOOKING] BOOKING_CREATED emitted to user rooms trainer=${trainerId} trainee=${traineeId}`
+      `[BOOKING] BOOKING_CREATED published trainer=${trainerId} trainee=${traineeId}`
     );
 
     console.log(`[BOOKING] [${new Date().toISOString()}] Booking created: ${payload.bookingId}, type: ${bookingType}, trainer: ${trainerId}, trainee: ${traineeId}`);
@@ -2306,24 +2305,25 @@ export const emitBookingCreated = async (bookingData: any, bookingType: 'instant
 
 export const emitBookingStatusUpdated = async (bookingData: any) => {
   try {
-    if (!ioInstance) {
-      console.warn("[BOOKING] ioInstance not set, cannot emit BOOKING_STATUS_UPDATED event");
-      return;
-    }
-
     const { _id: bookingId, trainer_id, trainee_id, status, updatedAt } = bookingData;
     const trainerId = trainer_id?.toString ? trainer_id.toString() : trainer_id;
     const traineeId = trainee_id?.toString ? trainee_id.toString() : trainee_id;
 
     const payload = {
       bookingId: bookingId?.toString ? bookingId.toString() : bookingId,
+      trainerId,
+      traineeId,
       status,
       updatedAt: updatedAt || new Date().toISOString(),
     };
 
-    emitToUsers([trainerId, traineeId], EVENTS.BOOKING.STATUS_UPDATED, payload);
+    void publishSocketEventToUsers(
+      [trainerId, traineeId],
+      EVENTS.BOOKING.STATUS_UPDATED,
+      payload
+    );
     console.log(
-      `[BOOKING] BOOKING_STATUS_UPDATED emitted trainer=${trainerId} trainee=${traineeId}`
+      `[BOOKING] BOOKING_STATUS_UPDATED published trainer=${trainerId} trainee=${traineeId}`
     );
 
     console.log(`[BOOKING] [${new Date().toISOString()}] Booking status updated: ${payload.bookingId}, status: ${status}, trainer: ${trainerId}, trainee: ${traineeId}`);

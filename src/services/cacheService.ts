@@ -1,6 +1,5 @@
 import { createHash } from "crypto";
 import {
-  getRedis,
   isRedisEnabled,
   redisDelByPattern,
   redisGetJson,
@@ -60,4 +59,39 @@ export function trainerSlotsCacheKey(query: Record<string, unknown>): string {
 
 export async function invalidateUserSessionsCache(userId: string): Promise<void> {
   await cacheInvalidate(sessionsListInvalidatePattern(userId));
+}
+
+export function trainerSlotsInvalidatePattern(): string {
+  return `${REDIS_KEYS.cache("trainers-slots:")}*`;
+}
+
+export async function invalidateAllTrainerSlotsCache(): Promise<number> {
+  if (!isRedisEnabled()) return 0;
+  return redisDelByPattern(trainerSlotsInvalidatePattern());
+}
+
+export type InvalidateBookingCachesOpts = {
+  trainerId?: string;
+  traineeId?: string;
+  bookingId?: string;
+  /** Skip directory cache bust (e.g. lesson timer ticks). */
+  skipTrainerSlots?: boolean;
+};
+
+/** Invalidate list caches after booking / session lifecycle events. */
+export async function invalidateBookingCaches(
+  opts: InvalidateBookingCachesOpts
+): Promise<number> {
+  if (!isRedisEnabled()) return 0;
+  let deleted = 0;
+  if (opts.trainerId) {
+    deleted += await redisDelByPattern(sessionsListInvalidatePattern(opts.trainerId));
+  }
+  if (opts.traineeId && opts.traineeId !== opts.trainerId) {
+    deleted += await redisDelByPattern(sessionsListInvalidatePattern(opts.traineeId));
+  }
+  if (!opts.skipTrainerSlots) {
+    deleted += await invalidateAllTrainerSlotsCache();
+  }
+  return deleted;
 }

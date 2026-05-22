@@ -84,6 +84,7 @@ export class App {
     this.app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
     this.app.get("/health", async (_req, res) => {
       const redis = await redisHealthCheck();
+      const { getPubSubMode, isPubSubActive } = await import("./services/eventPubSub");
       let messaging: unknown = { skipped: "lazy" };
       if (process.env.HEALTH_CHECK_MESSAGING === "true") {
         const { getMessagingHealth } = await import("./services/messagingHealth");
@@ -92,6 +93,7 @@ export class App {
       res.status(200).json({
         status: "ok",
         redis,
+        pubsub: { mode: getPubSubMode(), active: isPubSubActive() },
         messaging,
         uptimeSec: Math.floor(process.uptime()),
       });
