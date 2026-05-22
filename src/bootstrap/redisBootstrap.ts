@@ -5,6 +5,7 @@ import {
   type ExtensionExpiryJob,
 } from "../services/extensionTimerQueue";
 import { log } from "../../logger";
+import { isClusterLeader } from "../config/processRole";
 
 const logger = log.getLogger();
 
@@ -24,7 +25,7 @@ export async function bootstrapRedis(io: any): Promise<void> {
   if (adapted) {
     logger.info("[Redis] Socket.IO adapter attached");
   }
-  if (!extensionWorkerStarted) {
+  if (isClusterLeader() && !extensionWorkerStarted) {
     extensionWorkerStarted = true;
     startExtensionExpiryWorker(async (job: ExtensionExpiryJob) => {
       const { SessionExtensionService } = await import(
@@ -34,5 +35,7 @@ export async function bootstrapRedis(io: any): Promise<void> {
       await svc.expireRequest(job.sessionId, job.requestId, job.reason);
     });
     logger.info("[Redis] Extension expiry worker started");
+  } else if (!isClusterLeader()) {
+    logger.info("[Redis] Extension worker skipped on non-leader instance");
   }
 }

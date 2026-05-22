@@ -39,6 +39,7 @@ import { globalApiLimiter } from "./middleware/rateLimit.middleware";
 import { AuthorizeMiddleware } from "./middleware/authorize.middleware";
 import { bootstrapRedis } from "./bootstrap/redisBootstrap";
 import { redisHealthCheck } from "./services/redisClient";
+import { clusterInstanceLabel, isClusterLeader } from "./config/processRole";
 
 export class App {
   protected app: express.Application;
@@ -90,13 +91,16 @@ export class App {
     this.app.use(l10n.enableL10NExpress);
     const server = this.app.listen(this.PORT, () => {
       this.logger.info(
-        `The server is running in port localhost: ${process.env.PORT}`
+        `[API] instance=${clusterInstanceLabel()} port=${process.env.PORT}`
       );
       // connecting to the Database
       new DatabaseInit();
     });
-    // it's a function to execute all cron jobs
-    cronjobs();
+    if (isClusterLeader()) {
+      cronjobs();
+    } else {
+      this.logger.info("[Cron] Skipped on non-leader cluster instance");
+    }
 
     // Mount self-hosted PeerJS signaling server at /peerjs.
     // This eliminates dependency on the unreliable PeerJS public cloud (0.peerjs.com)
