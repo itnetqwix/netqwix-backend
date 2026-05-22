@@ -1,8 +1,9 @@
 /**
- * PM2 cluster on a single server — uses all CPU cores without extra VMs.
+ * PM2 on a single server.
  *
- * Requirements when instances > 1:
- *   REDIS_ENABLED=true  (Socket.IO adapter + shared lesson timer state)
+ * Socket.IO + HTTP long-polling: use PM2_INSTANCES=1 unless you add sticky
+ * sessions (@socket.io/sticky or nginx ip_hash). Redis adapter broadcasts events
+ * across workers but does NOT route polling sessions — "Session ID unknown" otherwise.
  *
  * Start:
  *   pm2 start ecosystem.config.js --env production
@@ -14,7 +15,7 @@ module.exports = {
       name: process.env.PM2_APP_NAME || "netqwix-api-prod",
       script: "dist/src/index.js",
       cwd: __dirname,
-      instances: process.env.PM2_INSTANCES || "2",
+      instances: process.env.PM2_INSTANCES || "1",
       exec_mode: "cluster",
       listen_timeout: 10000,
       kill_timeout: 8000,
@@ -30,7 +31,7 @@ module.exports = {
       },
       env_production: {
         NODE_ENV: "production",
-        PM2_INSTANCES: "2",
+        PM2_INSTANCES: "1",
         REDIS_ENABLED: "true",
       },
     },

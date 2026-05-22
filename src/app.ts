@@ -4,6 +4,7 @@ import { log } from "./../logger";
 import * as cors from "cors";
 import * as l10n from "jm-ez-l10n";
 import * as express from "express";
+import * as http from "http";
 const socketio = require("socket.io");
 const { ExpressPeerServer } = require("peer");
 
@@ -54,6 +55,7 @@ export class App {
   PORT = process.env.PORT;
   constructor() {
     this.app = express();
+    this.app.set("trust proxy", 1);
     this.app.use(requestContextMiddleware);
     this.app.use(securityHeaders);
     this.app.use(globalApiLimiter);
@@ -102,6 +104,8 @@ export class App {
           adapterAttached: isSocketAdapterAttached(),
           clusterInstances: clusterInstanceCount(),
           instance: clusterInstanceLabel(),
+          /** Polling needs sticky LB or a single PM2 worker; Redis adapter alone is not enough. */
+          pollingRequiresStickyOrSingleWorker: clusterInstanceCount() > 1,
         },
         pubsub: { mode: getPubSubMode(), active: isPubSubActive() },
         messaging,
@@ -111,22 +115,27 @@ export class App {
     this.app.use("/", route.routePath());
     l10n.setTranslationsFile("en", "src/language/translation.en.json");
     this.app.use(l10n.enableL10NExpress);
-    const server = this.app.listen(this.PORT, () => {
-      this.logger.info(
-        `[API] instance=${clusterInstanceLabel()} port=${process.env.PORT}`
-      );
-      // connecting to the Database
-      new DatabaseInit();
-    });
-    if (isClusterLeader()) {
-      cronjobs();
-    } else {
-      this.logger.info("[Cron] Skipped on non-leader cluster instance");
-    }
 
-    // Mount self-hosted PeerJS signaling server at /peerjs.
-    // This eliminates dependency on the unreliable PeerJS public cloud (0.peerjs.com)
-    // so both trainer and trainee always use the same signaling server as the backend.
+    const authorizeMiddleware = new AuthorizeMiddleware();
+    this.app.get("/connected-users", (req, res, next) => {
+      authorizeMiddleware.authorizeUser(req, res, () => {
+        const { assertAdminUser } = require("./modules/admin/adminPermission");
+        const denied = assertAdminUser(req["authUser"]);
+        if (denied) {
+          return res.status(403).json({ status: 0, error: denied });
+        }
+        const connectedUsers = this.socketEvents.getConnectedUsers();
+        return res.json({ connectedUsers });
+      });
+    });
+
+    void this.startHttpServer(corsOrigin);
+  }
+
+  /** Listen only after Redis + Socket.IO are ready (avoids early "Session ID unknown"). */
+  private async startHttpServer(corsOrigin: ResolvedCorsOrigin): Promise<void> {
+    const server = http.createServer(this.app);
+
     const peerServer = ExpressPeerServer(server, {
       path: "/",
       allow_discovery: false,
@@ -137,38 +146,50 @@ export class App {
     const socketCorsOrigin = socketOriginsFromCors(corsOrigin);
     const io = socketio(server, {
       maxHttpBufferSize: 1e8,
-      transports: ['websocket', 'polling'], // Explicitly allow both transports
-      allowEIO3: true, // Allow Engine.IO v3 clients
+      transports: ["websocket", "polling"],
+      allowEIO3: true,
       cors: {
         origin: socketCorsOrigin,
         methods: ["GET", "POST"],
         credentials: true,
       },
-      pingTimeout: 60000, // Increase ping timeout
-      pingInterval: 25000, // Increase ping interval
+      pingTimeout: 60000,
+      pingInterval: 25000,
     });
-    void bootstrapRedis(io)
-      .catch((err) => {
-        this.logger.warn(`[Redis] bootstrap failed: ${err?.message || err}`);
-      })
-      .finally(() => {
-        this.socketEvents.init(io, this.app);
-        registerTrainerTraineePresenceProvider(() =>
-          this.socketEvents.getTrainerTraineePresence()
-        );
-      });
 
-  const authorizeMiddleware = new AuthorizeMiddleware();
-  this.app.get("/connected-users", (req, res, next) => {
-    authorizeMiddleware.authorizeUser(req, res, () => {
-      const { assertAdminUser } = require("./modules/admin/adminPermission");
-      const denied = assertAdminUser(req["authUser"]);
-      if (denied) {
-        return res.status(403).json({ status: 0, error: denied });
-      }
-      const connectedUsers = this.socketEvents.getConnectedUsers();
-      return res.json({ connectedUsers });
+    try {
+      await bootstrapRedis(io);
+    } catch (err: any) {
+      this.logger.warn(`[Redis] bootstrap failed: ${err?.message || err}`);
+    }
+
+    if (clusterInstanceCount() > 1 && !isSocketAdapterAttached()) {
+      this.logger.error(
+        "[Socket] CRITICAL: multiple PM2 instances without Redis adapter — polling will fail"
+      );
+    }
+    if (clusterInstanceCount() > 1) {
+      this.logger.warn(
+        "[Socket] PM2_INSTANCES>1: enable sticky sessions for polling or set PM2_INSTANCES=1"
+      );
+    }
+
+    this.socketEvents.init(io, this.app);
+    registerTrainerTraineePresenceProvider(() =>
+      this.socketEvents.getTrainerTraineePresence()
+    );
+
+    server.listen(this.PORT, () => {
+      this.logger.info(
+        `[API] instance=${clusterInstanceLabel()} port=${process.env.PORT} socketReady=true`
+      );
+      new DatabaseInit();
     });
-  });
+
+    if (isClusterLeader()) {
+      cronjobs();
+    } else {
+      this.logger.info("[Cron] Skipped on non-leader cluster instance");
+    }
   }
 }
