@@ -163,6 +163,60 @@ export class AuthMiddleware {
     }
   };
 
+export type SocketAuthFailureReason =
+  | "missing"
+  | "invalid"
+  | "expired"
+  | "user_not_found";
+
+function extractSocketToken(handshake: {
+  auth?: { authorization?: string; token?: string };
+  query?: { authorization?: string; token?: string };
+}): string | null {
+  const fromAuth = handshake?.authorization;
+  if (typeof fromAuth === "string" && fromAuth.trim()) {
+    return fromAuth.trim();
+  }
+  if (typeof handshake?.token === "string" && handshake.token.trim()) {
+    return handshake.token.trim();
+  }
+  const fromQuery = handshake?.query?.authorization;
+  if (typeof fromQuery === "string") {
+    return typeof fromQuery === "string" ? fromQuery : String(fromQuery);
+  }
+  if (typeof fromQuery === "string" && handshake?.query?.token) {
+    return String(handshake.query.token);
+  }
+  return null;
+}
+
+export async function authenticateSocket(handshake: {
+  auth?: { authorization?: string; token?: string };
+  query?: { authorization?: string; token?: string };
+}): Promise<{ user: any; reason?: SocketAuthFailureReason }> {
+  const token = extractSocketToken(handshake);
+  if (!token) {
+    return { user: null, reason: "missing" };
+  }
+  try {
+    const decoded = await JWT.decodeAuthToken(token);
+    if (!decoded?.user_id) {
+      return { user: null, reason: "invalid" };
+    }
+    const result = await new AuthMiddleware().loadSocketUser(token);
+    if (!result.isValidUser || !result.user) {
+      return { user: null, reason: result.error ? "invalid" : "user_not_found" };
+    }
+    return { user: result.user, reason: undefined };
+  } catch (e: any) {
+    const msg = e?.message || "";
+    if (msg.toLowerCase().includes("expired")) {
+      return { user: null, reason: "expired" };
+    }
+    return { user: null, reason: "invalid" };
+  }
+}
+
   public loadSocketUser = async (token) => {
     try {
       const tokenInfo = await JWT.decodeAuthToken(token);
