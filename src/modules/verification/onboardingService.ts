@@ -2,7 +2,10 @@ import user from "../../model/user.schema";
 import { SendEmail } from "../../Utils/sendEmail";
 import { VERIFICATION_CONFIG } from "../../config/verification";
 import { buildOnboardingStatus, getTrainerVerification } from "./onboardingHelpers";
-import { syncTrustedContactVerification } from "./contactVerificationSync";
+import {
+  syncSignupOtpContactVerification,
+  syncTrustedContactVerification,
+} from "./contactVerificationSync";
 import { ensureTrainerGracePeriod } from "./gracePeriod";
 import { rekognitionLivenessService } from "./rekognitionLivenessService";
 import { logVerificationAudit } from "./verificationAudit";
@@ -11,6 +14,7 @@ import { recordOpsEvent } from "../ops/opsEventService";
 export class OnboardingService {
   async getStatus(userId: string) {
     await ensureTrainerGracePeriod(userId);
+    await syncSignupOtpContactVerification(userId);
     await syncTrustedContactVerification(userId);
     const u = await user.findById(userId).lean();
     if (!u) throw new Error("User not found");

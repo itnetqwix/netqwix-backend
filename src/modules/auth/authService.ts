@@ -20,7 +20,10 @@ import {
   buildOnboardingStatus,
   trainerVerificationAfterSignupOtp,
 } from "../verification/onboardingHelpers";
-import { syncTrustedContactVerification } from "../verification/contactVerificationSync";
+import {
+  syncSignupOtpContactVerification,
+  syncTrustedContactVerification,
+} from "../verification/contactVerificationSync";
 import { ensureTrainerGracePeriod } from "../verification/gracePeriod";
 import {
   assertLoginNotLocked,
@@ -170,8 +173,9 @@ export class AuthService {
 
     await userObj.save();
 
-
-
+    if (createUser.account_type === AccountType.TRAINER) {
+      await syncSignupOtpContactVerification(String(userObj._id));
+    }
 
     // Remove the referred user from the ReferredUser collection if it was created from there
     if (referredUser) {
@@ -315,6 +319,7 @@ export class AuthService {
             meta
           );
           await ensureTrainerGracePeriod(String(userDetails._id));
+          await syncSignupOtpContactVerification(String(userDetails._id));
           await syncTrustedContactVerification(String(userDetails._id), {
             trustEmailFromLogin: true,
           });
@@ -469,6 +474,7 @@ export class AuthService {
       };
       const issued = await refreshTokenService.issueRefreshToken(String(user._id), meta);
       await ensureTrainerGracePeriod(String(user._id));
+      await syncSignupOtpContactVerification(String(user._id));
       await syncTrustedContactVerification(String(user._id), { trustEmailFromLogin: true });
       const freshUser = await userModel.findById(user._id).lean();
       const onboarding = buildOnboardingStatus(freshUser || user);
