@@ -1,6 +1,7 @@
 import { log } from "../../../logger";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import master_data from "../../model/master_data";
+import mongoose from "mongoose";
 import * as l10n from "jm-ez-l10n";
 
 export class masterService {
@@ -8,7 +9,18 @@ export class masterService {
 
   public getMasterData = async (): Promise<ResponseBuilder> => {
     try {
-      const masterData = await master_data.find();
+      let masterData = await master_data.find().lean();
+      if (!masterData?.length) {
+        try {
+          const legacy = await mongoose.connection
+            .collection("master")
+            .find({})
+            .toArray();
+          if (legacy?.length) masterData = legacy as typeof masterData;
+        } catch (legacyErr) {
+          this.log.info(`[master] legacy collection read skipped: ${legacyErr}`);
+        }
+      }
       if (!masterData || masterData.length === 0) {
         return ResponseBuilder.badRequest(l10n.t("DATA_NOT_FOUND"));
       }

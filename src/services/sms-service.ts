@@ -1,3 +1,4 @@
+import { mapSmsSendError } from "../helpers/phoneNormalize";
 import { getSmsEnv, isSmsConfigured } from "../config/messaging";
 import { sendTwilioSms } from "./twilioRest";
 
@@ -37,8 +38,9 @@ export default class SMSService {
       console.log(`[SMS] Sent sid=${message.sid} status=${message.status}`);
       return message;
     } catch (error: any) {
-      console.error(`[SMS] Send failed: ${error?.message || error}`);
-      throw error;
+      const friendly = mapSmsSendError(error);
+      console.error(`[SMS] Send failed: ${friendly}`);
+      throw new Error(friendly);
     }
   }
 }

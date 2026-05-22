@@ -47,9 +47,12 @@ import { REDIS_TTL } from "../../config/redis";
 import { withDistributedLock } from "../../services/distributedLock";
 import trainee_favorite_trainers from "../../model/trainee_favorite_trainers.schema";
 import { trainerHasOpenSlots } from "../../helpers/trainerSlots";
+import { attachTrainerSocialSignals } from "./traineeSocialSignals";
 
 export class TraineeService {
   public log = log.getLogger();
+
+  public attachTrainerSocialSignals = attachTrainerSocialSignals;
 
   public async getSlotsOfAllTrainers(query): Promise<any> {
     const trimmedSearch =

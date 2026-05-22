@@ -36,9 +36,17 @@ export class traineeController {
       if (result.status === CONSTANCE.FAIL) {
         return res.status(result.code).send({ message: result.error });
       }
+      let payload = result.result;
+      const traineeId = req.authUser?._id ? String(req.authUser._id) : "";
+      if (traineeId && Array.isArray(payload)) {
+        payload = await this.traineeService.attachTrainerSocialSignals(
+          traineeId,
+          payload
+        );
+      }
       return res
         .status(result.code)
-        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+        .send({ status: CONSTANCE.SUCCESS, data: payload });
     } catch (err) {
       this.logger.error(err);
       return res

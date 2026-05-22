@@ -125,6 +125,14 @@ export class AuthService {
 
     };
 
+    if (
+      createUser.account_type === AccountType.TRAINEE &&
+      createUser.category &&
+      String(createUser.category).trim()
+    ) {
+      (updateduserObj as any).interests = [String(createUser.category).trim()];
+    }
+
     if (createUser.account_type === AccountType.TRAINER) {
       (updateduserObj as any).trainer_verification = initTrainerVerificationOnSignup(
         Boolean(createUser.isGoogleRegister)

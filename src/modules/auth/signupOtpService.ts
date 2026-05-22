@@ -1,4 +1,5 @@
 import { Bcrypt } from "../../Utils/bcrypt";
+import { normalizeSignupPhone, mapSmsSendError } from "../../helpers/phoneNormalize";
 import { SendEmail } from "../../Utils/sendEmail";
 import SMSService from "../../services/sms-service";
 import { VERIFICATION_CONFIG } from "../../config/verification";
@@ -29,15 +30,51 @@ export function normalizeSignupEmail(email: string): string {
   return String(email || "").trim().toLowerCase();
 }
 
-export function normalizeSignupPhone(mobile: string): string {
-  const digits = String(mobile || "").replace(/\D/g, "");
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-  if (String(mobile || "").trim().startsWith("+")) return String(mobile).trim();
-  return digits ? `+${digits}` : "";
-}
+export { normalizeSignupPhone } from "../../helpers/phoneNormalize";
+
+export type SignupContactCheckResult = {
+  available: boolean;
+  normalized?: string;
+  message?: string;
+};
 
 export class SignupOtpService {
+  /** Validates format and whether email/phone is not already registered (no OTP sent). */
+  async checkContactAvailable(
+    channel: "email" | "sms",
+    rawDestination: string
+  ): Promise<SignupContactCheckResult> {
+    const destination =
+      channel === "email"
+        ? normalizeSignupEmail(rawDestination)
+        : normalizeSignupPhone(rawDestination);
+
+    if (!destination) {
+      return {
+        available: false,
+        message:
+          channel === "email" ? "Enter a valid email." : "Enter a valid phone number.",
+      };
+    }
+    if (channel === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destination)) {
+      return { available: false, message: "Enter a valid email address." };
+    }
+    if (channel === "sms" && destination.replace(/\D/g, "").length < 10) {
+      return { available: false, message: "Enter a valid phone number (at least 10 digits)." };
+    }
+
+    try {
+      await this.assertDestinationAvailable(channel, destination);
+      return { available: true, normalized: destination };
+    } catch (e: any) {
+      return {
+        available: false,
+        normalized: destination,
+        message: e?.message || "This contact is not available for signup.",
+      };
+    }
+  }
+
   private async assertDestinationAvailable(channel: "email" | "sms", destination: string) {
     if (channel === "email") {
       const exists = await user.exists({ email: destination });
@@ -96,11 +133,15 @@ export class SignupOtpService {
         `<p>Your verification code is: <strong>${code}</strong></p><p>It expires in ${Math.floor(VERIFICATION_CONFIG.otpTtlSeconds / 60)} minutes.</p>`
       );
     } else {
-      const sms = new SMSService();
-      await sms.sendSMS(
-        destination,
-        `Your NetQwix code is ${code}. Valid for ${Math.floor(VERIFICATION_CONFIG.otpTtlSeconds / 60)} min.`
-      );
+      try {
+        const sms = new SMSService();
+        await sms.sendSMS(
+          destination,
+          `Your NetQwix code is ${code}. Valid for ${Math.floor(VERIFICATION_CONFIG.otpTtlSeconds / 60)} min.`
+        );
+      } catch (smsErr) {
+        throw new Error(mapSmsSendError(smsErr));
+      }
     }
 
     return { sent: true, channel, expires_at: expiresAt };

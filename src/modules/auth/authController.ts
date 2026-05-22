@@ -26,6 +26,29 @@ export class authController {
   public userService = new UserService();
   public logger = log.getLogger();
 
+  public signupCheckContact = async (req: Request, res: Response) => {
+    try {
+      const channel = req.body?.channel;
+      if (channel !== "email" && channel !== "sms") {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "Invalid channel." });
+      }
+      const raw =
+        channel === "email"
+          ? req.body?.email
+          : req.body?.mobile_no ?? req.body?.mobile;
+      const data = await signupOtpService.checkContactAvailable(
+        channel,
+        String(raw || "")
+      );
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data });
+    } catch (e: any) {
+      return res.status(400).send({
+        status: CONSTANCE.FAIL,
+        error: e?.message || "Could not check contact.",
+      });
+    }
+  };
+
   public signupOtpSend = async (req: Request, res: Response) => {
     try {
       const channel = req.body?.channel;

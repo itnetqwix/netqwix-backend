@@ -24,6 +24,7 @@ const authorizeMiddleware = new AuthorizeMiddleware();
 const V: validator = new validator();
 
 //TODO: add middleware
+route.post("/signup/check-contact", authSignupOtpLimiter, authC.signupCheckContact);
 route.post("/signup/otp/send", authSignupOtpLimiter, authC.signupOtpSend);
 route.post("/signup/otp/verify", authSignupOtpLimiter, authC.signupOtpVerify);
 route.post(
