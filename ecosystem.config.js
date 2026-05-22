@@ -11,19 +11,27 @@
 module.exports = {
   apps: [
     {
-      name: "netqwix-api",
+      name: process.env.PM2_APP_NAME || "netqwix-api-prod",
       script: "dist/src/index.js",
       cwd: __dirname,
-      instances: process.env.PM2_INSTANCES || "max",
+      instances: process.env.PM2_INSTANCES || "2",
       exec_mode: "cluster",
       listen_timeout: 10000,
       kill_timeout: 8000,
       max_memory_restart: "1200M",
       env: {
         NODE_ENV: "development",
+        PM2_INSTANCES: "1",
+      },
+      env_staging: {
+        NODE_ENV: "production",
+        PM2_INSTANCES: "1",
+        REDIS_ENABLED: "true",
       },
       env_production: {
         NODE_ENV: "production",
+        PM2_INSTANCES: "2",
+        REDIS_ENABLED: "true",
       },
     },
   ],

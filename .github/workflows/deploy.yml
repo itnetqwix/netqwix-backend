@@ -56,12 +56,13 @@ jobs:
             export NODE_OPTIONS="--max-old-space-size=1536"
             npm run build
 
-            echo "♻️ Starting or Reloading PM2 process"
-
-            if pm2 describe netqwix-api-staging > /dev/null; then
-              pm2 reload netqwix-api-staging --update-env
+            echo "♻️ Starting or reloading PM2 (ecosystem cluster)"
+            export PM2_APP_NAME=netqwix-api-staging
+            if pm2 describe "$PM2_APP_NAME" > /dev/null 2>&1; then
+              PM2_APP_NAME="$PM2_APP_NAME" pm2 reload ecosystem.config.js --env staging --update-env
             else
-              pm2 start npm --name netqwix-api-staging -- run prod
+              pm2 delete netqwix-api-staging 2>/dev/null || true
+              PM2_APP_NAME="$PM2_APP_NAME" pm2 start ecosystem.config.js --env staging
             fi
 
             pm2 save
@@ -102,12 +103,14 @@ jobs:
             export NODE_OPTIONS="--max-old-space-size=1536"
             npm run build
 
-            echo "♻️ Reloading PM2 process"
-
-            if pm2 describe netqwix-api-prod > /dev/null; then
-              pm2 reload netqwix-api-prod --update-env
+            echo "♻️ Starting or reloading PM2 (ecosystem cluster)"
+            export PM2_APP_NAME=netqwix-api-prod
+            if pm2 describe "$PM2_APP_NAME" > /dev/null 2>&1; then
+              PM2_APP_NAME="$PM2_APP_NAME" pm2 reload ecosystem.config.js --env production --update-env
             else
-              pm2 start npm --name netqwix-api-prod -- run prod
+              pm2 delete netqwix-api-prod 2>/dev/null || true
+              pm2 delete netqwix-api 2>/dev/null || true
+              PM2_APP_NAME="$PM2_APP_NAME" pm2 start ecosystem.config.js --env production
             fi
 
             pm2 save

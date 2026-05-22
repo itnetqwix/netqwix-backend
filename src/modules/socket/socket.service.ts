@@ -44,6 +44,12 @@ import {
   shouldSkipDuplicateNotify,
   INSTANT_NOTIFICATION,
 } from "../session/sessionNotificationService";
+import {
+  bindSocketIo,
+  emitToSession,
+  emitToUser,
+  emitToUsers,
+} from "./socketEmit";
 
 const pushService = new NotificationsService();
 const logoPath = path.resolve(__dirname, "../../assets/netqwix_logo.png");
@@ -74,6 +80,16 @@ export function isUserOnline(userId: string): boolean {
 
 export function getActiveUserIds(): string[] {
   return Object.keys(activeUsers);
+}
+
+/** Cluster-safe peer relay (WebRTC + in-call); `peerUserId` is the Mongo user id. */
+function relayPeerByUserId(
+  peerUserId: string | undefined | null,
+  event: string,
+  payload: unknown
+): boolean {
+  if (!peerUserId) return false;
+  return emitToUser(String(peerUserId), event, payload);
 }
 
 function broadcastUserStatus(userId: string, status: "online" | "offline") {
@@ -150,6 +166,7 @@ export const getIo = () => ioInstance;
 
 export const setIoInstance = (io: any) => {
   ioInstance = io;
+  bindSocketIo(io);
   
   // Start periodic heartbeat check to detect stale connections
   setInterval(() => {
@@ -613,10 +630,8 @@ export function broadcastSessionExtensionEvent(
   event: string,
   payload: Record<string, unknown>
 ) {
-  if (!ioInstance) return;
   const sid = String(sessionId);
-  const roomName = `session:${sid}`;
-  ioInstance.to(roomName).emit(event, { sessionId: sid, ...payload });
+  emitToSession(sid, event, { sessionId: sid, ...payload });
 }
 
 const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSessionState) => {
@@ -977,14 +992,13 @@ export const handleSocketEvents = (socket, connections = {}) => {
       to_user: userInfo?.to_user,
       toUserSocketMapped: !!toUserId,
     });
-    if (!toUserId) {
-      console.warn("[VideoCall:ON_OFFER] Target socket missing", {
+    if (!userInfo?.to_user) {
+      console.warn("[VideoCall:ON_OFFER] Target user missing", {
         from_user: userInfo?.from_user,
-        to_user: userInfo?.to_user,
       });
       return;
     }
-    socket.to(toUserId).emit("offer", offer);
+    emitToUser(String(userInfo.to_user), "offer", offer);
     // TODO:for now broadcasting the event, it needs to send to specific user.
     // socket.broadcast.emit('offer', offer);
   });
@@ -1190,17 +1204,16 @@ export const handleSocketEvents = (socket, connections = {}) => {
     }
     
     // Also emit to the specific user (for backward compatibility)
-    if (toUserId) {
-      console.log("[VideoCall:ON_CALL_JOIN] 📤 Forwarding to target socket:", {
-        toUserSocketId: toUserId,
+    if (userInfo?.to_user) {
+      console.log("[VideoCall:ON_CALL_JOIN] 📤 Forwarding via user room:", {
+        to_user: userInfo.to_user,
         peerId: userInfo?.peerId,
         from_user: userInfo?.from_user,
-        to_user: userInfo?.to_user,
-        WARNING: !userInfo?.peerId ? "⚠️ Forwarding WITHOUT peerId — trainer cannot dial!" : undefined,
+        memCacheSocketId: toUserId || null,
       });
-      socket.to(toUserId).emit(EVENTS.VIDEO_CALL.ON_CALL_JOIN, { userInfo });
+      relayPeerByUserId(userInfo.to_user, EVENTS.VIDEO_CALL.ON_CALL_JOIN, { userInfo });
     } else {
-      console.error("[VideoCall:ON_CALL_JOIN] 🚨 CANNOT FORWARD — no socket ID found for to_user:", userInfo?.to_user);
+      console.error("[VideoCall:ON_CALL_JOIN] 🚨 CANNOT FORWARD — missing to_user");
     }
   });
 
@@ -1241,8 +1254,11 @@ export const handleSocketEvents = (socket, connections = {}) => {
       }
     }
     
-    // Forward the ON_BOTH_JOIN event (for other UI purposes, not timer)
-    socket.to(toUserId).emit(EVENTS.VIDEO_CALL.ON_BOTH_JOIN, { socketReq });
+    relayPeerByUserId(
+      socketReq.userInfo?.to_user,
+      EVENTS.VIDEO_CALL.ON_BOTH_JOIN,
+      { socketReq }
+    );
   });
 
   socket.on("LESSON_STATE_REQUEST", async ({ sessionId }) => {
@@ -1358,14 +1374,13 @@ export const handleSocketEvents = (socket, connections = {}) => {
       to_user: userInfo?.to_user,
       toUserSocketMapped: !!toUserId,
     });
-    if (!toUserId) {
-      console.warn("[VideoCall:ON_ANSWER] Target socket missing", {
+    if (!userInfo?.to_user) {
+      console.warn("[VideoCall:ON_ANSWER] Target user missing", {
         from_user: userInfo?.from_user,
-        to_user: userInfo?.to_user,
       });
       return;
     }
-    socket.to(toUserId).emit("answer", answer);
+    relayPeerByUserId(userInfo.to_user, "answer", answer);
   });
 
   socket.on(EVENTS.VIDEO_CALL.ON_ICE_CANDIDATE, (data) => {
@@ -1379,76 +1394,36 @@ export const handleSocketEvents = (socket, connections = {}) => {
       to_user: userInfo?.to_user,
       toUserSocketMapped: !!toUserSocketId,
     });
-    if (!toUserSocketId) {
-      console.warn("[VideoCall:ON_ICE_CANDIDATE] Target socket missing", {
+    if (!userInfo?.to_user) {
+      console.warn("[VideoCall:ON_ICE_CANDIDATE] Target user missing", {
         from_user: userInfo?.from_user,
-        to_user: userInfo?.to_user,
       });
       return;
     }
-
-    // Broadcast the ICE candidate to the other connected peers
-    socket.to(toUserSocketId).emit("ice-candidate", data);
+    relayPeerByUserId(userInfo.to_user, "ice-candidate", data);
   });
 
   socket.on(EVENTS.EMIT_CLEAR_CANVAS, (payload) => {
     const { userInfo } = payload;
-    const toUserSocketId = MemCache.getDetail(
-      process.env.SOCKET_CONFIG,
-      userInfo?.to_user
-    );
-    // Forward the full payload so canvasIndex reaches the recipient correctly.
-    socket.to(toUserSocketId).emit(EVENTS.ON_CLEAR_CANVAS, payload);
+    relayPeerByUserId(userInfo?.to_user, EVENTS.ON_CLEAR_CANVAS, payload);
   });
 
   socket.on(EVENTS.EMIT_UNDO, (payload) => {
     const { userInfo } = payload;
-    const toUserSocketId = MemCache.getDetail(
-      process.env.SOCKET_CONFIG,
-      userInfo?.to_user
-    );
-
-    socket.to(toUserSocketId).emit(EVENTS.ON_UNDO, payload);
+    relayPeerByUserId(userInfo?.to_user, EVENTS.ON_UNDO, payload);
   });
 
   socket.on(EVENTS.VIDEO_CALL.MUTE_ME, ({ muteStatus, userInfo }) => {
-    const toUserSocketId = MemCache.getDetail(
-      process.env.SOCKET_CONFIG,
-      userInfo?.to_user
-    );
-
-    socket.to(toUserSocketId).emit(EVENTS.VIDEO_CALL.MUTE_ME, { muteStatus });
+    relayPeerByUserId(userInfo?.to_user, EVENTS.VIDEO_CALL.MUTE_ME, { muteStatus });
   });
 
   socket.on(EVENTS.VIDEO_CALL.STOP_FEED, ({ feedStatus, userInfo }) => {
-    const toUserSocketId = MemCache.getDetail(
-      process.env.SOCKET_CONFIG,
-      userInfo?.to_user
-    );
-    console.log("[VideoCall:STOP_FEED]", {
-      from_user: userInfo?.from_user,
-      to_user: userInfo?.to_user,
-      feedStatus,
-      toUserSocketMapped: !!toUserSocketId,
-    });
-    if (!toUserSocketId) {
-      console.warn("[VideoCall:STOP_FEED] Target socket missing", {
-        from_user: userInfo?.from_user,
-        to_user: userInfo?.to_user,
-      });
-      return;
-    }
-    socket.to(toUserSocketId).emit(EVENTS.VIDEO_CALL.STOP_FEED, { feedStatus });
+    relayPeerByUserId(userInfo?.to_user, EVENTS.VIDEO_CALL.STOP_FEED, { feedStatus });
   });
 
   socket.on(EVENTS.VIDEO_CALL.ON_CLOSE, (payload) => {
     const { userInfo } = payload;
-    const toUserSocketId = MemCache.getDetail(
-      process.env.SOCKET_CONFIG,
-      userInfo?.to_user
-    );
-
-    socket.to(toUserSocketId).emit(EVENTS.VIDEO_CALL.ON_CLOSE, {});
+    relayPeerByUserId(userInfo?.to_user, EVENTS.VIDEO_CALL.ON_CLOSE, {});
   });
 
   // Listen for userActivity event
@@ -1498,11 +1473,6 @@ const listenNotificationEvents = (socket) => {
       ) {
         return;
       }
-      const toUserSocketId = MemCache.getDetail(
-        process.env.SOCKET_CONFIG,
-        receiverId
-      );
-      // console.log(toUserSocketId, 'toUserSocketId')
       const sender = await user.findById(senderId);
       const receiver = await user.findById(receiverId);
       const newNotifications = await notification.create({
@@ -1517,7 +1487,7 @@ const listenNotificationEvents = (socket) => {
       // console.log(newNotifications, 'newNotifications')
       const subscription = JSON.parse(receiver?.subscriptionId);
       // console.log(subscription, 'subscription')
-      socket.to(toUserSocketId).emit(EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, {
+      emitToUser(receiverId, EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, {
         _id: newNotifications?._id,
         title: newNotifications?.title,
         description: newNotifications?.description,
@@ -1541,7 +1511,7 @@ const listenNotificationEvents = (socket) => {
         }
       }
 
-      if (!toUserSocketId && receiverId) {
+      if (receiverId && !isUserOnline(String(receiverId))) {
         void pushService.sendPushNotification(
           receiverId,
           title || "NetQwix",
@@ -1560,20 +1530,11 @@ async function emitInstantLessonExpire(
   lessonId: string,
   coachId: string,
   traineeId: string,
-  originatingSocket?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } }
+  _originatingSocket?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } }
 ) {
-  const coachSocketId = coachId ? MemCache.getDetail(process.env.SOCKET_CONFIG, coachId) : null;
-  const traineeSocketId = traineeId ? MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId) : null;
   const payload = { lessonId, coachId, traineeId };
-
-  if (coachSocketId) {
-    if (originatingSocket) originatingSocket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.EXPIRE, payload);
-    else if (ioInstance) ioInstance.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.EXPIRE, payload);
-  }
-  if (traineeSocketId) {
-    if (originatingSocket) originatingSocket.to(traineeSocketId).emit(EVENTS.INSTANT_LESSON.EXPIRE, payload);
-    else if (ioInstance) ioInstance.to(traineeSocketId).emit(EVENTS.INSTANT_LESSON.EXPIRE, payload);
-  } else if (traineeId) {
+  emitToUsers([coachId, traineeId], EVENTS.INSTANT_LESSON.EXPIRE, payload);
+  if (traineeId && !isUserOnline(traineeId)) {
     void pushService.sendPushNotification(
       traineeId,
       "Lesson Expired",
@@ -1589,19 +1550,10 @@ function emitInstantLessonPhase(
   traineeId: string,
   phase: string,
   extra: Record<string, unknown> = {},
-  originatingSocket?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } }
+  _originatingSocket?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } }
 ) {
   const payload = { lessonId, coachId, traineeId, phase, ...extra };
-  const coachSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, coachId);
-  const traineeSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId);
-  if (coachSocketId) {
-    if (originatingSocket) originatingSocket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.PHASE, payload);
-    else if (ioInstance) ioInstance.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.PHASE, payload);
-  }
-  if (traineeSocketId) {
-    if (originatingSocket) originatingSocket.to(traineeSocketId).emit(EVENTS.INSTANT_LESSON.PHASE, payload);
-    else if (ioInstance) ioInstance.to(traineeSocketId).emit(EVENTS.INSTANT_LESSON.PHASE, payload);
-  }
+  emitToUsers([coachId, traineeId], EVENTS.INSTANT_LESSON.PHASE, payload);
 }
 
 export async function runInstantLessonExpire(
@@ -2282,12 +2234,7 @@ async function persistBookingCreatedNotification(
     bookingInfo: { bookingId, ...socketPayload },
   };
 
-  const trainerSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, trainerId);
-  if (trainerSocketId && ioInstance) {
-    ioInstance
-      .to(trainerSocketId)
-      .emit(EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, receivePayload);
-  }
+  emitToUser(trainerId, EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, receivePayload);
 
   if (trainer?.subscriptionId) {
     try {
@@ -2346,17 +2293,10 @@ export const emitBookingCreated = async (bookingData: any, bookingType: 'instant
       return;
     }
 
-    const trainerSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, trainerId);
-    if (trainerSocketId && ioInstance) {
-      ioInstance.to(trainerSocketId).emit(EVENTS.BOOKING.CREATED, payload);
-      console.log(`[BOOKING] BOOKING_CREATED event emitted to trainer ${trainerId}`);
-    }
-
-    const traineeSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId);
-    if (traineeSocketId && ioInstance) {
-      ioInstance.to(traineeSocketId).emit(EVENTS.BOOKING.CREATED, payload);
-      console.log(`[BOOKING] BOOKING_CREATED event emitted to trainee ${traineeId}`);
-    }
+    emitToUsers([trainerId, traineeId], EVENTS.BOOKING.CREATED, payload);
+    console.log(
+      `[BOOKING] BOOKING_CREATED emitted to user rooms trainer=${trainerId} trainee=${traineeId}`
+    );
 
     console.log(`[BOOKING] [${new Date().toISOString()}] Booking created: ${payload.bookingId}, type: ${bookingType}, trainer: ${trainerId}, trainee: ${traineeId}`);
   } catch (err) {
@@ -2381,19 +2321,10 @@ export const emitBookingStatusUpdated = async (bookingData: any) => {
       updatedAt: updatedAt || new Date().toISOString(),
     };
 
-    // Emit to trainer
-    const trainerSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, trainerId);
-    if (trainerSocketId && ioInstance) {
-      ioInstance.to(trainerSocketId).emit(EVENTS.BOOKING.STATUS_UPDATED, payload);
-      console.log(`[BOOKING] BOOKING_STATUS_UPDATED event emitted to trainer ${trainerId}`);
-    }
-
-    // Emit to trainee
-    const traineeSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId);
-    if (traineeSocketId && ioInstance) {
-      ioInstance.to(traineeSocketId).emit(EVENTS.BOOKING.STATUS_UPDATED, payload);
-      console.log(`[BOOKING] BOOKING_STATUS_UPDATED event emitted to trainee ${traineeId}`);
-    }
+    emitToUsers([trainerId, traineeId], EVENTS.BOOKING.STATUS_UPDATED, payload);
+    console.log(
+      `[BOOKING] BOOKING_STATUS_UPDATED emitted trainer=${trainerId} trainee=${traineeId}`
+    );
 
     console.log(`[BOOKING] [${new Date().toISOString()}] Booking status updated: ${payload.bookingId}, status: ${status}, trainer: ${trainerId}, trainee: ${traineeId}`);
 
@@ -2460,7 +2391,7 @@ const listenDrawEvent = (socket) => {
       // Broadcast the offer to the other connected peers
       // console.log(`toUserSocketId --- `, toUserSocketId);
       // console.log(`socket req ==== `, socketReq, socket.id)
-      socket.to(toUserSocketId).emit(EVENTS.EMIT_DRAWING_CORDS, socketReq);
+      relayPeerByUserId(userInfo?.to_user,EVENTS.EMIT_DRAWING_CORDS, socketReq);
     });
   } catch (err) {
     console.error(`Error while listening to draw event:`, err);
@@ -2477,7 +2408,7 @@ const stopDrawEvent = (socket) => {
         userInfo?.to_user
       );
 
-      socket.to(toUserSocketId).emit(EVENTS.EMIT_STOP_DRAWING, socketReq);
+      relayPeerByUserId(userInfo?.to_user,EVENTS.EMIT_STOP_DRAWING, socketReq);
     });
   } catch (err) {
     console.error(`Error while listening to stop draw event:`, err);
@@ -2493,7 +2424,7 @@ const listenVideoShowEvent = (socket) => {
         process.env.SOCKET_CONFIG,
         userInfo?.to_user
       );
-      socket.to(toUserSocketId).emit(EVENTS.ON_VIDEO_SHOW, socketReq);
+      relayPeerByUserId(userInfo?.to_user,EVENTS.ON_VIDEO_SHOW, socketReq);
     });
   } catch (err) {
     console.error(`Error while listening to video show event:`, err);
@@ -2509,7 +2440,7 @@ const listenDrawingModeToggle = (socket) => {
         process.env.SOCKET_CONFIG,
         userInfo?.to_user
       );
-      socket.to(toUserSocketId).emit(EVENTS.TOGGLE_DRAWING_MODE, socketReq);
+      relayPeerByUserId(userInfo?.to_user,EVENTS.TOGGLE_DRAWING_MODE, socketReq);
     });
   } catch (err) {
     console.error(`Error while listening to drawing mode toggle:`, err);
@@ -2525,7 +2456,7 @@ const listenFullscreenToggle = (socket) => {
         process.env.SOCKET_CONFIG,
         userInfo?.to_user
       );
-      socket.to(toUserSocketId).emit(EVENTS.TOGGLE_FULL_SCREEN, socketReq);
+      relayPeerByUserId(userInfo?.to_user,EVENTS.TOGGLE_FULL_SCREEN, socketReq);
     });
   } catch (err) {
     console.error(`Error while listening to fullscreen toggle:`, err);
@@ -2541,7 +2472,7 @@ const listenLockModeToggle = (socket) => {
         process.env.SOCKET_CONFIG,
         userInfo?.to_user
       );
-      socket.to(toUserSocketId).emit(EVENTS.TOGGLE_LOCK_MODE, socketReq);
+      relayPeerByUserId(userInfo?.to_user,EVENTS.TOGGLE_LOCK_MODE, socketReq);
     });
   } catch (err) {
     console.error(`Error while listening to lock mode toggle:`, err);
@@ -2558,8 +2489,8 @@ const listenInstantLessonSessionRecording = (socket) => {
         process.env.SOCKET_CONFIG,
         userInfo?.to_user
       );
-      if (toUserSocketId) {
-        socket.to(toUserSocketId).emit(EVENTS.INSTANT_LESSON.SESSION_RECORDING, socketReq);
+      if (userInfo?.to_user) {
+        relayPeerByUserId(userInfo?.to_user,EVENTS.INSTANT_LESSON.SESSION_RECORDING, socketReq);
       }
     });
   } catch (err) {
@@ -2583,8 +2514,8 @@ const listenVideoPositionEvent = (socket) => {
           process.env.SOCKET_CONFIG,
           userInfo?.to_user
         );
-        if (toUserSocketId) {
-          socket.to(toUserSocketId).emit(EVENTS.ON_VIDEO_ZOOM_PAN, socketReq);
+        if (userInfo?.to_user) {
+          relayPeerByUserId(userInfo?.to_user,EVENTS.ON_VIDEO_ZOOM_PAN, socketReq);
         }
       }
     });
@@ -2606,8 +2537,8 @@ const listenMeetingTileLayoutEvent = (socket) => {
           process.env.SOCKET_CONFIG,
           userInfo?.to_user
         );
-        if (toUserSocketId) {
-          socket.to(toUserSocketId).emit(EVENTS.MEETING_TILE_LAYOUT, socketReq);
+        if (userInfo?.to_user) {
+          relayPeerByUserId(userInfo?.to_user,EVENTS.MEETING_TILE_LAYOUT, socketReq);
         }
       }
     });
@@ -2632,8 +2563,8 @@ const listenShowVideoEvent = (socket) => {
           process.env.SOCKET_CONFIG,
           userInfo?.to_user
         );
-        if (toUserSocketId) {
-          socket.to(toUserSocketId).emit(EVENTS.ON_VIDEO_SELECT, socketReq);
+        if (userInfo?.to_user) {
+          relayPeerByUserId(userInfo?.to_user,EVENTS.ON_VIDEO_SELECT, socketReq);
         }
       }
     });
@@ -2651,7 +2582,7 @@ const listenCallEndEvent = (socket) => {
         process.env.SOCKET_CONFIG,
         userInfo?.to_user
       );
-      socket.to(toUserSocketId).emit(EVENTS.CALL_END, socketReq);
+      relayPeerByUserId(userInfo?.to_user,EVENTS.CALL_END, socketReq);
     });
   } catch (err) {
     console.error(`Error while listening to call end event:`, err);
@@ -2671,8 +2602,8 @@ const listenPlayPauseVideoEvent = (socket) => {
           process.env.SOCKET_CONFIG,
           userInfo?.to_user
         );
-        if (toUserSocketId) {
-          socket.to(toUserSocketId).emit(EVENTS.ON_VIDEO_PLAY_PAUSE, socketReq);
+        if (userInfo?.to_user) {
+          relayPeerByUserId(userInfo?.to_user,EVENTS.ON_VIDEO_PLAY_PAUSE, socketReq);
         }
       }
     });
@@ -2693,8 +2624,8 @@ const listenVideoTimeEvent = (socket) => {
           process.env.SOCKET_CONFIG,
           userInfo?.to_user
         );
-        if (toUserSocketId) {
-          socket.to(toUserSocketId).emit(EVENTS.ON_VIDEO_TIME, socketReq);
+        if (userInfo?.to_user) {
+          relayPeerByUserId(userInfo?.to_user,EVENTS.ON_VIDEO_TIME, socketReq);
         }
       }
     });

@@ -40,6 +40,7 @@ import { AuthorizeMiddleware } from "./middleware/authorize.middleware";
 import { bootstrapRedis } from "./bootstrap/redisBootstrap";
 import { redisHealthCheck } from "./services/redisClient";
 import { clusterInstanceLabel, isClusterLeader } from "./config/processRole";
+import { requestContextMiddleware } from "./middleware/requestContext.middleware";
 
 export class App {
   protected app: express.Application;
@@ -48,6 +49,7 @@ export class App {
   PORT = process.env.PORT;
   constructor() {
     this.app = express();
+    this.app.use(requestContextMiddleware);
     this.app.use(securityHeaders);
     this.app.use(globalApiLimiter);
     this.app.use("/public/assets", express.static("uploads"));

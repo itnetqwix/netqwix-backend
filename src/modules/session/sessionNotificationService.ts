@@ -100,11 +100,8 @@ export async function notifySessionUser(
   };
 
   try {
-    const { MemCache } = require("../../Utils/memCache");
-    const socketId = MemCache.getDetail(process.env.SOCKET_CONFIG, receiverId);
-    if (socketId && ioInstance) {
-      ioInstance.to(socketId).emit(EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, receivePayload);
-    }
+    const { emitToUser } = require("../socket/socketEmit");
+    emitToUser(receiverId, EVENTS.PUSH_NOTIFICATIONS.ON_RECEIVE, receivePayload);
   } catch {
     /* optional */
   }
