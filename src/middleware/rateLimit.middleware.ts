@@ -1,11 +1,14 @@
 import { Request, Response, NextFunction } from "express";
+import { isRedisEnabled, redisRateLimitCheck } from "../services/redisClient";
 
 type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
 
-function key(req: Request, name: string) {
-  const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown");
+function clientKey(req: Request, name: string) {
+  const ip = String(
+    req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown"
+  );
   return `${name}:${ip}`;
 }
 
@@ -15,8 +18,26 @@ export function createRateLimiter(opts: {
   name: string;
   message?: string;
 }) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const k = key(req, opts.name);
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const k = clientKey(req, opts.name);
+    if (isRedisEnabled()) {
+      const colon = k.indexOf(":");
+      const identifier = colon >= 0 ? k.slice(colon + 1) : k;
+      const { allowed } = await redisRateLimitCheck(
+        opts.name,
+        identifier,
+        opts.windowMs,
+        opts.max
+      );
+      if (!allowed) {
+        return res.status(429).json({
+          status: 0,
+          error: opts.message ?? "Too many requests. Please try again later.",
+        });
+      }
+      return next();
+    }
+
     const now = Date.now();
     let bucket = buckets.get(k);
     if (!bucket || bucket.resetAt <= now) {

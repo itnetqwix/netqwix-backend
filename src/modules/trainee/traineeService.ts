@@ -38,12 +38,41 @@ import {
   isInstantAllowedDuration,
 } from "../../config/instantLesson";
 import { instantEligibilityService } from "./instantEligibilityService";
+import {
+  cacheGetOrSet,
+  invalidateUserSessionsCache,
+  trainerSlotsCacheKey,
+} from "../../services/cacheService";
+import { REDIS_TTL } from "../../config/redis";
+import { withDistributedLock } from "../../services/distributedLock";
 
 export class TraineeService {
   public log = log.getLogger();
 
   public async getSlotsOfAllTrainers(query): Promise<any> {
+    const trimmedSearch =
+      typeof query?.search === "string" ? query.search.trim() : "";
+    if (trimmedSearch.length >= 2 && !isNaN(Number(trimmedSearch))) {
+      return ResponseBuilder.badRequest(
+        "Search must be a name or category, not a number",
+        400
+      );
+    }
+    const cacheKey = trainerSlotsCacheKey(query as Record<string, unknown>);
     try {
+      const enriched = await cacheGetOrSet(
+        cacheKey,
+        REDIS_TTL.TRAINER_SLOTS_SEC,
+        () => this.loadSlotsOfAllTrainers(query)
+      );
+      return ResponseBuilder.data(enriched, l10n.t("GET_ALL_SLOTS"));
+    } catch (err) {
+      console.error(`Error getting slots of all trainers:`, err);
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
+  private async loadSlotsOfAllTrainers(query): Promise<any[]> {
       const {
         search = "",
         category = "",
@@ -58,12 +87,6 @@ export class TraineeService {
       } = query;
 
       const trimmedSearch = typeof search === "string" ? search.trim() : "";
-      if (trimmedSearch.length >= 2 && !isNaN(Number(trimmedSearch))) {
-        return ResponseBuilder.badRequest(
-          "Search must be a name or category, not a number",
-          400
-        );
-      }
 
       const pageNum = Math.max(1, parseInt(String(page), 10) || 1);
       const limitNum = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 50));
@@ -328,11 +351,7 @@ export class TraineeService {
         })
       );
 
-      return ResponseBuilder.data(enriched, l10n.t("GET_ALL_SLOTS"));
-    } catch (err) {
-      console.error(`Error getting slots of all trainers:`, err);
-      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
-    }
+      return enriched;
   }
 
   public filterTrainersByDayAndTime = async (day, time) => {
@@ -386,6 +405,26 @@ export class TraineeService {
   };
 
   public async bookSession(
+    payload: bookSessionModal,
+    _id: string
+  ): Promise<ResponseBuilder> {
+    const lockKey = `book:${payload?.trainer_id}:${payload?.booked_date}:${payload?.session_start_time}`;
+    try {
+      return await withDistributedLock(lockKey, () =>
+        this.bookSessionCore(payload, _id)
+      );
+    } catch (err: any) {
+      if (err?.message === "RESOURCE_LOCKED") {
+        return ResponseBuilder.badRequest(
+          "This slot is being booked by another user. Please try again.",
+          409
+        );
+      }
+      throw err;
+    }
+  }
+
+  private async bookSessionCore(
     payload: bookSessionModal,
     _id: string
   ): Promise<ResponseBuilder> {
@@ -641,6 +680,9 @@ export class TraineeService {
       } catch (err) {
         console.error("[BOOKING] Error emitting booking created event:", err);
       }
+
+      void invalidateUserSessionsCache(String(_id));
+      void invalidateUserSessionsCache(String(payload.trainer_id));
       
       return ResponseBuilder.data(bookingData, l10n.t("SESSION_BOOKED"));
     } catch (err) {

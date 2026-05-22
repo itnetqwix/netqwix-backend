@@ -10,15 +10,21 @@ import booked_session from "../../model/booked_sessions.schema";
 import user from "../../model/user.schema";
 import { DateFormat } from "../../Utils/dateFormat";
 import { isAllowedExtensionMinutes } from "./sessionExtensionValidator";
+import {
+  cancelExtensionExpiryJob,
+  scheduleExtensionExpiryJob,
+} from "../../services/extensionTimerQueue";
+import { isRedisEnabled } from "../../services/redisClient";
+import { withIdempotency } from "../../services/idempotencyService";
+import { invalidateUserSessionsCache } from "../../services/cacheService";
 
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
-/** In-process auto-reject / auto-expire timers, keyed by `${sessionId}:${requestId}`.
- *  Kept here (not in Mongo) so a restart simply falls back to the row's `expires_at`
- *  field being honored on the next request. */
+/** In-process fallback when REDIS_ENABLED=false. */
 const extensionRequestTimers = new Map<string, NodeJS.Timeout>();
 
 function clearExtensionTimer(sessionId: string, requestId: string) {
+  void cancelExtensionExpiryJob(sessionId, requestId);
   const key = `${sessionId}:${requestId}`;
   const t = extensionRequestTimers.get(key);
   if (t) {
@@ -31,9 +37,15 @@ function scheduleExtensionTimer(
   sessionId: string,
   requestId: string,
   delayMs: number,
+  reason: string,
   cb: () => Promise<void> | void
 ) {
   clearExtensionTimer(sessionId, requestId);
+  if (isRedisEnabled()) {
+    void scheduleExtensionExpiryJob(sessionId, requestId, reason, delayMs);
+    if (delayMs <= 0) void cb();
+    return;
+  }
   if (delayMs <= 0) {
     void cb();
     return;
@@ -399,6 +411,37 @@ export class SessionExtensionService {
       _userId: string;
     }
   ) {
+    const idemKey =
+      body.payment_intent_id && body.sessionId
+        ? `extension-confirm:${body.sessionId}:${body.payment_intent_id}`
+        : null;
+    if (idemKey) {
+      try {
+        return await withIdempotency(idemKey, () => this.confirmExtensionCore(body));
+      } catch (err: any) {
+        if (err?.message === "IDEMPOTENCY_IN_PROGRESS") {
+          return ResponseBuilder.badRequest(
+            "Payment confirmation already in progress.",
+            409
+          );
+        }
+        throw err;
+      }
+    }
+    return this.confirmExtensionCore(body);
+  }
+
+  private async confirmExtensionCore(
+    body: {
+      sessionId: string;
+      minutes: number;
+      requestId?: string;
+      payment_intent_id?: string;
+      payment_method?: string;
+      pin_session_token?: string;
+      _userId: string;
+    }
+  ) {
     try {
       const { sessionId, minutes, requestId, payment_intent_id, payment_method, pin_session_token, _userId } =
         body;
@@ -589,6 +632,9 @@ export class SessionExtensionService {
         }
       );
 
+      void invalidateUserSessionsCache(String(booking.trainee_id));
+      void invalidateUserSessionsCache(String(booking.trainer_id));
+
       return ResponseBuilder.data(
         {
           booking,
@@ -736,6 +782,7 @@ export class SessionExtensionService {
         String(sessionId),
         String(newReq._id),
         SESSION_EXTENSION.REQUEST_AUTO_REJECT_SECONDS * 1000,
+        "trainer_offline_timeout",
         () => this.expireRequest(String(sessionId), String(newReq._id), "trainer_offline_timeout")
       );
 
@@ -832,6 +879,7 @@ export class SessionExtensionService {
         String(sessionId),
         String(reqDoc._id),
         SESSION_EXTENSION.PAYMENT_WINDOW_SECONDS * 1000,
+        "payment_window_elapsed",
         () => this.expireRequest(String(sessionId), String(reqDoc._id), "payment_window_elapsed")
       );
 
@@ -908,7 +956,7 @@ export class SessionExtensionService {
   }
 
   /** Internal helper used by the auto-reject / payment-window timers. */
-  private async expireRequest(
+  public async expireRequest(
     sessionId: string,
     requestId: string,
     reason: string

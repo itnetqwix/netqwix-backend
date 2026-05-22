@@ -28,6 +28,11 @@ import SMSService from "../../services/sms-service";
 import user from "../../model/user.schema";
 import { applyAvailabilityForConnectedUser } from "../socket/socket.service";
 import { DateTime } from "luxon";
+import {
+  cacheGetOrSet,
+  sessionsListCacheKey,
+} from "../../services/cacheService";
+import { REDIS_TTL } from "../../config/redis";
 import ReferredUser from "../../model/referred.user.schema";
 const stripe = require("stripe")(process.env.STRIPE_SECRET);
 
@@ -706,33 +711,47 @@ export class UserService {
         pipeline.push({ $limit: 1 });
       }
 
-      const result = await booked_session.aggregate(pipeline).exec();
-
-      // Debug logging
-      this.log.debug("getScheduledMeetings - result count:", result?.length || 0);
-      if (result?.length === 0) {
-        // Try a simpler query to debug
-        const simpleMatch = {
-          ...matchCondition,
-          ...statusFilter,
-          session_end_time: { $exists: true, $ne: null },
-          session_start_time: { $exists: true, $ne: null },
-          booked_date: dateFilter
-        };
-        this.log.debug("getScheduledMeetings - match query:", JSON.stringify(simpleMatch, null, 2));
-        const countResult = await booked_session.countDocuments(simpleMatch);
-        this.log.debug("getScheduledMeetings - countDocuments result:", countResult);
-      }
-
-      return ResponseBuilder.data(
-        {
+      const loadMeetings = async () => {
+        const result = await booked_session.aggregate(pipeline).exec();
+        this.log.debug("getScheduledMeetings - result count:", result?.length || 0);
+        if (result?.length === 0) {
+          const simpleMatch = {
+            ...matchCondition,
+            ...statusFilter,
+            session_end_time: { $exists: true, $ne: null },
+            session_start_time: { $exists: true, $ne: null },
+            booked_date: dateFilter,
+          };
+          this.log.debug(
+            "getScheduledMeetings - match query:",
+            JSON.stringify(simpleMatch, null, 2)
+          );
+          const countResult = await booked_session.countDocuments(simpleMatch);
+          this.log.debug("getScheduledMeetings - countDocuments result:", countResult);
+        }
+        return {
           data: result,
           page,
           limit,
           hasMore: !id ? result.length === limit : false,
-        },
-        l10n.t("MEETING_FETCHED")
-      );
+        };
+      };
+
+      const payload =
+        id && Types.ObjectId.isValid(id)
+          ? await loadMeetings()
+          : await cacheGetOrSet(
+              sessionsListCacheKey(
+                String(authUser._id),
+                String(status || ""),
+                page,
+                limit
+              ),
+              REDIS_TTL.SESSIONS_LIST_SEC,
+              loadMeetings
+            );
+
+      return ResponseBuilder.data(payload, l10n.t("MEETING_FETCHED"));
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
     }

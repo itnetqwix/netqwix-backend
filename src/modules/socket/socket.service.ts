@@ -1,5 +1,11 @@
 import { Readable } from "stream";
 import { MemCache } from "../../Utils/memCache";
+import {
+  deleteLessonSession,
+  getLessonSession,
+  hydrateLessonSessionFromRedis,
+  setLessonSession,
+} from "./lessonTimerStore";
 import { EVENTS, BOOKED_SESSIONS_STATUS } from "../../config/constance";
 const fs = require("fs");
 const path = require("path");
@@ -213,7 +219,16 @@ type LessonSessionState = {
 
 const TRAINEE_LATE_AUTO_START_MS = 120_000;
 
-const lessonSessions: Map<string, LessonSessionState> = new Map();
+/** @deprecated Use getLessonSession / setLessonSession — backed by lessonTimerStore + Redis. */
+function lessonSessionsGet(sessionId: string): LessonSessionState | undefined {
+  return getLessonSession(sessionId) as LessonSessionState | undefined;
+}
+function lessonSessionsSet(sessionId: string, session: LessonSessionState): void {
+  setLessonSession(sessionId, session as any);
+}
+function lessonSessionsDelete(sessionId: string): void {
+  deleteLessonSession(sessionId);
+}
 
 /** Brief disconnects (e.g. ERR_NETWORK_CHANGED → reconnect) must not pause the lesson or emit PARTICIPANT_LEFT. */
 const SESSION_LEAVE_GRACE_MS = 12000;
@@ -285,7 +300,7 @@ function finalizeLessonParticipantDisconnect(
   role: "trainer" | "trainee",
   disconnectedUserId: string,
 ) {
-  const session = lessonSessions.get(sessionId);
+  const session = lessonSessionsGet(sessionId);
   if (!session) return;
 
   if (role === "trainer") {
@@ -392,7 +407,7 @@ export function getLessonTimerSnapshot(sessionId: string): {
   status: string;
   duration: number;
 } | null {
-  const session = lessonSessions.get(String(sessionId));
+  const session = lessonSessionsGet(String(sessionId));
   if (!session) return null;
 
   if (session.status === "running" && session.startedAt != null) {
@@ -422,7 +437,7 @@ export function extendLessonTimer(
   const addedSeconds = addedMinutes * 60;
   const sid = String(sessionId);
   const roomName = `session:${sid}`;
-  let session = lessonSessions.get(sid);
+  let session = lessonSessionsGet(sid);
 
   if (!session) {
     session = {
@@ -434,7 +449,7 @@ export function extendLessonTimer(
       remainingSeconds: addedSeconds,
       status: "running",
     };
-    lessonSessions.set(sid, session);
+    lessonSessionsSet(sid, session);
   } else {
     if (session.status === "running" && session.startedAt != null) {
       const elapsed = Math.floor((Date.now() - session.startedAt) / 1000);
@@ -494,7 +509,7 @@ export function extendLessonTimer(
 export function pauseLessonTimer(sessionId: string, reason: string) {
   if (!ioInstance) return false;
   const sid = String(sessionId);
-  const session = lessonSessions.get(sid);
+  const session = lessonSessionsGet(sid);
   if (!session) return false;
   if (session.status === "ended") return false;
 
@@ -531,7 +546,7 @@ export function pauseLessonTimer(sessionId: string, reason: string) {
 export function resumeLessonTimer(sessionId: string, reason: string) {
   if (!ioInstance) return false;
   const sid = String(sessionId);
-  const session = lessonSessions.get(sid);
+  const session = lessonSessionsGet(sid);
   if (!session) return false;
   if (session.status !== "paused") return false;
   if (session.trainerLeftPaused) {
@@ -555,7 +570,7 @@ export function resumeLessonTimer(sessionId: string, reason: string) {
     ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.ENDED, endedPayload);
     const stubSocket = { nsp: ioInstance.to(roomName) };
     emitLessonStateSync(stubSocket, roomName, session);
-    lessonSessions.delete(sid);
+    lessonSessionsDelete(sid);
     return true;
   }
 
@@ -584,7 +599,7 @@ export function setPendingExtensionRequest(
 ) {
   if (!ioInstance) return;
   const sid = String(sessionId);
-  const session = lessonSessions.get(sid);
+  const session = lessonSessionsGet(sid);
   if (!session) return;
   session.pendingExtensionRequest = snapshot;
   const roomName = `session:${sid}`;
@@ -617,7 +632,7 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
     if (ioInstance) ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.ENDED, endedPayload);
     else socket.nsp.to(roomName).emit(EVENTS.LESSON_TIMER.ENDED, endedPayload);
     emitLessonStateSync(socket, roomName, session);
-    lessonSessions.delete(session.sessionId);
+    lessonSessionsDelete(session.sessionId);
     return;
   }
 
@@ -632,7 +647,7 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
     if (ioInstance) ioInstance.to(roomName).emit(EVENTS.LESSON_TIMER.ENDED, endedPayload);
     else socket.nsp.to(roomName).emit(EVENTS.LESSON_TIMER.ENDED, endedPayload);
     emitLessonStateSync(socket, roomName, session);
-    lessonSessions.delete(session.sessionId);
+    lessonSessionsDelete(session.sessionId);
   }, remainingMs);
 };
 
@@ -747,7 +762,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
     socket.rooms.forEach((roomName) => {
       if (!roomName.startsWith("session:")) return;
       const sessionId = roomName.replace("session:", "");
-      const session = lessonSessions.get(sessionId);
+      const session = lessonSessionsGet(sessionId);
       if (!session) return;
 
       const role =
@@ -1029,7 +1044,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
       cancelLessonDisconnectGrace(sessionId, String(userId));
       console.log(`[SESSION] User ${userId} (${accountType}) joined room ${roomName} for session ${sessionId}`);
       
-      let session = lessonSessions.get(sessionId);
+      let session = lessonSessionsGet(sessionId);
       if (!session) {
         // Fetch booked session to get duration
         try {
@@ -1073,7 +1088,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
               coachFirstJoinedAt: null,
               userFirstJoinedAt: null,
             };
-            lessonSessions.set(sessionId, session);
+            lessonSessionsSet(sessionId, session);
             console.log(`[TIMER] Session ${sessionId} initialized with duration ${session.duration}s`);
           }
         } catch (err) {
@@ -1212,7 +1227,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
         .exec();
       clearInstantLessonTimers(sessionId);
 
-      const session = lessonSessions.get(sessionId);
+      const session = lessonSessionsGet(sessionId);
       if (session && session.status === "running" && session.startedAt !== null) {
         // Timer already started - send un-adjusted state; frontend derives currentRemaining = remainingSeconds - (now - startedAt)
         const timerPayload = {
@@ -1230,9 +1245,10 @@ export const handleSocketEvents = (socket, connections = {}) => {
     socket.to(toUserId).emit(EVENTS.VIDEO_CALL.ON_BOTH_JOIN, { socketReq });
   });
 
-  socket.on("LESSON_STATE_REQUEST", ({ sessionId }) => {
+  socket.on("LESSON_STATE_REQUEST", async ({ sessionId }) => {
     if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
-    const session = lessonSessions.get(sessionId);
+    await hydrateLessonSessionFromRedis(String(sessionId));
+    const session = lessonSessionsGet(sessionId);
     if (!session) return;
 
     const roomName = `session:${sessionId}`;
@@ -1256,7 +1272,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
 
   socket.on("LESSON_TIMER_START_REQUEST", ({ sessionId }) => {
     if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
-    const session = lessonSessions.get(sessionId);
+    const session = lessonSessionsGet(sessionId);
     if (!session) return;
 
     const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
@@ -1278,7 +1294,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
 
   socket.on("LESSON_TIMER_PAUSE_REQUEST", ({ sessionId }) => {
     if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
-    const session = lessonSessions.get(sessionId);
+    const session = lessonSessionsGet(sessionId);
     if (!session || session.status !== "running" || session.startedAt == null) return;
 
     const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
@@ -1307,7 +1323,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
 
   socket.on("LESSON_TIMER_RESUME_REQUEST", ({ sessionId }) => {
     if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
-    const session = lessonSessions.get(sessionId);
+    const session = lessonSessionsGet(sessionId);
     if (!session || session.status !== "paused") return;
 
     const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;

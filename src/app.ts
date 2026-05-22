@@ -37,6 +37,8 @@ import { webhookRoute } from "./modules/wallet/webhookRoutes";
 import { securityHeaders } from "./middleware/securityHeaders.middleware";
 import { globalApiLimiter } from "./middleware/rateLimit.middleware";
 import { AuthorizeMiddleware } from "./middleware/authorize.middleware";
+import { bootstrapRedis } from "./bootstrap/redisBootstrap";
+import { redisHealthCheck } from "./services/redisClient";
 
 export class App {
   protected app: express.Application;
@@ -75,6 +77,14 @@ export class App {
     }
     this.app.use(bodyParser.json({ limit: '50mb' }));
     this.app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+    this.app.get("/health", async (_req, res) => {
+      const redis = await redisHealthCheck();
+      res.status(200).json({
+        status: "ok",
+        redis,
+        uptimeSec: Math.floor(process.uptime()),
+      });
+    });
     this.app.use("/", route.routePath());
     l10n.setTranslationsFile("en", "src/language/translation.en.json");
     this.app.use(l10n.enableL10NExpress);
@@ -111,8 +121,16 @@ export class App {
       pingTimeout: 60000, // Increase ping timeout
       pingInterval: 25000, // Increase ping interval
     });
-    this.socketEvents.init(io, this.app);
-    registerTrainerTraineePresenceProvider(() => this.socketEvents.getTrainerTraineePresence());
+    void bootstrapRedis(io)
+      .catch((err) => {
+        this.logger.warn(`[Redis] bootstrap failed: ${err?.message || err}`);
+      })
+      .finally(() => {
+        this.socketEvents.init(io, this.app);
+        registerTrainerTraineePresenceProvider(() =>
+          this.socketEvents.getTrainerTraineePresence()
+        );
+      });
 
   const authorizeMiddleware = new AuthorizeMiddleware();
   this.app.get("/connected-users", (req, res, next) => {

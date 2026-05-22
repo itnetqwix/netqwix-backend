@@ -153,7 +153,8 @@ export class SocketInit {
         }
 
         this.connectedUsers.set(userId, { socketId: socket.id, userData: socket.user });
-        MemCache.setDetail(process.env.SOCKET_CONFIG, userId, socket.id);
+        void socket.join(`user:${userId}`);
+        MemCache.setDetailSync(process.env.SOCKET_CONFIG, userId, socket.id);
         this.logger.info(`[MemCache] ✅ Socket registered: userId=${userId} socketId=${socket.id}`);
 
         const accountType = String(
@@ -193,7 +194,7 @@ export class SocketInit {
         
         // Remove the user from the connected users map
         this.connectedUsers.delete(userId);
-        MemCache.deleteDetail(process.env.SOCKET_CONFIG, userId);
+        MemCache.deleteDetailSync(process.env.SOCKET_CONFIG, userId);
 
         this.emitTrainerTraineePresence(io);
 
