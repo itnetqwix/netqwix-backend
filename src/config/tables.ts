@@ -36,4 +36,5 @@ export class Tables {
     public static readonly signup_verification_otps = "signup_verification_otps";
     public static readonly trainer_verification_audit = "trainer_verification_audit";
     public static readonly auth_sessions = "auth_sessions";
+    public static readonly trainee_favorite_trainers = "trainee_favorite_trainers";
 }

@@ -405,6 +405,53 @@ export class traineeController {
     }
   };
 
+  public listFavoriteTrainers = async (req: any, res: Response) => {
+    try {
+      const result = await this.traineeService.listFavoriteTrainers(
+        String(req.authUser._id)
+      );
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ message: result.error });
+      }
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public addFavoriteTrainer = async (req: any, res: Response) => {
+    try {
+      const result = await this.traineeService.addFavoriteTrainer(
+        String(req.authUser._id),
+        String(req.params.trainerId)
+      );
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ message: result.error });
+      }
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public removeFavoriteTrainer = async (req: any, res: Response) => {
+    try {
+      const result = await this.traineeService.removeFavoriteTrainer(
+        String(req.authUser._id),
+        String(req.params.trainerId)
+      );
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ message: result.error });
+      }
+      return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
   public getSessionExtensionQuote = async (req: any, res: Response) => {
     try {
       const sessionId = String(req.query.sessionId ?? "");

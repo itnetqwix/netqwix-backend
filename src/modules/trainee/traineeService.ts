@@ -45,6 +45,8 @@ import {
 } from "../../services/cacheService";
 import { REDIS_TTL } from "../../config/redis";
 import { withDistributedLock } from "../../services/distributedLock";
+import trainee_favorite_trainers from "../../model/trainee_favorite_trainers.schema";
+import { trainerHasOpenSlots } from "../../helpers/trainerSlots";
 
 export class TraineeService {
   public log = log.getLogger();
@@ -79,6 +81,7 @@ export class TraineeService {
         categories = "",
         sortBy = "name",
         onlineOnly = "",
+        hasSlotsOnly = "",
         minRating = "",
         minHourlyRate = "",
         maxHourlyRate = "",
@@ -285,12 +288,40 @@ export class TraineeService {
             trainer_id: "$_id",
             trainer_ratings: 1,
             avgRating: 1,
+            reviewCount: { $size: { $ifNull: ["$trainer_ratings", []] } } },
+            completedSessionCount: {
+              $size: {
+                $filter: {
+                  input: { $ifNull: ["$trainer_ratings", []] },
+                  as: "r",
+                  cond: {
+                    $in: [
+                      { $toLower: { $ifNull: ["$$r.status", ""] } } },
+                      ["completed", "confirm", "confirmed"],
+                    ],
+                  },
+                },
+              },
+            },
+            isVerified: {
+              $cond: {
+                if: {
+                  $or: [
+                    { $eq: ["$status", "approved"] },
+                    { $eq: ["$trainer_verification.onboarding_step", "completed"] },
+                  ],
+                },
+                then: true,
+                else: false,
+              },
+            },
             hourly_rate: 1,
             extraInfo: 1,
             fullname: 1,
             email: 1,
             category: 1,
             profile_picture: "$profile_picture",
+            trainer_verification: 1,
             stripe_account_id: 1,
             is_kyc_completed: 1,
             commission: 1,
@@ -314,6 +345,8 @@ export class TraineeService {
 
       const sortKey = String(sortBy || "name").toLowerCase();
       if (sortKey === "rating") {
+        pipeline.push({ $sort: { avgRating: -1, fullname: 1 } });
+      } else if (sortKey === "next_available") {
         pipeline.push({ $sort: { avgRating: -1, fullname: 1 } });
       } else if (sortKey === "hourly_rate" || sortKey === "rate") {
         pipeline.push({ $sort: { hourly_rate: 1, fullname: 1 } });
@@ -342,16 +375,32 @@ export class TraineeService {
             row.extraInfo?.availabilityInfo?.timeZone ||
             (row as { time_zone?: string }).time_zone ||
             inAvail.timezone;
+          const slots = row.available_slots ?? row.slots;
           return {
             ...row,
+            slots,
             is_online: isUserOnline(trainerId),
             in_availability_now: inAvail.ok,
             trainer_timezone: tz,
+            has_open_slots: trainerHasOpenSlots(slots),
           };
         })
       );
 
-      return enriched;
+      let out = enriched;
+      if (hasSlotsOnly === "true" || hasSlotsOnly === "1") {
+        out = out.filter((row) => row.has_open_slots);
+      }
+      if (sortKey === "next_available") {
+        out = [...out].sort((a, b) => {
+          const aSlots = a.has_open_slots ? 1 : 0;
+          const bSlots = b.has_open_slots ? 1 : 0;
+          if (bSlots !== aSlots) return bSlots - aSlots;
+          return (b.avgRating ?? 0) - (a.avgRating ?? 0);
+        });
+      }
+
+      return out;
   }
 
   public filterTrainersByDayAndTime = async (day, time) => {
@@ -1124,6 +1173,77 @@ export class TraineeService {
     } catch (error) {
       console.error("Error in checkSlotExist:", error);
       return ResponseBuilder.errorMessage("An error occurred");
+    }
+  }
+
+  public async listFavoriteTrainers(traineeId: string): Promise<ResponseBuilder> {
+    try {
+      const rows = await trainee_favorite_trainers
+        .find({ trainee_id: new mongoose.Types.ObjectId(traineeId) })
+        .sort({ createdAt: -1 })
+        .lean();
+      const trainerIds = rows.map((r) => r.trainer_id);
+      if (!trainerIds.length) {
+        return ResponseBuilder.data([], l10n.t("GET_ALL_SLOTS"));
+      }
+      const trainers = await user
+        .find({ _id: { $in: trainerIds }, account_type: "Trainer" })
+        .select(
+          "fullname profile_picture category avgRating status trainer_verification extraInfo"
+        )
+        .lean();
+      const order = new Map(trainerIds.map((id, i) => [String(id), i]));
+      trainers.sort(
+        (a, b) =>
+          (order.get(String(a._id)) ?? 0) - (order.get(String(b._id)) ?? 0)
+      );
+      return ResponseBuilder.data(trainers, l10n.t("GET_ALL_SLOTS"));
+    } catch (err) {
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
+  public async addFavoriteTrainer(
+    traineeId: string,
+    trainerId: string
+  ): Promise<ResponseBuilder> {
+    try {
+      if (!isValidMongoObjectId(trainerId)) {
+        return ResponseBuilder.errorMessage("Invalid trainer id");
+      }
+      const trainer = await user
+        .findOne({ _id: trainerId, account_type: "Trainer" })
+        .select("_id")
+        .lean();
+      if (!trainer) {
+        return ResponseBuilder.errorMessage("Trainer not found");
+      }
+      await trainee_favorite_trainers.findOneAndUpdate(
+        {
+          trainee_id: new mongoose.Types.ObjectId(traineeId),
+          trainer_id: new mongoose.Types.ObjectId(trainerId),
+        },
+        {},
+        { upsert: true, new: true }
+      );
+      return ResponseBuilder.data({ trainerId }, l10n.t("GET_ALL_SLOTS"));
+    } catch (err) {
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
+  public async removeFavoriteTrainer(
+    traineeId: string,
+    trainerId: string
+  ): Promise<ResponseBuilder> {
+    try {
+      await trainee_favorite_trainers.deleteOne({
+        trainee_id: new mongoose.Types.ObjectId(traineeId),
+        trainer_id: new mongoose.Types.ObjectId(trainerId),
+      });
+      return ResponseBuilder.data({ trainerId }, l10n.t("GET_ALL_SLOTS"));
+    } catch (err) {
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
     }
   }
 }

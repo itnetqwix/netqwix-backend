@@ -63,6 +63,18 @@ route.post(
 );
 route.get('/recent-trainers' , traineeC.recentTrainers)
 
+route.get("/favorite-trainers", traineeMiddleware.isTrainee, traineeC.listFavoriteTrainers);
+route.post(
+  "/favorite-trainers/:trainerId",
+  traineeMiddleware.isTrainee,
+  traineeC.addFavoriteTrainer
+);
+route.delete(
+  "/favorite-trainers/:trainerId",
+  traineeMiddleware.isTrainee,
+  traineeC.removeFavoriteTrainer
+);
+
 route.get(
   "/session-extension/quote",
   traineeMiddleware.isTrainee,
