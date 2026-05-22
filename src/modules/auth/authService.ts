@@ -48,6 +48,12 @@ export class AuthService {
   ): Promise<ResponseBuilder> => {
     this.log.info(createUser);
 
+    if (createUser.accepted_terms_and_privacy !== true) {
+      return ResponseBuilder.badRequest(
+        l10n.t("ERR_TERMS_PRIVACY_REQUIRED")
+      );
+    }
+
     if (!createUser.isGoogleRegister) {
       const pwErr = validateSignupPassword(createUser.password);
       if (pwErr) {
@@ -109,6 +115,7 @@ export class AuthService {
       account_type: AccountType;
       category?: string;
       isGoogleRegister?: boolean;
+      terms_and_privacy_accepted_at?: Date;
       extraInfo?: {
         availabilityInfo: {
           availability: Record<string, { start: string; end: string }[]>;
@@ -126,7 +133,7 @@ export class AuthService {
       is_registered_with_stript: account?.id ? true : false,
       stripe_account_id: account?.id,
       commission: global_commission?.commission ?? 0,
-
+      terms_and_privacy_accepted_at: new Date(),
     };
 
     if (
@@ -164,6 +171,8 @@ export class AuthService {
     }
 
     delete createUser.isGoogleRegister;
+    delete (updateduserObj as { accepted_terms_and_privacy?: boolean })
+      .accepted_terms_and_privacy;
 
     // Create the user object, but replace its _id if referredUser exists
     const userObj = referredUser

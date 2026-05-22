@@ -61,6 +61,11 @@ const userSchema: Schema = new Schema(
       type: Boolean,
       default: false, // Default to false so users appear in search by default
     },
+    /** When the user accepted Terms & Conditions and Privacy Policy (signup). */
+    terms_and_privacy_accepted_at: {
+      type: Date,
+      default: null,
+    },
     friends: [{ type: ObjectId, ref: 'user' }],
     blockedUsers: [{ type: ObjectId, ref: 'user' }],
     lastSeen: { type: Date, default: null },

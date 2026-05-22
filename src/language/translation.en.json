@@ -23,6 +23,7 @@
   "SCHEDULE_SLOTS_FETCHED": "Schedule loaded.",
   "INVALID_ID": "Invalid ID.",
   "ERR_UNAUTH": "Please sign in again.",
+  "ERR_TERMS_PRIVACY_REQUIRED": "You must accept the Terms and Conditions and Privacy Policy to create an account.",
   "TRAINERS_LIST_SUCCESS": "Trainers loaded.",
   "GET_ALL_SLOTS": "Trainer slots loaded.",
   "SESSION_BOOKED": "Session booked.",

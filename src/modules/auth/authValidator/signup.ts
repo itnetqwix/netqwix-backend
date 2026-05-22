@@ -44,6 +44,11 @@ export class signupModel extends model {
   @IsOptional()
   public isGoogleRegister?: boolean;
 
+  /** Must be `true` — user accepted Terms & Conditions and Privacy Policy at signup. */
+  @IsBoolean()
+  @IsNotEmpty()
+  public accepted_terms_and_privacy: boolean;
+
   constructor(body: any) {
     super();
     const {
@@ -54,6 +59,7 @@ export class signupModel extends model {
       account_type,
       category,
       isGoogleRegister,
+      accepted_terms_and_privacy,
     } = body;
     this.fullname = fullname;
     this.email = email;
@@ -62,5 +68,6 @@ export class signupModel extends model {
     this.account_type = account_type;
     this.category = category;
     this.isGoogleRegister = isGoogleRegister;
+    this.accepted_terms_and_privacy = accepted_terms_and_privacy === true;
   }
 }
