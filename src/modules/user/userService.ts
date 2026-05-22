@@ -108,6 +108,24 @@ export class UserService {
         );
         const smsService = new SMSService()
         if (payload.booked_status === BOOKED_SESSIONS_STATUS.confirm) {
+          try {
+            const {
+              scheduleSessionRemindersForBooking,
+            } = require("../../services/bookingReminderScheduler");
+            void scheduleSessionRemindersForBooking(String(bookedSessionId));
+          } catch (remErr) {
+            console.warn("[BOOKING] reminder schedule failed:", remErr);
+          }
+        }
+        if (payload.booked_status === BOOKED_SESSIONS_STATUS.cancel) {
+          try {
+            const { cancelSessionReminders } = require("../../services/bookingReminderScheduler");
+            void cancelSessionReminders(String(bookedSessionId));
+          } catch (_e) {
+            /* ignore */
+          }
+        }
+        if (payload.booked_status === BOOKED_SESSIONS_STATUS.confirm) {
           const traineeInfo = await user.findById(
             bookedSessionDetail["trainee_id"]
           );

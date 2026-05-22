@@ -1,44 +1,44 @@
-const Twilio = require("twilio")
-const dotenv = require("dotenv")
-dotenv.config()
-class SMSService {
-  private client: typeof Twilio; // Define client property with Twilio type
-  private senderNumber: string; // Define senderNumber as string
+import { getSmsEnv, isSmsConfigured } from "../config/messaging";
+import { sendTwilioSms } from "./twilioRest";
+
+export default class SMSService {
+  private senderNumber: string;
+  private sid: string;
+  private token: string;
 
   constructor() {
-    const { SMS_SID, SMS_TOKEN, SMS_NUMBER } = process.env;
-
-    if (!SMS_SID || !SMS_TOKEN || !SMS_NUMBER) {
-      throw new Error('Missing SMS configuration in environment variables.');
+    if (!isSmsConfigured()) {
+      throw new Error(
+        "SMS is not configured. Set SMS_SID, SMS_TOKEN, and SMS_NUMBER in .env."
+      );
     }
-
-    this.client = new Twilio(SMS_SID, SMS_TOKEN);
-    this.senderNumber = SMS_NUMBER;
+    const env = getSmsEnv();
+    this.senderNumber = env.number;
+    this.sid = env.sid;
+    this.token = env.token;
   }
 
-  /**
-   * Sends an SMS message.
-   * @param toNumber - The recipient's phone number.
-   * @param smsContent - The content of the SMS message.
-   * @returns The result of the message send attempt.
-   */
-  async sendSMS(toNumber: string, smsContent: string): Promise<object> {
-    console.log('Starting SMS sending process...');
+  /** Sends an SMS message via Twilio REST API. */
+  async sendSMS(toNumber: string, smsContent: string): Promise<object | undefined> {
+    const to = String(toNumber || "").trim();
+    if (!to) {
+      console.warn("[SMS] Missing recipient number.");
+      return undefined;
+    }
 
     try {
-      const message = await this.client.messages.create({
-        body: smsContent,
-        from: this.senderNumber,
-        to: toNumber,
-      });
-
-      console.log(`SMS sent successfully: ${JSON.stringify(message)}`);
+      const message = await sendTwilioSms(
+        this.sid,
+        this.token,
+        this.senderNumber,
+        to,
+        smsContent
+      );
+      console.log(`[SMS] Sent sid=${message.sid} status=${message.status}`);
       return message;
-    } catch (error) {
-      console.error(`Error sending SMS: ${error.message}`);
-      // throw error;
+    } catch (error: any) {
+      console.error(`[SMS] Send failed: ${error?.message || error}`);
+      throw error;
     }
   }
 }
-
-export default SMSService;

@@ -69,6 +69,8 @@ export class App {
         "Accept",
         "Access-Control-Allow-Origin",
         "X-Session-Id",
+        "Idempotency-Key",
+        "X-Idempotency-Key",
       ],
     };
     this.app.use(cors(corsOptions));
@@ -82,9 +84,15 @@ export class App {
     this.app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
     this.app.get("/health", async (_req, res) => {
       const redis = await redisHealthCheck();
+      let messaging: unknown = { skipped: "lazy" };
+      if (process.env.HEALTH_CHECK_MESSAGING === "true") {
+        const { getMessagingHealth } = await import("./services/messagingHealth");
+        messaging = await getMessagingHealth();
+      }
       res.status(200).json({
         status: "ok",
         redis,
+        messaging,
         uptimeSec: Math.floor(process.uptime()),
       });
     });

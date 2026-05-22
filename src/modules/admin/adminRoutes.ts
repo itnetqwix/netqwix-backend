@@ -45,6 +45,17 @@ route.get("/trainer-verifications/:userId", trainerReviewAdminController.detail)
 route.post("/trainer-verifications/:userId/approve", trainerReviewAdminController.approve);
 route.post("/trainer-verifications/:userId/reject", trainerReviewAdminController.reject);
 
+route.get("/messaging-health", async (_req, res) => {
+  try {
+    const { getMessagingHealth } = await import("../../services/messagingHealth");
+    const report = await getMessagingHealth();
+    const ok = report.email.ok && report.sms.ok;
+    return res.status(ok ? 200 : 503).json({ success: ok ? 1 : 0, data: report });
+  } catch (err: any) {
+    return res.status(500).json({ success: 0, message: err?.message || "Health check failed" });
+  }
+});
+
 route.get("/dashboard-metrics", adminController.getDashboardMetrics);
 route.get("/online-users", adminController.getOnlineUsers);
 route.get("/booking/:bookingId", adminController.getBookingSessionDetail);

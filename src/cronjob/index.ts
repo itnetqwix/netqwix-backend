@@ -15,14 +15,21 @@ import onlineUser from "../model/online_user.schema";
 import { NotificationsService } from "../modules/notifications/notificationsService";
 import { AIService } from "../services/ai-service";
 import { NotificationType } from "../enum/notification.enum";
+import { isBullmqAvailable } from "../queues/bullmqConnection";
 
 const pushService = new NotificationsService();
 const aiService = new AIService();
 
   export const cronjobs = async () => {
+    const useBullmqReminders =
+      isBullmqAvailable() &&
+      String(process.env.BULLMQ_BOOKING_REMINDERS ?? "true").toLowerCase() !== "false";
+
     const job = cron.schedule("* * * * *", () => {
       try {
-        meetingConfirmationJob();
+        if (!useBullmqReminders) {
+          meetingConfirmationJob();
+        }
         cleanupInactiveUsers();
       } catch (err) {
         console.log("err on cron job running", err);

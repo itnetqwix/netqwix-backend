@@ -15,6 +15,7 @@ import {
   sessionExtensionRequestModal,
 } from "./sessionExtensionValidator";
 import { TraineeMiddleware } from "./traineeMiddleware";
+import { idempotentHandler, requireIdempotencyKey } from "../../middleware/idempotency.middleware";
 
 const route: Router = Router();
 const authorizeMiddleware = new AuthorizeMiddleware();
@@ -32,12 +33,18 @@ route.use([
 const V: validator = new validator();
 
 route.get("/get-trainers-with-slots", traineeC.getSlotsOfAllTrainers);
-route.post("/book-session", V.validate(bookSessionModal), traineeC.bookSession);
+route.post(
+  "/book-session",
+  requireIdempotencyKey,
+  V.validate(bookSessionModal),
+  idempotentHandler(traineeC.bookSession)
+);
 route.post(
   "/book-instant-meeting",
   traineeMiddleware.isTrainee,
+  requireIdempotencyKey,
   V.validate(bookInstantMeetingModal),
-  traineeC.bookInstantMeeting
+  idempotentHandler(traineeC.bookInstantMeeting)
 );
 route.get(
   "/instant-lesson/eligibility",
@@ -64,8 +71,9 @@ route.get(
 route.post(
   "/session-extension/request",
   traineeMiddleware.isTrainee,
+  requireIdempotencyKey,
   V.validate(sessionExtensionRequestModal),
-  traineeC.requestSessionExtension
+  idempotentHandler(traineeC.requestSessionExtension)
 );
 route.post(
   "/session-extension/cancel-request",
@@ -82,8 +90,9 @@ route.post(
 route.post(
   "/session-extension/confirm",
   traineeMiddleware.isTrainee,
+  requireIdempotencyKey,
   V.validate(sessionExtensionConfirmModal),
-  traineeC.confirmSessionExtension
+  idempotentHandler(traineeC.confirmSessionExtension)
 );
 
 export const traineeRoute: Router = route;

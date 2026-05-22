@@ -2,6 +2,11 @@ import {
   INSTANT_ACCEPT_WINDOW_MS,
   INSTANT_JOIN_AFTER_ACCEPT_MS,
 } from "../config/instantLesson";
+import { isBullmqAvailable } from "../queues/bullmqConnection";
+import {
+  cancelInstantDeadlineJobs,
+  scheduleInstantDeadlineJob,
+} from "../queues/instantLessonDeadlineQueue";
 
 type ExpireHandler = (
   lessonId: string,
@@ -11,6 +16,8 @@ type ExpireHandler = (
 ) => Promise<void>;
 
 let expireHandler: ExpireHandler | null = null;
+
+/** In-memory fallback when Redis/BullMQ is off (single-process dev). */
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function timerKey(lessonId: string, kind: "accept" | "join") {
@@ -21,41 +28,45 @@ export function registerInstantLessonExpireHandler(handler: ExpireHandler) {
   expireHandler = handler;
 }
 
-export function clearInstantLessonTimers(lessonId: string) {
-  for (const kind of ["accept", "join"] as const) {
-    const key = timerKey(lessonId, kind);
-    const existing = timers.get(key);
-    if (existing) {
-      clearTimeout(existing);
-      timers.delete(key);
-    }
+function clearMemoryTimer(lessonId: string, kind: "accept" | "join") {
+  const key = timerKey(lessonId, kind);
+  const existing = timers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+    timers.delete(key);
   }
 }
 
-/** @deprecated use clearInstantLessonTimers */
-export function clearInstantLessonAcceptExpiry(lessonId: string) {
-  clearInstantLessonTimers(lessonId);
-}
-
-function scheduleTimer(
+function scheduleMemoryTimer(
   lessonId: string,
   coachId: string,
   traineeId: string,
   kind: "accept" | "join",
   deadline: Date
 ) {
-  const key = timerKey(lessonId, kind);
-  const existing = timers.get(key);
-  if (existing) clearTimeout(existing);
-
+  clearMemoryTimer(lessonId, kind);
   const delay = Math.max(0, deadline.getTime() - Date.now());
   const timer = setTimeout(() => {
-    timers.delete(key);
+    timers.delete(timerKey(lessonId, kind));
     if (expireHandler) {
       void expireHandler(String(lessonId), String(coachId), String(traineeId), kind);
     }
   }, delay);
-  timers.set(key, timer);
+  timers.set(timerKey(lessonId, kind), timer);
+}
+
+export function clearInstantLessonTimers(lessonId: string) {
+  if (isBullmqAvailable()) {
+    void cancelInstantDeadlineJobs(lessonId);
+  }
+  for (const kind of ["accept", "join"] as const) {
+    clearMemoryTimer(lessonId, kind);
+  }
+}
+
+/** @deprecated use clearInstantLessonTimers */
+export function clearInstantLessonAcceptExpiry(lessonId: string) {
+  clearInstantLessonTimers(lessonId);
 }
 
 export function scheduleInstantLessonAcceptExpiry(
@@ -65,7 +76,17 @@ export function scheduleInstantLessonAcceptExpiry(
   requestedAt: Date = new Date()
 ) {
   const deadline = new Date(requestedAt.getTime() + INSTANT_ACCEPT_WINDOW_MS);
-  scheduleTimer(lessonId, coachId, traineeId, "accept", deadline);
+  if (isBullmqAvailable()) {
+    void scheduleInstantDeadlineJob(
+      lessonId,
+      coachId,
+      traineeId,
+      "accept",
+      deadline
+    );
+    return;
+  }
+  scheduleMemoryTimer(lessonId, coachId, traineeId, "accept", deadline);
 }
 
 export function scheduleInstantLessonJoinExpiry(
@@ -75,7 +96,17 @@ export function scheduleInstantLessonJoinExpiry(
   acceptedAt: Date = new Date()
 ) {
   const deadline = new Date(acceptedAt.getTime() + INSTANT_JOIN_AFTER_ACCEPT_MS);
-  scheduleTimer(lessonId, coachId, traineeId, "join", deadline);
+  if (isBullmqAvailable()) {
+    void scheduleInstantDeadlineJob(
+      lessonId,
+      coachId,
+      traineeId,
+      "join",
+      deadline
+    );
+    return;
+  }
+  scheduleMemoryTimer(lessonId, coachId, traineeId, "join", deadline);
 }
 
 export { INSTANT_ACCEPT_WINDOW_MS, INSTANT_JOIN_AFTER_ACCEPT_MS };

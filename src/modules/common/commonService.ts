@@ -28,6 +28,7 @@ import { AccountType } from "../auth/authEnum";
 import { s3, S3_BUCKET } from "../../Utils/s3Client";
 import { recordUserActivity, UserActivityEvent } from "../../helpers/userActivity";
 import { storageService } from "../storage/storageService";
+import { MAX_CLIP_FILE_BYTES, MAX_PDF_FILE_BYTES } from "../../config/storageLimits";
 
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
@@ -229,6 +230,17 @@ export class commonService {
             return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
               success: 0,
               message: "You can only share clips with friends on your friends list.",
+            });
+          }
+        }
+
+        for (const clipData of req.body.clips as any[]) {
+          const clipBytes = Number(clipData.fileSizeBytes ?? clipData.file_size_bytes ?? 0);
+          if (clipBytes > MAX_CLIP_FILE_BYTES) {
+            return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
+              success: 0,
+              message: "Each clip must be 50 MB or smaller.",
+              maxClipFileBytes: MAX_CLIP_FILE_BYTES,
             });
           }
         }
@@ -479,16 +491,43 @@ export class commonService {
 
   public async pdfUploadUrl(req: any, res: Response) {
     try {
+      const userId = String(req?.authUser?._id || "");
+      const sizeBytes = Number(req.body?.sizeBytes ?? req.body?.fileSizeBytes ?? 0);
+      if (sizeBytes > MAX_PDF_FILE_BYTES) {
+        return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
+          success: 0,
+          message: "Game plan PDF must be 25 MB or smaller.",
+          maxPdfFileBytes: MAX_PDF_FILE_BYTES,
+        });
+      }
+      if (sizeBytes > 0) {
+        const quota = await storageService.assertQuota(userId, sizeBytes);
+        if (!quota.ok) {
+          return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
+            success: 0,
+            message: quota.message,
+            usedBytes: quota.usedBytes,
+            quotaBytes: quota.quotaBytes,
+          });
+        }
+      }
+
       var filename = "file-" + new Date().getTime().toString() + ".pdf";
       req.body.user_id = req?.authUser?._id;
-      const clipObj = await booked_session.findOneAndUpdate(
+      await booked_session.findOneAndUpdate(
         { _id: req.body.session_id },
-        { report: filename }
+        {
+          report: filename,
+          ...(sizeBytes > 0 ? { report_file_size_bytes: sizeBytes } : {}),
+        }
       );
       let fileUrl = await this.generatePreSignedPutUrl(
         filename,
         "application/pdf"
       );
+      if (sizeBytes > 0) {
+        await storageService.syncUsedBytes(userId);
+      }
       return res
         .status(CONSTANCE.RES_CODE.success)
         .json({ success: 1, url: fileUrl });

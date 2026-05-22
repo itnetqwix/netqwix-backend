@@ -4,6 +4,7 @@
   "description": "",
   "main": "dist/src/index.js",
   "scripts": {
+    "test:messaging": "node scripts/test-messaging.mjs",
     "tsc": "tsc",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
     "start": "npx tsc -w & nodemon --inspect dist/src/index.js",

@@ -34,9 +34,15 @@ export async function getRedisPubSub(): Promise<{
 } | null> {
   if (!REDIS_ENABLED) return null;
   if (!pubClient) {
-    pubClient = new Redis(REDIS_URL, { maxRetriesPerRequest: null });
+    pubClient = new Redis(REDIS_URL, {
+      maxRetriesPerRequest: null,
+      lazyConnect: true,
+    });
     subClient = pubClient.duplicate();
-    await Promise.all([pubClient.connect(), subClient.connect()]);
+    const connects: Promise<void>[] = [];
+    if (pubClient.status === "wait") connects.push(pubClient.connect());
+    if (subClient.status === "wait") connects.push(subClient.connect());
+    if (connects.length) await Promise.all(connects);
   }
   return { pub: pubClient!, sub: subClient! };
 }

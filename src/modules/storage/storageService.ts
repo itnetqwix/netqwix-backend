@@ -10,6 +10,11 @@ import {
   StoragePlanId,
   planFromId,
 } from "../../config/storage";
+import {
+  LEGACY_PDF_SIZE_ESTIMATE_BYTES,
+  MAX_CLIP_FILE_BYTES,
+} from "../../config/storageLimits";
+import booked_session from "../../model/booked_sessions.schema";
 import { ensureStripeCustomerForUser } from "../wallet/stripeCustomerHelper";
 
 export class StorageService {
@@ -28,6 +33,7 @@ export class StorageService {
         planLabel: plan.label,
         quotaBytes: fresh?.storage_quota_bytes ?? plan.quotaBytes,
         usedBytes: fresh?.storage_used_bytes ?? 0,
+        maxClipFileBytes: MAX_CLIP_FILE_BYTES,
         billingInterval: fresh?.storage_billing_interval ?? null,
         plans: Object.entries(STORAGE_PLANS).map(([id, p]) => ({
           id,
@@ -43,10 +49,11 @@ export class StorageService {
   }
 
   async syncUsedBytes(userId: string) {
-    const agg = await clip.aggregate([
+    const uid = new mongoose.Types.ObjectId(userId);
+    const clipAgg = await clip.aggregate([
       {
         $match: {
-          user_id: new mongoose.Types.ObjectId(userId),
+          user_id: uid,
           $or: [
             { shared_from_user_id: null },
             { shared_from_user_id: { $exists: false } },
@@ -55,7 +62,28 @@ export class StorageService {
       },
       { $group: { _id: null, total: { $sum: { $ifNull: ["$file_size_bytes", 0] } } } },
     ]);
-    const used = agg[0]?.total ?? 0;
+    const clipBytes = clipAgg[0]?.total ?? 0;
+
+    const pdfAgg = await booked_session.aggregate([
+      {
+        $match: {
+          report: { $nin: [null, ""] },
+          $or: [{ trainer_id: uid }, { trainee_id: uid }],
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: {
+              $ifNull: ["$report_file_size_bytes", LEGACY_PDF_SIZE_ESTIMATE_BYTES],
+            },
+          },
+        },
+      },
+    ]);
+    const pdfBytes = pdfAgg[0]?.total ?? 0;
+    const used = clipBytes + pdfBytes;
     await user.findByIdAndUpdate(userId, { storage_used_bytes: used });
     return used;
   }

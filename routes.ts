@@ -16,6 +16,7 @@ import { aiRoute } from "./src/modules/ai/aiRoutes";
 import { walletRoute } from "./src/modules/wallet/walletRoutes";
 import { opsRoute } from "./src/modules/ops/opsRoutes";
 import { verificationRoute } from "./src/modules/verification/verificationRoutes";
+import { storageRoute } from "./src/modules/storage/storageRoutes";
 export class Routes {
   protected app: express.Application;
   constructor() {}
@@ -37,6 +38,7 @@ export class Routes {
     router.use("/admin/broadcasts", broadcastRoute);
     router.use("/ai", aiRoute);
     router.use("/wallet", walletRoute);
+    router.use("/storage", storageRoute);
     router.use("/ops", opsRoute);
     router.use("/verification", verificationRoute);
     router.get("/", (req, res) => {

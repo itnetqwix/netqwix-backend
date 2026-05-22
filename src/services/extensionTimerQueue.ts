@@ -1,5 +1,6 @@
 import { Queue, Worker } from "bullmq";
-import { REDIS_ENABLED, REDIS_URL } from "../config/redis";
+import { getBullmqConnection, isBullmqAvailable } from "../queues/bullmqConnection";
+import { QUEUE_EXTENSION_EXPIRY } from "../queues/queueNames";
 
 export type ExtensionExpiryJob = {
   sessionId: string;
@@ -10,15 +11,11 @@ export type ExtensionExpiryJob = {
 let queue: Queue<ExtensionExpiryJob> | null = null;
 let worker: Worker<ExtensionExpiryJob> | null = null;
 
-function connectionOpts() {
-  return { url: REDIS_URL };
-}
-
 export function getExtensionExpiryQueue(): Queue<ExtensionExpiryJob> | null {
-  if (!REDIS_ENABLED) return null;
+  if (!isBullmqAvailable()) return null;
   if (!queue) {
-    queue = new Queue<ExtensionExpiryJob>("nq-extension-expiry", {
-      connection: connectionOpts(),
+    queue = new Queue<ExtensionExpiryJob>(QUEUE_EXTENSION_EXPIRY, {
+      connection: getBullmqConnection(),
       defaultJobOptions: {
         removeOnComplete: true,
         removeOnFail: 50,
@@ -58,13 +55,13 @@ export async function cancelExtensionExpiryJob(
 export function startExtensionExpiryWorker(
   handler: (job: ExtensionExpiryJob) => Promise<void>
 ): void {
-  if (!REDIS_ENABLED || worker) return;
+  if (!isBullmqAvailable() || worker) return;
   worker = new Worker<ExtensionExpiryJob>(
-    "nq-extension-expiry",
+    QUEUE_EXTENSION_EXPIRY,
     async (job) => {
       await handler(job.data);
     },
-    { connection: connectionOpts() }
+    { connection: getBullmqConnection() }
   );
   worker.on("failed", (job, err) => {
     console.warn("[extensionTimerQueue] job failed", job?.id, err?.message);

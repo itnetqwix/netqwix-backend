@@ -37,13 +37,15 @@ export class SendEmail {
         to: emails,
       };
 
+      const port = Number(process.env.EMAIL_PORT || 587);
       const transportObj: any = {
         auth: {
           pass: process.env.EMAIL_PASSWORD,
           user: process.env.EMAIL_USERNAME,
         },
         host: process.env.EMAIL_HOST,
-        port: +process.env.EMAIL_PORT,
+        port,
+        secure: port === 465,
       };
       const transporter = nodemailer.createTransport(transportObj);
       transporter.sendMail(mailOptions, (mailSendErr: any, info: any) => {
@@ -82,13 +84,15 @@ export class SendEmail {
           text,
           to: emails,
         };
+        const port = Number(process.env.EMAIL_PORT || 587);
         const transportObj: any = {
           auth: {
             pass: process.env.EMAIL_PASSWORD,
             user: process.env.EMAIL_USERNAME,
           },
           host: process.env.EMAIL_HOST,
-          port: +process.env.EMAIL_PORT,
+          port,
+          secure: port === 465,
         };
         const transporter = nodemailer.createTransport(transportObj);
         transporter.sendMail(mailOptions, (err: any, info: any) => {

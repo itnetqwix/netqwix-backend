@@ -86,6 +86,10 @@ const bookedSessionsSchema: Schema = new Schema(
             type: String,
             default: null,
         },
+        report_file_size_bytes: {
+            type: Number,
+            default: 0,
+        },
         payment_intent_id: {
             type: String,
             default: null,
