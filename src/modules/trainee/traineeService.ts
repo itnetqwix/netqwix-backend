@@ -48,6 +48,11 @@ import { withDistributedLock } from "../../services/distributedLock";
 import trainee_favorite_trainers from "../../model/trainee_favorite_trainers.schema";
 import { trainerHasOpenSlots } from "../../helpers/trainerSlots";
 import { attachTrainerSocialSignals } from "./traineeSocialSignals";
+import {
+  buildTrainerDirectoryMatchStage,
+  mongoMatchTrainerVisibleToTrainees,
+  parseTrainerCategoryFilterList,
+} from "../../helpers/trainerListingMatch";
 
 export class TraineeService {
   public log = log.getLogger();
@@ -98,30 +103,19 @@ export class TraineeService {
       const limitNum = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 50));
       const skip = (pageNum - 1) * limitNum;
 
-      const matchStage: Record<string, unknown> = { account_type: "Trainer" };
+      const categoryList = parseTrainerCategoryFilterList(categories, category);
+      let searchOr: Record<string, unknown>[] | undefined;
       if (trimmedSearch.length >= 2) {
         const searchQuery = getSearchRegexQuery(
           trimmedSearch,
           CONSTANCE.USERS_SEARCH_KEYS
         );
-        matchStage.$or = searchQuery.$or;
+        searchOr = searchQuery.$or;
       }
-      const categoryList = String(categories || category || "")
-        .split(",")
-        .map((c) => c.trim())
-        .filter(Boolean);
-      if (categoryList.length === 1) {
-        matchStage.category = { $regex: categoryList[0], $options: "i" };
-      } else if (categoryList.length > 1) {
-        matchStage.$and = [
-          ...(Array.isArray(matchStage.$and) ? matchStage.$and : []),
-          {
-            $or: categoryList.map((c) => ({
-              category: { $regex: c, $options: "i" },
-            })),
-          },
-        ];
-      }
+      const matchStage = buildTrainerDirectoryMatchStage({
+        searchOr,
+        categoryList,
+      });
 
       // const filteredTrainer =
       //   (day && day.length) || (time && time.length)
@@ -309,9 +303,46 @@ export class TraineeService {
             isVerified: {
               $cond: {
                 if: {
-                  $or: [
+                  $and: [
                     { $eq: ["$status", "approved"] },
-                    { $eq: ["$trainer_verification.onboarding_step", "completed"] },
+                    {
+                      $or: [
+                        {
+                          $eq: [
+                            "$trainer_verification.onboarding_step",
+                            "completed",
+                          ],
+                        },
+                        {
+                          $and: [
+                            {
+                              $in: [
+                                "$trainer_verification.onboarding_step",
+                                ["account_created", null],
+                              ],
+                            },
+                            {
+                              $eq: [
+                                {
+                                  $ifNull: [
+                                    "$trainer_verification.submitted_for_review_at",
+                                    null,
+                                  ],
+                                },
+                                null,
+                              ],
+                            },
+                          ],
+                        },
+                        { $eq: ["$trainer_verification", null] },
+                        {
+                          $eq: [
+                            { $type: "$trainer_verification" },
+                            "missing",
+                          ],
+                        },
+                      ],
+                    },
                   ],
                 },
                 then: true,
@@ -1190,7 +1221,9 @@ export class TraineeService {
         return ResponseBuilder.data([], l10n.t("GET_ALL_SLOTS"));
       }
       const trainers = await user
-        .find({ _id: { $in: trainerIds }, account_type: "Trainer" })
+        .find({
+          $and: [{ _id: { $in: trainerIds } }, mongoMatchTrainerVisibleToTrainees()],
+        })
         .select(
           "fullname profile_picture category avgRating status trainer_verification extraInfo"
         )
