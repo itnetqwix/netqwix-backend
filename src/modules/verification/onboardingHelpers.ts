@@ -112,6 +112,22 @@ export function initTrainerVerificationOnSignup(isGoogle = false) {
   };
 }
 
+/**
+ * Signup already verified email + SMS via `/auth/signup/otp/*` — do not ask again on
+ * trainer contact onboarding.
+ */
+export function trainerVerificationAfterSignupOtp(isGoogle = false) {
+  const tv: Record<string, unknown> = {
+    ...initTrainerVerificationOnSignup(isGoogle),
+    phone_verified_at: new Date(),
+    onboarding_step: "contact_verified",
+  };
+  if (!isGoogle) {
+    tv.email_verified_at = new Date();
+  }
+  return tv;
+}
+
 export const ONBOARDING_ALLOWED_PATH_PREFIXES = [
   "/verification",
   "/auth/",

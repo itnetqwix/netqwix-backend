@@ -18,7 +18,7 @@ import ReferredUser from "../../model/referred.user.schema";
 import { recordUserActivity, UserActivityEvent } from "../../helpers/userActivity";
 import {
   buildOnboardingStatus,
-  initTrainerVerificationOnSignup,
+  trainerVerificationAfterSignupOtp,
 } from "../verification/onboardingHelpers";
 import { syncTrustedContactVerification } from "../verification/contactVerificationSync";
 import { ensureTrainerGracePeriod } from "../verification/gracePeriod";
@@ -50,13 +50,14 @@ export class AuthService {
       if (pwErr) {
         return ResponseBuilder.badRequest(pwErr);
       }
-      try {
-        await signupOtpService.assertContactVerified(createUser.email, createUser.mobile_no, {
-          skipEmail: Boolean(createUser.isGoogleRegister),
-        });
-      } catch (e: any) {
-        return ResponseBuilder.badRequest(e?.message || "Contact verification required.");
-      }
+    }
+
+    try {
+      await signupOtpService.assertContactVerified(createUser.email, createUser.mobile_no, {
+        skipEmail: Boolean(createUser.isGoogleRegister),
+      });
+    } catch (e: any) {
+      return ResponseBuilder.badRequest(e?.message || "Contact verification required.");
     }
 
     let hashPassword: string;
@@ -134,7 +135,7 @@ export class AuthService {
     }
 
     if (createUser.account_type === AccountType.TRAINER) {
-      (updateduserObj as any).trainer_verification = initTrainerVerificationOnSignup(
+      (updateduserObj as any).trainer_verification = trainerVerificationAfterSignupOtp(
         Boolean(createUser.isGoogleRegister)
       );
       (updateduserObj as any).status = "pending";
