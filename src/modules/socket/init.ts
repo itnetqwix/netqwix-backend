@@ -7,6 +7,7 @@ import {
 } from "./socket.service";
 import { EVENTS } from "../../config/constance";
 import { AuthMiddleware } from "../auth/authMiddleware";
+import { extractSocketToken } from "../../helpers/socketAuth";
 import { MemCache } from "../../Utils/memCache";
 import { AdminService } from "../admin/adminService";
 import user from "../../model/user.schema";
@@ -99,9 +100,10 @@ export class SocketInit {
     }, 30000);
     
     io.use(async (socket, next) => {
-      const token =
-        socket.handshake?.auth?.authorization ||
-        socket.handshake?.query?.authorization;
+      const token = extractSocketToken({
+        auth: socket.handshake?.auth,
+        query: socket.handshake?.query,
+      });
 
       if (!token) {
         this.logger.info(`Socket auth failed: missing token`);

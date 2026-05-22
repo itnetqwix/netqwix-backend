@@ -7,6 +7,7 @@ import { isDataExists } from "../../common/types/mongoose.types";
 import { log } from "../../../logger";
 import JWT from "../../Utils/jwt";
 import user from "../../model/user.schema";
+import { extractSocketToken } from "../../helpers/socketAuth";
 
 export class AuthMiddleware {
   public authService = new AuthService();
@@ -163,32 +164,34 @@ export class AuthMiddleware {
     }
   };
 
+  public loadSocketUser = async (token) => {
+    try {
+      const tokenInfo = await JWT.decodeAuthToken(token);
+      if (tokenInfo && tokenInfo["user_id"]) {
+        const result = await user.findOne({ _id: tokenInfo["user_id"] });
+        if (result) {
+          return { user: result, isValidUser: true };
+        } else {
+          return {
+            user: null,
+            isValidUser: false,
+            error: l10n.t("ERR_UNAUTH"),
+          };
+        }
+      } else {
+        return { user: null, isValidUser: false, error: l10n.t("ERR_UNAUTH") };
+      }
+    } catch (err) {
+      return { user: null, isValidUser: false, error: l10n.t("ERR_UNAUTH") };
+    }
+  };
+}
+
 export type SocketAuthFailureReason =
   | "missing"
   | "invalid"
   | "expired"
   | "user_not_found";
-
-function extractSocketToken(handshake: {
-  auth?: { authorization?: string; token?: string };
-  query?: { authorization?: string; token?: string };
-}): string | null {
-  const fromAuth = handshake?.authorization;
-  if (typeof fromAuth === "string" && fromAuth.trim()) {
-    return fromAuth.trim();
-  }
-  if (typeof handshake?.token === "string" && handshake.token.trim()) {
-    return handshake.token.trim();
-  }
-  const fromQuery = handshake?.query?.authorization;
-  if (typeof fromQuery === "string") {
-    return typeof fromQuery === "string" ? fromQuery : String(fromQuery);
-  }
-  if (typeof fromQuery === "string" && handshake?.query?.token) {
-    return String(handshake.query.token);
-  }
-  return null;
-}
 
 export async function authenticateSocket(handshake: {
   auth?: { authorization?: string; token?: string };
@@ -215,27 +218,4 @@ export async function authenticateSocket(handshake: {
     }
     return { user: null, reason: "invalid" };
   }
-}
-
-  public loadSocketUser = async (token) => {
-    try {
-      const tokenInfo = await JWT.decodeAuthToken(token);
-      if (tokenInfo && tokenInfo["user_id"]) {
-        const result = await user.findOne({ _id: tokenInfo["user_id"] });
-        if (result) {
-          return { user: result, isValidUser: true };
-        } else {
-          return {
-            user: null,
-            isValidUser: false,
-            error: l10n.t("ERR_UNAUTH"),
-          };
-        }
-      } else {
-        return { user: null, isValidUser: false, error: l10n.t("ERR_UNAUTH") };
-      }
-    } catch (err) {
-      return { user: null, isValidUser: false, error: l10n.t("ERR_UNAUTH") };
-    }
-  };
 }

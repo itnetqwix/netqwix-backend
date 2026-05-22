@@ -39,7 +39,12 @@ import { globalApiLimiter } from "./middleware/rateLimit.middleware";
 import { AuthorizeMiddleware } from "./middleware/authorize.middleware";
 import { bootstrapRedis } from "./bootstrap/redisBootstrap";
 import { redisHealthCheck } from "./services/redisClient";
-import { clusterInstanceLabel, isClusterLeader } from "./config/processRole";
+import {
+  clusterInstanceCount,
+  clusterInstanceLabel,
+  isClusterLeader,
+} from "./config/processRole";
+import { isSocketAdapterAttached } from "./services/socketAdapterState";
 import { requestContextMiddleware } from "./middleware/requestContext.middleware";
 
 export class App {
@@ -93,6 +98,11 @@ export class App {
       res.status(200).json({
         status: "ok",
         redis,
+        socket: {
+          adapterAttached: isSocketAdapterAttached(),
+          clusterInstances: clusterInstanceCount(),
+          instance: clusterInstanceLabel(),
+        },
         pubsub: { mode: getPubSubMode(), active: isPubSubActive() },
         messaging,
         uptimeSec: Math.floor(process.uptime()),

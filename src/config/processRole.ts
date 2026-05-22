@@ -13,3 +13,9 @@ export function isClusterLeader(): boolean {
 export function clusterInstanceLabel(): string {
   return process.env.NODE_APP_INSTANCE ?? "single";
 }
+
+/** PM2 `instances` from ecosystem / env (used for Socket.IO cluster safety checks). */
+export function clusterInstanceCount(): number {
+  const n = parseInt(String(process.env.PM2_INSTANCES ?? "1"), 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}

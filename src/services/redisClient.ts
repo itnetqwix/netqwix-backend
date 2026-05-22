@@ -33,18 +33,37 @@ export async function getRedisPubSub(): Promise<{
   sub: Redis;
 } | null> {
   if (!REDIS_ENABLED) return null;
-  if (!pubClient) {
-    pubClient = new Redis(REDIS_URL, {
-      maxRetriesPerRequest: null,
-      lazyConnect: true,
-    });
-    subClient = pubClient.duplicate();
-    const connects: Promise<void>[] = [];
-    if (pubClient.status === "wait") connects.push(pubClient.connect());
-    if (subClient.status === "wait") connects.push(subClient.connect());
-    if (connects.length) await Promise.all(connects);
+  try {
+    if (!pubClient) {
+      pubClient = new Redis(REDIS_URL, {
+        maxRetriesPerRequest: null,
+        enableReadyCheck: true,
+        lazyConnect: true,
+      });
+      subClient = pubClient.duplicate();
+      pubClient.on("error", (err) => {
+        logger.error(`[Redis pub] ${err?.message || err}`);
+      });
+      subClient.on("error", (err) => {
+        logger.error(`[Redis sub] ${err?.message || err}`);
+      });
+    }
+    const ensureReady = async (r: Redis, label: string) => {
+      if (r.status === "wait" || r.status === "end") {
+        await r.connect();
+      }
+      await r.ping();
+      logger.info(`[Redis] ${label} ready for Socket.IO adapter`);
+    };
+    await ensureReady(pubClient, "pub");
+    await ensureReady(subClient!, "sub");
+    return { pub: pubClient, sub: subClient! };
+  } catch (err: any) {
+    logger.error(
+      `[Redis] Pub/Sub clients unavailable for Socket.IO adapter: ${err?.message || err}`
+    );
+    return null;
   }
-  return { pub: pubClient!, sub: subClient! };
 }
 
 export async function connectRedis(): Promise<boolean> {
