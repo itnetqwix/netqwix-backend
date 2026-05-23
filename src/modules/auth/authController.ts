@@ -10,6 +10,7 @@ import { authSessionService } from "./authSessionService";
 import { parseClientSessionMeta } from "./clientSessionMeta";
 import userModel from "../../model/user.schema";
 import { signupOtpService } from "./signupOtpService";
+import { signupModel } from "./authValidator/signup";
 
 const loginAttemptStore = new Map<string, { count: number; resetAt: number }>();
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -96,7 +97,7 @@ export class authController {
       }
 
       const result: ResponseBuilder = await this.authService.createNewUser(
-        req.body
+        (req as Request & { model?: signupModel }).model ?? req.body
       );
 
       return res

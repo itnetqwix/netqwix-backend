@@ -54,6 +54,8 @@ export class AuthService {
       );
     }
 
+    const isAdminSignup = createUser.account_type === AccountType.ADMIN;
+
     if (!createUser.isGoogleRegister) {
       const pwErr = validateSignupPassword(createUser.password);
       if (pwErr) {
@@ -61,12 +63,14 @@ export class AuthService {
       }
     }
 
-    try {
-      await signupOtpService.assertContactVerified(createUser.email, createUser.mobile_no, {
-        skipEmail: Boolean(createUser.isGoogleRegister),
-      });
-    } catch (e: any) {
-      return ResponseBuilder.badRequest(e?.message || "Contact verification required.");
+    if (!isAdminSignup) {
+      try {
+        await signupOtpService.assertContactVerified(createUser.email, createUser.mobile_no, {
+          skipEmail: Boolean(createUser.isGoogleRegister),
+        });
+      } catch (e: any) {
+        return ResponseBuilder.badRequest(e?.message || "Contact verification required.");
+      }
     }
 
     let hashPassword: string;
@@ -174,6 +178,10 @@ export class AuthService {
     delete (updateduserObj as { accepted_terms_and_privacy?: boolean })
       .accepted_terms_and_privacy;
 
+    if (isAdminSignup) {
+      (updateduserObj as any).status = "approved";
+    }
+
     // Create the user object, but replace its _id if referredUser exists
     const userObj = referredUser
       ? new userModel({ ...updateduserObj, _id: referredUser._id,friends:[referredUser.referrerId] }) // Use referred user's _id
@@ -215,23 +223,37 @@ export class AuthService {
     //     </div> `
     // );
 
-    const emailTemplate =
-      createUser.account_type === AccountType.TRAINER
-        ? "trainer-welcome"
-        : "trainee-welcome";
-
-    SendEmail.sendRawEmail(
-      emailTemplate,
-      null,
-      [createUser.email],
-      "Welcome to NetQwix!",
-      "Thank you for joining!"
-    );
     const adminEmail = process.env.EMAIL_USER || "shubhamrakhecha5@gmail.com";
 
     if (createUser.account_type === AccountType.ADMIN) {
-      // Admin accounts do not go through trainer/trainee onboarding emails.
-    } else if (createUser.account_type === AccountType.TRAINER) {
+      const adminAppUrl = process.env.ADMIN_APP_URL || process.env.BASE_URL || "";
+      SendEmail.sendRawEmail(
+        null,
+        null,
+        [createUser.email],
+        "Your NetQwix administrator account",
+        null,
+        `<p>Hi ${createUser.fullname},</p>
+         <p>Your administrator account is ready.</p>
+         ${adminAppUrl ? `<p><a href="${adminAppUrl}">Open the admin portal</a></p>` : ""}
+         <p>Sign in with the email and password you chose during registration.</p>`
+      );
+    } else {
+      const emailTemplate =
+        createUser.account_type === AccountType.TRAINER
+          ? "trainer-welcome"
+          : "trainee-welcome";
+
+      SendEmail.sendRawEmail(
+        emailTemplate,
+        null,
+        [createUser.email],
+        "Welcome to NetQwix!",
+        "Thank you for joining!"
+      );
+    }
+
+    if (createUser.account_type === AccountType.TRAINER) {
       SendEmail.sendRawEmail(
         "new-trainer",
         {
@@ -243,7 +265,7 @@ export class AuthService {
         [adminEmail],
         `NetQwix New Expert Sign Up Request from ${createUser.fullname}`,
       );
-    } else {
+    } else if (createUser.account_type === AccountType.TRAINEE) {
       await userModel.findByIdAndUpdate(userObj._id, { status: "approved" },
         { new: true })
       SendEmail.sendRawEmail(

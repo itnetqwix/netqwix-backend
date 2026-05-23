@@ -19,8 +19,9 @@ export class AuthMiddleware {
     next: NextFunction
   ) => {
     try {
+      const signupPayload = (req as Request & { model?: unknown }).model ?? req.body;
       const isUserExist: isDataExists = await this.authService.isUserExists(
-        req.body
+        signupPayload as any
       );
       this.logger.info(isUserExist);
       if (isEmpty(isUserExist)) {
