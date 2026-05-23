@@ -11,6 +11,26 @@ const clipSchema: Schema = new Schema(
       type: String,
       required: false,
     },
+    category_id: {
+      type: Schema.Types.ObjectId,
+      ref: Tables.clip_category,
+      default: null,
+    },
+    subcategory_id: {
+      type: Schema.Types.ObjectId,
+      ref: Tables.clip_subcategory,
+      default: null,
+    },
+    clip_scope: {
+      type: String,
+      enum: ["personal", "library"],
+      default: "personal",
+    },
+    library_source_submission_id: {
+      type: Schema.Types.ObjectId,
+      ref: Tables.clip_library_submission,
+      default: null,
+    },
     file_name: {
       type: String,
       default: ""

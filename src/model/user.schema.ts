@@ -134,6 +134,10 @@ const userSchema: Schema = new Schema(
       enum: ["pending", "approved", "rejected"],
       default: "pending",
     },
+    account_rejection_reason: {
+      type: String,
+      default: null,
+    },
     trainer_verification: {
       onboarding_step: {
         type: String,

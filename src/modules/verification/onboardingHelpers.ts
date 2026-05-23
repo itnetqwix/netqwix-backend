@@ -54,6 +54,7 @@ export function hasTrainerFullAccess(u: any): boolean {
 
 export function isOnboardingRequired(u: any): boolean {
   if (!isTrainer(u)) return false;
+  if (u?.status === "rejected") return false;
   if (hasTrainerFullAccess(u)) return false;
 
   const tv = getTrainerVerification(u);
@@ -65,10 +66,12 @@ export function isOnboardingRequired(u: any): boolean {
 
 export function buildOnboardingStatus(u: any): OnboardingStatusPayload {
   if (!isTrainer(u)) {
+    const rejected = u?.status === "rejected";
     return {
-      required: false,
-      step: null,
+      required: rejected,
+      step: rejected ? "rejected" : null,
       status: u?.status || "approved",
+      rejection_reason: rejected ? u?.account_rejection_reason || "" : undefined,
       email_verified: true,
       phone_verified: true,
     };
@@ -77,6 +80,7 @@ export function buildOnboardingStatus(u: any): OnboardingStatusPayload {
   const tv = getTrainerVerification(u);
   const step = (tv.onboarding_step || "account_created") as OnboardingStep;
   const required = isOnboardingRequired(u);
+  const rejected = u.status === "rejected";
   const emailVerified = Boolean(tv.email_verified_at);
   const phoneVerified = Boolean(tv.phone_verified_at);
   const contactSubstep: ContactSubstep = !emailVerified
@@ -86,10 +90,10 @@ export function buildOnboardingStatus(u: any): OnboardingStatusPayload {
       : "complete";
 
   return {
-    required,
-    step: required ? step : "completed",
+    required: rejected ? true : required,
+    step: rejected ? "rejected" : required ? step : "completed",
     status: u.status || "pending",
-    rejection_reason: tv.rejection_reason,
+    rejection_reason: rejected ? tv.rejection_reason || "" : undefined,
     email_verified: emailVerified,
     phone_verified: phoneVerified,
     email_masked: maskEmail(u.email),
@@ -134,6 +138,7 @@ export const ONBOARDING_ALLOWED_PATH_PREFIXES = [
   "/user/me",
   "/master/",
   "/common/",
+  "/clips/",
 ];
 
 export function isOnboardingWhitelistedPath(path: string, originalUrl?: string): boolean {

@@ -541,35 +541,13 @@ export class commonService {
 
   public async getClips(req: any, res: Response) {
     try {
+      const { clipListService } = await import("../clips/clipListService");
       const trainee_id = req.body.trainee_id ?? null;
-
-      const ownerId = new mongoose.Types.ObjectId(trainee_id ?? req?.authUser?._id);
-      var clips = await clip.aggregate([
-        {
-          $match: {
-            user_id: { $in: [ownerId] },
-            $and: [
-              { $or: [{ status: true }, { status: { $exists: false } }] },
-              {
-                $or: [
-                  { shared_from_user_id: null },
-                  { shared_from_user_id: { $exists: false } },
-                ],
-              },
-            ],
-          },
-        },
-        {
-          $group: {
-            _id: "$category",
-            clips: {
-              $push: "$$ROOT",
-            },
-          },
-        },
-      ]);
-
-      return res.status(CONSTANCE.RES_CODE.success).json({ data: clips });
+      const data = await clipListService.getMyClipsGrouped(
+        String(req?.authUser?._id),
+        trainee_id
+      );
+      return res.status(CONSTANCE.RES_CODE.success).json({ data });
     } catch (error) {
       res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
         success: 0,
@@ -580,33 +558,22 @@ export class commonService {
 
   public async getSharedClips(req: any, res: Response) {
     try {
-      const userId = new mongoose.Types.ObjectId(req?.authUser?._id);
-      const clips = await clip.aggregate([
-        {
-          $match: {
-            user_id: userId,
-            shared_from_user_id: { $ne: null, $exists: true },
-            $or: [{ status: true }, { status: { $exists: false } }],
-          },
-        },
-        {
-          $lookup: {
-            from: "users",
-            localField: "shared_from_user_id",
-            foreignField: "_id",
-            as: "sharer",
-            pipeline: [{ $project: { fullname: 1, profile_picture: 1 } }],
-          },
-        },
-        { $unwind: { path: "$sharer", preserveNullAndEmptyArrays: true } },
-        {
-          $group: {
-            _id: "$category",
-            clips: { $push: "$$ROOT" },
-          },
-        },
-      ]);
-      return res.status(CONSTANCE.RES_CODE.success).json({ data: clips });
+      const { clipListService } = await import("../clips/clipListService");
+      const data = await clipListService.getSharedClipsGrouped(String(req?.authUser?._id));
+      return res.status(CONSTANCE.RES_CODE.success).json({ data });
+    } catch (error) {
+      res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
+        success: 0,
+        message: Message.internal,
+      });
+    }
+  }
+
+  public async getLibraryClips(req: any, res: Response) {
+    try {
+      const { clipListService } = await import("../clips/clipListService");
+      const data = await clipListService.getLibraryClipsGrouped();
+      return res.status(CONSTANCE.RES_CODE.success).json({ data });
     } catch (error) {
       res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
         success: 0,

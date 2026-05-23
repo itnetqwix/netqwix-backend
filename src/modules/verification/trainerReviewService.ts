@@ -72,6 +72,24 @@ export class TrainerReviewService {
     return u;
   }
 
+  async reapply(userId: string) {
+    const u = await user.findById(userId);
+    if (!u) throw new Error("User not found");
+    if (u.status !== "rejected") throw new Error("Account is not in rejected state");
+    return user.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          status: "pending",
+          "trainer_verification.rejection_reason": "",
+          "trainer_verification.onboarding_step": "under_review",
+          "trainer_verification.submitted_for_review_at": new Date(),
+        },
+      },
+      { new: true }
+    );
+  }
+
   async reject(userId: string, adminId: string, reason: string) {
     if (!reason?.trim()) throw new Error("Rejection reason is required");
     const u = await user.findByIdAndUpdate(

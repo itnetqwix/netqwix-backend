@@ -17,6 +17,7 @@ import { walletRoute } from "./src/modules/wallet/walletRoutes";
 import { opsRoute } from "./src/modules/ops/opsRoutes";
 import { verificationRoute } from "./src/modules/verification/verificationRoutes";
 import { storageRoute } from "./src/modules/storage/storageRoutes";
+import { clipsRoute } from "./src/modules/clips/clipsRoutes";
 export class Routes {
   protected app: express.Application;
   constructor() {}
@@ -41,6 +42,7 @@ export class Routes {
     router.use("/storage", storageRoute);
     router.use("/ops", opsRoute);
     router.use("/verification", verificationRoute);
+    router.use("/clips", clipsRoute);
     router.get("/", (req, res) => {
       res.send("Welcome to NetQwix :) ");
     });

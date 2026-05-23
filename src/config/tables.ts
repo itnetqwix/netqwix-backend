@@ -4,7 +4,10 @@ export class Tables {
   public static readonly master_data = "master_data";
   public static readonly schedule_inventory = "schedule_inventory";
   public static readonly booked_sessions = "booked_sessions";
-  public static readonly clip = "clip";
+    public static readonly clip = "clip";
+    public static readonly clip_category = "clip_category";
+    public static readonly clip_subcategory = "clip_subcategory";
+    public static readonly clip_library_submission = "clip_library_submission";
   public static readonly report = "report";
   public static readonly saved_session = "saved_session";
   public static readonly availability = "availability";

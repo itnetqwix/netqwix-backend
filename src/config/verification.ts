@@ -23,6 +23,7 @@ export const ONBOARDING_STEPS = [
   "profile_face_complete",
   "under_review",
   "completed",
+  "rejected",
 ] as const;
 
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];

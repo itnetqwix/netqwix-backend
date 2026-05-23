@@ -114,6 +114,20 @@ export class ClipPresignService {
     return { ok: true, uploadUrl, key, mediaUrl, expiresIn };
   }
 
+  /** Presign PUT for an explicit S3 key (admin library uploads). */
+  async createPresignedPutForKey(
+    key: string,
+    contentType: string,
+    expiresIn = 900
+  ): Promise<string> {
+    return s3.getSignedUrlPromise("putObject", {
+      Bucket: S3_BUCKET,
+      Key: key,
+      Expires: expiresIn,
+      ContentType: contentType,
+    });
+  }
+
   async presignHandler(req: any, res: Response) {
     try {
       const userId = String(req.authUser?._id || "");

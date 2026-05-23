@@ -12,6 +12,7 @@ import {
   isValidMongoObjectId,
 } from "../../helpers/mongoose";
 import user from "../../model/user.schema";
+import { mergeExtraInfo } from "../../helpers/trainerCredentials";
 import { AccountType } from "../auth/authEnum";
 import { Utils } from "../../Utils/Utils";
 import availability from "../../model/availability.schema";
@@ -299,9 +300,17 @@ export class TrainerService {
   public async updateProfile(reqBody, authUser): Promise<ResponseBuilder> {
     
     try {
+      const updatePayload = { ...reqBody };
+      if (reqBody.extraInfo != null) {
+        const existing = await user.findById(authUser["_id"].toString()).select("extraInfo").lean();
+        updatePayload.extraInfo = mergeExtraInfo(
+          (existing?.extraInfo as Record<string, unknown>) ?? {},
+          reqBody.extraInfo as Record<string, unknown>
+        );
+      }
       await user.findOneAndUpdate(
         { _id: authUser["_id"].toString() },
-        { $set: { ...reqBody } },
+        { $set: updatePayload },
         { new: true }
       );
       return ResponseBuilder.data({}, l10n.t("PROFILE_UPDATED"));

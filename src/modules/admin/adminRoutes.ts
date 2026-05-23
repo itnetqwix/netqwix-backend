@@ -4,6 +4,7 @@ import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
 import { adminFinanceController } from "../wallet/adminFinanceController";
 import { opsAdminController } from "../ops/opsAdminController";
 import { trainerReviewAdminController } from "../verification/trainerReviewAdminController";
+import { mountAdminClipRoutes } from "../clips/clipsRoutes";
 
 const route: Router = Router();
 const authorizeMiddleware = new AuthorizeMiddleware();
@@ -44,6 +45,8 @@ route.post("/trainer-verifications/migrate", trainerReviewAdminController.migrat
 route.get("/trainer-verifications/:userId", trainerReviewAdminController.detail);
 route.post("/trainer-verifications/:userId/approve", trainerReviewAdminController.approve);
 route.post("/trainer-verifications/:userId/reject", trainerReviewAdminController.reject);
+
+mountAdminClipRoutes(route);
 
 route.get("/messaging-health", async (_req, res) => {
   try {

@@ -9,6 +9,7 @@ import { AccountType } from "../auth/authEnum";
 import { SendEmail } from "../../Utils/sendEmail";
 import { recordUserActivity, UserActivityEvent } from "../../helpers/userActivity";
 import { storageService } from "./storageService";
+import { clipTaxonomyService } from "../clips/clipTaxonomyService";
 
 const SHARE_MY_CLIPS = "My Clips";
 const SHARE_FRIENDS = "Friends";
@@ -19,7 +20,9 @@ export type ClipConfirmBody = {
   thumbnailKey: string;
   fileType: string;
   title: string;
-  category: string;
+  category?: string;
+  category_id?: string;
+  subcategory_id?: string;
   fileSizeBytes: number;
   shareOptions?: {
     type?: string;
@@ -131,10 +134,44 @@ export class ClipConfirmService {
       const thumbnailKey = String(body.thumbnailKey || "").trim();
       const fileSizeBytes = Number(body.fileSizeBytes || 0);
       const title = String(body.title || "").trim();
-      const category = String(body.category || "").trim();
       const fileType = String(body.fileType || "video/mp4").trim();
 
-      if (!videoKey || !thumbnailKey || !title || !category) {
+      let category = String(body.category || "").trim();
+      let categoryId: any = null;
+      let subcategoryId: any = null;
+
+      if (body.category_id && body.subcategory_id) {
+        try {
+          const resolved = await clipTaxonomyService.resolveCategoryIds(
+            body.category_id,
+            body.subcategory_id
+          );
+          categoryId = resolved.categoryId;
+          subcategoryId = resolved.subcategoryId;
+          category = resolved.categoryName;
+
+          if (authUser.account_type === AccountType.TRAINER) {
+            const profileCatId = await clipTaxonomyService.findCategoryIdByName(
+              String(authUser.category || "")
+            );
+            if (profileCatId && profileCatId !== String(body.category_id)) {
+              return res.status(400).json({
+                success: 0,
+                message: "Category must match your trainer profile category.",
+              });
+            }
+          }
+        } catch (taxErr: any) {
+          return res.status(400).json({ success: 0, message: taxErr?.message || "Invalid taxonomy" });
+        }
+      } else if (!category) {
+        return res.status(400).json({
+          success: 0,
+          message: "category_id and subcategory_id are required.",
+        });
+      }
+
+      if (!videoKey || !thumbnailKey || !title) {
         return res.status(400).json({ success: 0, message: "Missing required clip fields." });
       }
       if (!keyOwnedByUser(videoKey, userId, "clips") || !keyOwnedByUser(thumbnailKey, userId, "thumbnails")) {
@@ -180,11 +217,14 @@ export class ClipConfirmService {
         const clipObj = new clip({
           title,
           category,
+          ...(categoryId ? { category_id: categoryId, subcategory_id: subcategoryId } : {}),
+          clip_scope: "personal",
           file_name: videoKey,
           thumbnail: thumbnailKey,
           file_type: fileType,
           file_size_bytes: fileSizeBytes,
           user_id: targetUserId,
+          user_type: authUser.account_type,
           ...(isRecipientCopy
             ? { shared_from_user_id: sharerId, shared_at: new Date() }
             : {}),

@@ -48,6 +48,7 @@ route.post("/get-all-saved-sessions", commonC.getAllSavedSession);
 route.post("/pdf-upload-url", commonC.pdfUploadUrl);
 route.post("/get-clips", commonC.getClips);
 route.post("/get-shared-clips", commonC.getSharedClips);
+route.post("/get-library-clips", commonC.getLibraryClips);
 route.post("/trainee-clips", commonC.traineeClips);
 route.delete('/delete-clip/:id', commonC.deleteClip);
 route.delete('/delete-saved-session/:id', commonC.deleteSavedSession);
