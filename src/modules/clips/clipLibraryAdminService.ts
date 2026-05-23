@@ -18,36 +18,45 @@ export class ClipLibraryAdminService {
     const adminId = String(req.authUser?._id || "");
     if (!adminId) return res.status(401).json({ success: 0, message: "Unauthorized" });
 
-    const fileName = String(req.body?.fileName || "video.mp4").trim();
-    const contentType = String(req.body?.contentType || "video/mp4").trim();
-    const fileSizeBytes = Number(req.body?.fileSizeBytes || 0);
+    try {
+      const rawName = String(req.body?.fileName || "video.mp4").trim();
+      const safeName = rawName.replace(/[^a-zA-Z0-9._-]/g, "_") || "video.mp4";
+      const uniqueName = `${Date.now()}-${safeName}`;
+      const contentType = String(req.body?.contentType || "video/mp4").trim();
+      const fileSizeBytes = Number(req.body?.fileSizeBytes || 0);
 
-    if (fileSizeBytes <= 0 || fileSizeBytes > MAX_CLIP_FILE_BYTES) {
-      return res.status(400).json({
+      if (fileSizeBytes <= 0 || fileSizeBytes > MAX_CLIP_FILE_BYTES) {
+        return res.status(400).json({
+          success: 0,
+          message: `File must be between 1 byte and ${MAX_CLIP_FILE_BYTES} bytes.`,
+        });
+      }
+
+      const videoKey = adminLibraryKey(adminId, "clips", uniqueName);
+      const thumbKey = adminLibraryKey(
+        adminId,
+        "thumbnails",
+        uniqueName.replace(/\.[^.]+$/, "") + "-thumb.jpg"
+      );
+
+      const [videoUploadUrl, thumbnailUploadUrl] = await Promise.all([
+        clipPresignService.createPresignedPutForKey(videoKey, contentType),
+        clipPresignService.createPresignedPutForKey(thumbKey, "image/jpeg"),
+      ]);
+
+      return res.status(CONSTANCE.RES_CODE.success).json({
+        success: 1,
+        videoKey,
+        thumbnailKey: thumbKey,
+        videoUploadUrl,
+        thumbnailUploadUrl,
+      });
+    } catch (err: any) {
+      return res.status(500).json({
         success: 0,
-        message: `File must be between 1 byte and ${MAX_CLIP_FILE_BYTES} bytes.`,
+        message: err?.message || "Failed to prepare upload",
       });
     }
-
-    const videoKey = adminLibraryKey(adminId, "clips", fileName);
-    const thumbKey = adminLibraryKey(
-      adminId,
-      "thumbnails",
-      fileName.replace(/\.[^.]+$/, "") + "-thumb.jpg"
-    );
-
-    const [videoUploadUrl, thumbnailUploadUrl] = await Promise.all([
-      clipPresignService.createPresignedPutForKey(videoKey, contentType),
-      clipPresignService.createPresignedPutForKey(thumbKey, "image/jpeg"),
-    ]);
-
-    return res.status(CONSTANCE.RES_CODE.success).json({
-      success: 1,
-      videoKey,
-      thumbnailKey: thumbKey,
-      videoUploadUrl,
-      thumbnailUploadUrl,
-    });
   }
 
   async confirmLibraryClip(req: any, res: Response) {
