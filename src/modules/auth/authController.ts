@@ -88,10 +88,16 @@ export class authController {
     try {
       const at = String(req.body?.account_type ?? "").trim().toLowerCase();
       if (at === String(AccountType.ADMIN).toLowerCase()) {
-        if (String(process.env.ADMIN_PUBLIC_SIGNUP_ENABLED || "").toLowerCase() !== "true") {
+        const adminSignupFlag = String(
+          process.env.ADMIN_PUBLIC_SIGNUP_ENABLED ?? "true"
+        )
+          .trim()
+          .toLowerCase();
+        if (adminSignupFlag === "false") {
           return res.status(403).json({
             status: CONSTANCE.FAIL,
-            error: "Admin self-signup is disabled. Set ADMIN_PUBLIC_SIGNUP_ENABLED=true to allow (not recommended for production).",
+            error:
+              "Admin self-signup is disabled on this API (ADMIN_PUBLIC_SIGNUP_ENABLED=false).",
           });
         }
       }
