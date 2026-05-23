@@ -76,10 +76,14 @@ export class ClipLibrarySubmissionService {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(query.limit) || 30));
     const filter: Record<string, unknown> = {};
-    if (query.status) filter.status = query.status;
-    else filter.status = { $in: OPEN_STATUSES };
+    const statusParam = String(query.status ?? "").trim().toLowerCase();
+    if (statusParam && statusParam !== "all") {
+      filter.status = statusParam;
+    } else if (!statusParam) {
+      filter.status = { $in: OPEN_STATUSES };
+    }
 
-    const [items, total] = await Promise.all([
+    const [items, total, pendingCount, underReviewCount] = await Promise.all([
       clip_library_submission
         .find(filter)
         .sort({ createdAt: 1 })
@@ -87,10 +91,16 @@ export class ClipLibrarySubmissionService {
         .limit(limit)
         .populate("source_clip_id")
         .populate("requester_user_id", "fullname email account_type category profile_picture")
+        .populate("proposed_category_id", "name")
+        .populate("proposed_subcategory_id", "name")
+        .populate("assigned_category_id", "name")
+        .populate("assigned_subcategory_id", "name")
         .lean(),
       clip_library_submission.countDocuments(filter),
+      clip_library_submission.countDocuments({ status: "submitted" }),
+      clip_library_submission.countDocuments({ status: "under_review" }),
     ]);
-    return { items, total, page, limit };
+    return { items, total, page, limit, pendingCount, underReviewCount };
   }
 
   async approve(
