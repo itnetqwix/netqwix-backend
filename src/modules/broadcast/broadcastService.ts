@@ -338,13 +338,16 @@ export class BroadcastService {
     const adminErr = assertAdminUser(authUser);
     if (adminErr) return ResponseBuilder.badRequest(adminErr, 403);
 
-    const { search = "", page = 1, limit = 25 } = query;
+    const { search = "", page = 1, limit = 25, status } = query;
     const filter: any = {};
     if (search) {
       filter.$or = [
         { title: { $regex: search, $options: "i" } },
         { body: { $regex: search, $options: "i" } },
       ];
+    }
+    if (status && String(status).trim()) {
+      filter.status = String(status).trim();
     }
 
     const skip = (Number(page) - 1) * Number(limit);
