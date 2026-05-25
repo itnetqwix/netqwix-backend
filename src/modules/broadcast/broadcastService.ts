@@ -9,10 +9,13 @@ import { SendEmail } from "../../Utils/sendEmail";
 import SMSService from "../../services/sms-service";
 import WhatsAppService from "../../services/whatsapp-service";
 import { NotificationType } from "../../enum/notification.enum";
+import { normalizeSignupPhone } from "../../helpers/phoneNormalize";
 import * as webpush from "web-push";
 
 const DELIVERY_LOG_CAP = 10_000;
-const EMAIL_BATCH_SIZE = 50;
+
+const EMAIL_CONCURRENCY = 10;
+const SMS_CONCURRENCY = 5;
 
 export class BroadcastService {
   private smsService: SMSService | null = null;
@@ -156,6 +159,26 @@ export class BroadcastService {
     }
   }
 
+  private async runWithConcurrency<T>(
+    items: T[],
+    concurrency: number,
+    worker: (item: T) => Promise<void>
+  ): Promise<void> {
+    if (!items.length) return;
+    let cursor = 0;
+    const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+      while (cursor < items.length) {
+        const idx = cursor++;
+        try {
+          await worker(items[idx]);
+        } catch {
+          /* worker handles its own logging */
+        }
+      }
+    });
+    await Promise.all(runners);
+  }
+
   private async sendEmailChannel(
     doc: any,
     recipients: any[],
@@ -165,20 +188,27 @@ export class BroadcastService {
       (u) => u.email && u.notifications?.promotional?.email !== false
     );
 
-    for (let i = 0; i < eligible.length; i += EMAIL_BATCH_SIZE) {
-      const batch = eligible.slice(i, i + EMAIL_BATCH_SIZE);
-      const emails = batch.map((u) => u.email);
+    await this.runWithConcurrency(eligible, EMAIL_CONCURRENCY, async (u) => {
       try {
-        await SendEmail.sendRawEmailAsync(emails, doc.title, doc.html_body, doc.body || null);
-        batch.forEach((u) => addLog(String(u._id), "email", "sent"));
-        doc.stats.email.sent += batch.length;
+        await SendEmail.sendRawEmailAsync(
+          [u.email],
+          doc.title,
+          doc.html_body,
+          doc.body || null
+        );
+        addLog(String(u._id), "email", "sent");
+        doc.stats.email.sent++;
       } catch (err: any) {
-        batch.forEach((u) => addLog(String(u._id), "email", "failed", err?.message));
-        doc.stats.email.failed += batch.length;
+        addLog(String(u._id), "email", "failed", err?.message);
+        doc.stats.email.failed++;
       }
-    }
+    });
   }
 
+  /**
+   * Sends an SMS to each recipient via Twilio (same integration that powers
+   * signup OTPs). Numbers are normalized to E.164 before hand-off.
+   */
   private async sendSmsChannel(
     doc: any,
     recipients: any[],
@@ -186,22 +216,34 @@ export class BroadcastService {
   ) {
     const sms = this.getSmsService();
     if (!sms) {
-      console.warn("[Broadcast] SMS service not available.");
+      console.warn("[Broadcast] SMS service not configured — set SMS_SID / SMS_TOKEN / SMS_NUMBER.");
+      const eligible = recipients.filter((u) => u.mobile_no);
+      eligible.forEach((u) =>
+        addLog(String(u._id), "sms", "failed", "SMS provider not configured.")
+      );
+      doc.stats.sms.failed += eligible.length;
       return;
     }
     const eligible = recipients.filter(
       (u) => u.mobile_no && u.notifications?.promotional?.sms !== false
     );
-    for (const u of eligible) {
+
+    await this.runWithConcurrency(eligible, SMS_CONCURRENCY, async (u) => {
+      const to = normalizeSignupPhone(u.mobile_no);
+      if (!to) {
+        addLog(String(u._id), "sms", "failed", "Invalid mobile number.");
+        doc.stats.sms.failed++;
+        return;
+      }
       try {
-        await sms.sendSMS(u.mobile_no, doc.body);
+        await sms.sendSMS(to, doc.body);
         addLog(String(u._id), "sms", "sent");
         doc.stats.sms.sent++;
       } catch (err: any) {
         addLog(String(u._id), "sms", "failed", err?.message);
         doc.stats.sms.failed++;
       }
-    }
+    });
   }
 
   private async sendWhatsAppChannel(
@@ -215,16 +257,22 @@ export class BroadcastService {
       return;
     }
     const eligible = recipients.filter((u) => u.mobile_no);
-    for (const u of eligible) {
+    await this.runWithConcurrency(eligible, SMS_CONCURRENCY, async (u) => {
+      const to = normalizeSignupPhone(u.mobile_no);
+      if (!to) {
+        addLog(String(u._id), "whatsapp", "failed", "Invalid mobile number.");
+        doc.stats.whatsapp.failed++;
+        return;
+      }
       try {
-        await wa.sendWhatsApp(u.mobile_no, doc.body);
+        await wa.sendWhatsApp(to, doc.body);
         addLog(String(u._id), "whatsapp", "sent");
         doc.stats.whatsapp.sent++;
       } catch (err: any) {
         addLog(String(u._id), "whatsapp", "failed", err?.message);
         doc.stats.whatsapp.failed++;
       }
-    }
+    });
   }
 
   private async sendInAppChannel(
