@@ -8,6 +8,9 @@ import { walletAccountService } from "./walletAccountService";
 import { ledgerService } from "./ledgerService";
 import { payoutService } from "./payoutService";
 import { walletTransactionDetailService } from "./walletTransactionDetailService";
+import { savedPaymentMethodsService } from "./savedPaymentMethodsService";
+import { autoTopUpService } from "./autoTopUpService";
+import { walletTimelineService } from "./walletTimelineService";
 import { AccountType } from "../auth/authEnum";
 
 export class WalletController {
@@ -238,6 +241,97 @@ export class WalletController {
         `attachment; filename="netqwix-earnings-${range}.csv"`
       );
       return res.status(200).send(csv);
+    } catch (err: any) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public listPaymentMethods = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const items = await savedPaymentMethodsService.list(userId);
+      return res
+        .status(200)
+        .send({ status: CONSTANCE.SUCCESS, data: { items } });
+    } catch (err: any) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public deletePaymentMethod = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const pmId = String(req.params.id);
+      await savedPaymentMethodsService.detach(userId, pmId);
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data: { ok: true } });
+    } catch (err: any) {
+      return res.status(400).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public makePaymentMethodDefault = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const pmId = String(req.params.id);
+      await savedPaymentMethodsService.makeDefault(userId, pmId);
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data: { ok: true } });
+    } catch (err: any) {
+      return res.status(400).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public getAutoTopUp = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const rule = await autoTopUpService.getForUser(userId);
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data: rule });
+    } catch (err: any) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public saveAutoTopUp = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const body = req.body || {};
+      const result = await autoTopUpService.upsertForUser(userId, {
+        enabled: body.enabled,
+        thresholdMinor: body.thresholdMinor ?? body.threshold_minor,
+        reloadMinor: body.reloadMinor ?? body.reload_minor,
+        paymentMethodId: body.paymentMethodId ?? body.payment_method_id,
+      });
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ status: CONSTANCE.FAIL, error: result.error });
+      }
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err: any) {
+      return res.status(400).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public disableAutoTopUp = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      await autoTopUpService.disable(userId);
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data: { ok: true } });
+    } catch (err: any) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public getTransactionTimeline = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const id = String(req.params.id);
+      const events = await walletTimelineService.getForLedgerEntry(userId, id);
+      const detail = await walletTransactionDetailService.getLedgerDetail(userId, id);
+      return res.status(200).send({
+        status: CONSTANCE.SUCCESS,
+        data: {
+          events,
+          currency: (detail as any)?.currency ?? WALLET_CONFIG.defaultCurrency,
+        },
+      });
     } catch (err: any) {
       return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
     }

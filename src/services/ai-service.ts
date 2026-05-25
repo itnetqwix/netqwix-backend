@@ -4,6 +4,68 @@ dotenv.config();
 
 const MODEL = "gpt-4o-mini";
 
+/**
+ * Whitelist of action types the assistant is allowed to suggest. The
+ * mobile client maps each to a deep-link / navigation target — anything
+ * outside this list is silently dropped so the model can't navigate
+ * users to arbitrary surfaces.
+ */
+export type AiActionType =
+  | "open-book-lesson"
+  | "open-trainer-profile"
+  | "open-schedule"
+  | "open-upcoming-sessions"
+  | "open-wallet-topup"
+  | "open-support-chat"
+  | "open-report-issue"
+  | "open-faq";
+
+const ALLOWED_ACTION_TYPES = new Set<AiActionType>([
+  "open-book-lesson",
+  "open-trainer-profile",
+  "open-schedule",
+  "open-upcoming-sessions",
+  "open-wallet-topup",
+  "open-support-chat",
+  "open-report-issue",
+  "open-faq",
+]);
+
+export type AiActionSuggestion = {
+  type: AiActionType;
+  payload?: Record<string, unknown>;
+  label?: string;
+};
+
+/**
+ * The assistant is asked to wrap structured actions in
+ * `<ACTIONS>{...}</ACTIONS>`. We extract that block, parse it, and
+ * filter to the whitelist. Anything we can't parse falls through to an
+ * empty list — the text reply still renders.
+ */
+function parseAssistantResponse(raw: string): { reply: string; actions: AiActionSuggestion[] } {
+  const match = raw.match(/<ACTIONS>([\s\S]*?)<\/ACTIONS>/i);
+  const reply = match ? raw.replace(match[0], "").trim() : raw.trim();
+  if (!match) return { reply, actions: [] };
+  try {
+    const parsed = JSON.parse(match[1]);
+    const list = Array.isArray(parsed?.actions) ? parsed.actions : [];
+    const actions: AiActionSuggestion[] = [];
+    for (const candidate of list) {
+      const t = String(candidate?.type ?? "");
+      if (!ALLOWED_ACTION_TYPES.has(t as AiActionType)) continue;
+      actions.push({
+        type: t as AiActionType,
+        payload: candidate?.payload && typeof candidate.payload === "object" ? candidate.payload : undefined,
+        label: typeof candidate?.label === "string" ? candidate.label : undefined,
+      });
+    }
+    return { reply, actions };
+  } catch {
+    return { reply, actions: [] };
+  }
+}
+
 let _client: OpenAI | null = null;
 
 function client(): OpenAI {
@@ -69,7 +131,7 @@ Only return the JSON array, no other text.`;
   async chatAssistant(
     messages: { role: "user" | "assistant"; content: string }[],
     context: { userName?: string; userType?: string; category?: string; platformInfo?: string }
-  ): Promise<string> {
+  ): Promise<{ reply: string; actions: AiActionSuggestion[] }> {
     const systemPrompt = `You are NetQwix AI Assistant, a helpful, friendly, and concise assistant for a sports coaching platform called NetQwix.
 
 NetQwix connects trainees (learners) with expert trainers (coaches) for live video lessons in sports like Golf, Tennis, and more.
@@ -93,7 +155,14 @@ Guidelines:
 - If asked about pricing, mention that each trainer sets their own hourly rate
 - Never make up specific prices or trainer names
 - If you don't know something specific about the platform, say so and suggest contacting support
-- Be encouraging and positive about their sports journey`;
+- Be encouraging and positive about their sports journey
+- After the reply, ALWAYS include a JSON block on its OWN line in the form:
+  <ACTIONS>{"actions":[{"type":"open-book-lesson"}]}</ACTIONS>
+  using ONLY these whitelisted action types:
+    open-book-lesson, open-trainer-profile, open-schedule,
+    open-upcoming-sessions, open-wallet-topup, open-support-chat,
+    open-report-issue, open-faq
+  Return [] when no action fits.`;
 
     const resp = await client().chat.completions.create({
       model: MODEL,
@@ -102,10 +171,13 @@ Guidelines:
         ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
       ],
       temperature: 0.7,
-      max_tokens: 300,
+      max_tokens: 380,
     });
 
-    return resp.choices[0]?.message?.content?.trim() || "I'm sorry, I couldn't process that. Please try again.";
+    const raw = resp.choices[0]?.message?.content?.trim() ||
+      "I'm sorry, I couldn't process that. Please try again.";
+
+    return parseAssistantResponse(raw);
   }
 
   // ─── Lesson Summarization ────────────────────────────────

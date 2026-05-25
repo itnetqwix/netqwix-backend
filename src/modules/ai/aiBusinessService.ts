@@ -92,13 +92,13 @@ export class AIBusinessService {
 
       const userData = await user.findById(authUser._id).select("fullname account_type category").lean();
 
-      const reply = await aiService.chatAssistant(messages, {
+      const { reply, actions } = await aiService.chatAssistant(messages, {
         userName: (userData as any)?.fullname || "User",
         userType: (userData as any)?.account_type || "Trainee",
         category: (userData as any)?.category || undefined,
       });
 
-      const data: any = { reply };
+      const data: any = { reply, actions };
       return ResponseBuilder.data(data, "AI assistant response.");
     } catch (err) {
       console.error("[AI] chatAssistant error:", err);

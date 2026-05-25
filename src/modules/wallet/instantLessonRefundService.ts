@@ -3,6 +3,7 @@ import escrow_holds from "../../model/escrow_holds.schema";
 import { WALLET_CONFIG } from "../../config/wallet";
 import { releaseService } from "./releaseService";
 import { BOOKED_SESSIONS_STATUS } from "../../config/constance";
+import { walletTimelineService } from "./walletTimelineService";
 
 /**
  * Refund escrow for a cancelled instant/scheduled session (idempotent per session).
@@ -58,6 +59,30 @@ export async function refundSessionEscrow(
         instant_phase: booking.is_instant ? "cancelled" : booking.instant_phase,
       },
     });
+
+    // Emit timeline events so TransactionDetailScreen renders the refund flow.
+    try {
+      if (booking.trainee_id) {
+        await walletTimelineService.append({
+          referenceId: sessionId,
+          referenceType: "booking",
+          userId: String(booking.trainee_id),
+          type: "refund-initiated",
+          label: "Refund initiated",
+          detail: reason,
+        });
+        await walletTimelineService.append({
+          referenceId: sessionId,
+          referenceType: "booking",
+          userId: String(booking.trainee_id),
+          type: stripeRefundId ? "refund-bank" : "refund-completed",
+          label: stripeRefundId ? "Refund sent to your bank" : "Refund credited to wallet",
+          reference: stripeRefundId ?? undefined,
+        });
+      }
+    } catch {
+      /* timeline is best-effort, never blocks the refund flow */
+    }
 
     if (booking.trainee_id) {
       try {

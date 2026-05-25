@@ -30,6 +30,14 @@ const authSessionSchema = new Schema(
     lastUsedAt: { type: Date, default: Date.now },
     expiresAt: { type: Date, required: true, index: true },
     revokedAt: { type: Date, default: null },
+    /**
+     * Trusted-device flag for 2FA. Once a user passes a 2FA challenge
+     * from this device we set `trusted=true` so subsequent logins on
+     * the same session skip the OTP step. `2fa/trusted-devices` lists
+     * sessions with this flag.
+     */
+    trusted: { type: Boolean, default: false },
+    trustedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

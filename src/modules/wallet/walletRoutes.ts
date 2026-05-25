@@ -13,7 +13,16 @@ route.use(authorizeMiddleware.authorizeUser);
 
 route.get("/balance", walletController.getBalance);
 route.get("/transactions/:id", walletController.getTransactionDetail);
+route.get("/transactions/:id/timeline", walletController.getTransactionTimeline);
 route.get("/ledger", walletController.getLedger);
+
+route.get("/payment-methods", walletController.listPaymentMethods);
+route.delete("/payment-methods/:id", walletController.deletePaymentMethod);
+route.post("/payment-methods/:id/default", walletController.makePaymentMethodDefault);
+
+route.get("/auto-topup", walletController.getAutoTopUp);
+route.put("/auto-topup", walletController.saveAutoTopUp);
+route.delete("/auto-topup", walletController.disableAutoTopUp);
 route.get("/earnings", walletController.getEarnings);
 route.get("/trainer-pulse", walletController.getTrainerPulse);
 route.get("/trainer-earnings-series", walletController.getTrainerEarningsSeries);

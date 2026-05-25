@@ -6,6 +6,20 @@ import { IsValidMongoId } from "../../middleware/isValidToken.middleware";
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
 import { userMiddleware } from './userMiddleware';
 import { storageController } from "../storage/storageController";
+import {
+  listBlockedUsers,
+  unblockUser,
+  updateProfileVisibility,
+  requestDataExport,
+  dataExportStatus,
+  twoFactorStatus,
+  twoFactorEnable,
+  twoFactorChallenge,
+  twoFactorVerify,
+  twoFactorDisable,
+  listTrustedDevices,
+  revokeTrustedDevice,
+} from "./userPrivacyController";
 
 const isValidMongoMiddleware = new IsValidMongoId();
 const route: Router = Router();
@@ -97,8 +111,22 @@ route.get("/sent-friend-requests", userC.getSentFriendRequests);
 route.get("/friends", userC.getFriends);
 route.post("/remove-friend", userC.removeFriend);
 route.post("/block-user", userC.blockUser);
+route.get("/blocked-users", listBlockedUsers);
+route.post("/unblock-user", unblockUser);
 route.post("/report-user", userC.reportUser);
-route.post("/update-account-privacy",userC.updateIsPrivate);
+route.post("/update-account-privacy", userC.updateIsPrivate);
+route.patch("/update-profile-visibility", updateProfileVisibility);
+
+route.post("/data-export/request", requestDataExport);
+route.get("/data-export/status", dataExportStatus);
+
+route.get("/2fa/status", twoFactorStatus);
+route.post("/2fa/enable", twoFactorEnable);
+route.post("/2fa/disable", twoFactorDisable);
+route.post("/2fa/challenge", twoFactorChallenge);
+route.post("/2fa/verify", twoFactorVerify);
+route.get("/2fa/trusted-devices", listTrustedDevices);
+route.delete("/2fa/trusted-devices/:id", revokeTrustedDevice);
 route.get("/get-all-trainee",userC.getAllTrainee);
 route.get("/get-all-users",userC.getAllUsers);
 route.get("/get-all-trainer",userC.getAllTrainers);

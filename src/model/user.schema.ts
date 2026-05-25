@@ -88,6 +88,17 @@ const userSchema: Schema = new Schema(
     privacy: {
       read_receipts_enabled: { type: Boolean, default: true },
     },
+    /**
+     * Profile-visibility settings surfaced in the privacy screen. Defaults
+     * preserve current behaviour: last-active and search visibility on,
+     * message requests from non-friends allowed.
+     */
+    privacy_visibility: {
+      show_last_active: { type: Boolean, default: true },
+      show_in_community_search: { type: Boolean, default: true },
+      allow_message_requests_from_non_friends: { type: Boolean, default: true },
+      show_online_status: { type: Boolean, default: true },
+    },
     friendRequests: [
       {
         senderId: { type: Schema.Types.ObjectId, ref: 'user' },
