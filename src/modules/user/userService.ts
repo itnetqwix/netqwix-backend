@@ -1721,6 +1721,74 @@ export class UserService {
     }
   }
 
+  /**
+   * Self-serve account deletion for App Store / Play Store compliance.
+   *
+   * We soft-delete the user record so audit trails (bookings, payments,
+   * abuse reports) remain intact, then scramble the obvious PII so the
+   * account is unusable, hide it from every listing, and revoke every
+   * active session. A cleanup job can hard-delete after the 30-day grace
+   * period if no recovery request comes in.
+   */
+  public async deleteOwnAccount(
+    userId: string,
+    reason?: string
+  ): Promise<ResponseBuilder> {
+    try {
+      if (!userId) {
+        return ResponseBuilder.badRequest("Not authenticated");
+      }
+      const target = await user.findById(userId);
+      if (!target) {
+        return ResponseBuilder.badRequest("Account not found");
+      }
+      if (target.account_type === AccountType.ADMIN) {
+        return ResponseBuilder.badRequest("Admin accounts must be removed by another admin");
+      }
+      if (target.deleted_at) {
+        return ResponseBuilder.data(
+          { deletedAt: target.deleted_at },
+          "Account already scheduled for deletion"
+        );
+      }
+
+      const now = new Date();
+      const scrambled = `deleted+${userId}@netqwix.invalid`;
+      await user.updateOne(
+        { _id: userId },
+        {
+          $set: {
+            deleted_at: now,
+            deletion_reason: reason ? String(reason).slice(0, 240) : null,
+            isPrivate: true,
+            showAsOnline: false,
+            email: scrambled,
+            mobile_no: "",
+            fullname: "Deleted user",
+            profile_picture: null,
+            chat_public_key: null,
+            ai_profile_summary: null,
+          },
+        }
+      );
+
+      try {
+        const { authSessionService } = require("../auth/authSessionService");
+        await authSessionService.revokeAllForUser(userId);
+      } catch (err) {
+        this.log.error("[deleteOwnAccount] revoke sessions failed", err);
+      }
+
+      return ResponseBuilder.data(
+        { deletedAt: now.toISOString() },
+        "Account scheduled for deletion"
+      );
+    } catch (err) {
+      this.log.error(err);
+      return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
+    }
+  }
+
   public async deleteUser(authUser: any, userId: string): Promise<ResponseBuilder> {
     try {
       if (authUser?.account_type !== AccountType.ADMIN) {

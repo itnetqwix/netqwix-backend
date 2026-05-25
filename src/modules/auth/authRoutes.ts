@@ -34,6 +34,8 @@ route.post(
   authC.signup
 );
 route.post("/login", authLoginLimiter, V.validate(loginModel), authC.login);
+route.post("/magic-link/request", authLoginLimiter, authC.requestMagicLink);
+route.post("/magic-link/verify", authLoginLimiter, authC.verifyMagicLink);
 route.post("/refresh", authC.refreshToken);
 route.post("/logout", authC.logout);
 
@@ -53,6 +55,10 @@ route.post("/sessions/revoke-others", (req, res, next) => {
   req["byPassRoute"] = [];
   authorizeMiddleware.authorizeUser(req, res, next);
 }, authC.revokeOtherSessions);
+route.post("/sessions/revoke-all", (req, res, next) => {
+  req["byPassRoute"] = [];
+  authorizeMiddleware.authorizeUser(req, res, next);
+}, authC.revokeAllSessions);
 
 // to send email for forgot password
 route.post(

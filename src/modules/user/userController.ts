@@ -1236,6 +1236,25 @@ export class userController {
     }
   };
 
+  public deleteOwnAccount = async (req, res) => {
+    try {
+      const userId = String(req?.authUser?._id ?? "");
+      const reason = String(req?.body?.reason ?? "").trim() || undefined;
+      const result: ResponseBuilder = await this.userService.deleteOwnAccount(
+        userId,
+        reason
+      );
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ message: result.error });
+      }
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err?.error || err?.message });
+    }
+  };
+
   public deleteUser = async (req, res) => {
     try {
       if (req["authUser"]) {

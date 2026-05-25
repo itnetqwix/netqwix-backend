@@ -99,6 +99,16 @@ const aiService = new AIService();
     });
     void instantRecoveryJob.start();
 
+    const bookingRemindersJob = cron.schedule("* * * * *", () => {
+      try {
+        const { processBookingReminders } = require("./bookingRemindersJob");
+        void processBookingReminders();
+      } catch (err) {
+        console.log("err on booking reminders job:", err);
+      }
+    });
+    void bookingRemindersJob.start();
+
     const refundTransferReconcileJob = cron.schedule("*/10 * * * *", () => {
       try {
         const {

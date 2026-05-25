@@ -317,6 +317,11 @@ export class AuthService {
       }
       const userDetails: any = await this.getUser(user);
       if (userDetails) {
+        if (userDetails.deleted_at) {
+          return ResponseBuilder.badRequest(
+            "This account has been deleted. Contact support if this was a mistake."
+          );
+        }
         const validPassword = await this.bcrypt.comparePassword(
           password,
           userDetails.password

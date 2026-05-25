@@ -75,6 +75,22 @@ route.delete(
   traineeC.removeFavoriteTrainer
 );
 
+route.post(
+  "/guest-activity",
+  traineeMiddleware.isTrainee,
+  traineeC.ingestGuestActivity
+);
+route.get(
+  "/guest-activity/seeded-trainers",
+  traineeMiddleware.isTrainee,
+  traineeC.getGuestSeededTrainers
+);
+route.get(
+  "/personalized-feed",
+  traineeMiddleware.isTrainee,
+  traineeC.getPersonalizedFeed
+);
+
 route.get(
   "/session-extension/quote",
   traineeMiddleware.isTrainee,

@@ -9,6 +9,8 @@ import {
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { TraineeService } from "./traineeService";
 import { SessionExtensionService } from "./sessionExtensionService";
+import { guestActivityService } from "./guestActivityService";
+import { personalizedFeedService } from "./personalizedFeedService";
 import { bookSessionModal } from "./traineeValidator";
 import * as _ from "lodash";
 import { TrainerService } from "../trainer/trainerService";
@@ -590,6 +592,69 @@ export class traineeController {
           status: CONSTANCE.FAIL,
           error: result.error || result.result,
         });
+      }
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public ingestGuestActivity = async (req: any, res: Response) => {
+    try {
+      const result = await guestActivityService.ingest(
+        String(req.authUser._id),
+        req.body
+      );
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ message: result.error });
+      }
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public getGuestSeededTrainers = async (req: any, res: Response) => {
+    try {
+      const limit = Number(req.query?.limit) || 12;
+      const result = await guestActivityService.getSeededTrainers(
+        String(req.authUser._id),
+        limit
+      );
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ message: result.error });
+      }
+      return res
+        .status(result.code)
+        .send({ status: CONSTANCE.SUCCESS, data: result.result });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public getPersonalizedFeed = async (req: any, res: Response) => {
+    try {
+      const limit = Number(req.query?.limit) || 12;
+      const raw = req.query?.recentTrainerIds ?? req.query?.recent_ids;
+      const recentTrainerIds = Array.isArray(raw)
+        ? raw.map(String)
+        : typeof raw === "string"
+        ? raw.split(",").map((s) => s.trim()).filter(Boolean)
+        : [];
+      const result = await personalizedFeedService.listForYou(
+        String(req.authUser._id),
+        recentTrainerIds,
+        limit
+      );
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).send({ message: result.error });
       }
       return res
         .status(result.code)

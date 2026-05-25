@@ -88,6 +88,19 @@ const userSchema: Schema = new Schema(
         email: { type: Boolean, default: true },
         sms: { type: Boolean, default: true },
       },
+      /**
+       * Cadence preset for upcoming-session push reminders.
+       *
+       *  - `standard`  → 24h + 1h + 10m before the session
+       *  - `minimal`   → 1h only
+       *  - `aggressive`→ 24h + 1h + 10m + 1m
+       *  - `off`       → no reminder pushes
+       */
+      bookingReminderCadence: {
+        type: String,
+        enum: ["standard", "minimal", "aggressive", "off"],
+        default: "standard",
+      },
     },
     interests: {
       type: [String],
@@ -97,6 +110,23 @@ const userSchema: Schema = new Schema(
       type: String,
       default: null,
     },
+    /**
+     * Bumped when a freshly signed-up user's guest browsing activity has been
+     * ingested via `POST /trainee/guest-activity`. Lets the discovery feed
+     * cheaply detect whether seeded recommendations are available.
+     */
+    guest_seed_ingested_at: {
+      type: Date,
+      default: null,
+    },
+    /**
+     * Self-serve account deletion (App Store / Play Store compliance).
+     * When set, the user is treated as deleted everywhere: cannot log in,
+     * hidden from listings, frozen from receiving messages. A cleanup job
+     * can hard-delete after a 30-day grace period.
+     */
+    deleted_at: { type: Date, default: null, index: true },
+    deletion_reason: { type: String, default: null },
     /** IANA zone (e.g. America/New_York) for availability display and scheduling context. */
     time_zone: {
       type: String,

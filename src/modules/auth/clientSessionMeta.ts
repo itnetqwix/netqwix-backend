@@ -6,7 +6,7 @@ export type ClientSessionMeta = {
   deviceLabel: string;
   deviceId?: string;
   appVersion?: string;
-  loginMethod: "password" | "google" | "apple" | "unknown";
+  loginMethod: "password" | "google" | "apple" | "magic-link" | "unknown";
   ipAddress: string;
   userAgent: string;
 };
