@@ -313,12 +313,8 @@ export class ChatExtrasService {
     try {
       const fetched = await fetch(msg.mediaUrl);
       if (!fetched.ok) throw new Error(`download failed (${fetched.status})`);
-      const blob = await fetched.blob();
-      const file = new File(
-        [blob],
-        `voice-${String(messageId)}.m4a`,
-        { type: blob.type || "audio/m4a" }
-      );
+      const buffer = Buffer.from(await fetched.arrayBuffer());
+      const file = await OpenAI.toFile(buffer, `voice-${String(messageId)}.m4a`);
       const resp = await openai().audio.transcriptions.create({
         model: "whisper-1",
         file,
