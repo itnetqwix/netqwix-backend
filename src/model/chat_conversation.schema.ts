@@ -31,6 +31,23 @@ const chatConversationSchema: Schema = new Schema(
       ref: Tables.user,
       default: null,
     },
+    /**
+     * Pinned message slot. Only one pin per conversation — newer pins
+     * overwrite older ones. `pinnedAt` lets the UI surface "Pinned 2h ago".
+     */
+    pinnedMessageId: {
+      type: Schema.Types.ObjectId,
+      ref: Tables.chat_message,
+      default: null,
+    },
+    pinnedAt: { type: Date, default: null },
+    pinnedBy: { type: Schema.Types.ObjectId, ref: Tables.user, default: null },
+    /**
+     * When > 0, every new message in this conversation gets
+     * `expiresAt = now + N minutes` (handled in chatService.sendMessage).
+     * `0` disables disappearing messages.
+     */
+    disappearingTtlMinutes: { type: Number, default: 0, min: 0, max: 60 * 24 * 30 },
   },
   { timestamps: true }
 );

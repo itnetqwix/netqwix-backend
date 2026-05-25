@@ -15,6 +15,9 @@ route.get("/balance", walletController.getBalance);
 route.get("/transactions/:id", walletController.getTransactionDetail);
 route.get("/ledger", walletController.getLedger);
 route.get("/earnings", walletController.getEarnings);
+route.get("/trainer-pulse", walletController.getTrainerPulse);
+route.get("/trainer-earnings-series", walletController.getTrainerEarningsSeries);
+route.get("/trainer-earnings.csv", walletController.exportTrainerEarningsCsv);
 route.post(
   "/topup/create-intent",
   requireIdempotencyKey,

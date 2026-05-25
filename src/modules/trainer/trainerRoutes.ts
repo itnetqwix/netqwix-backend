@@ -77,4 +77,36 @@ route.post(
   trainerC.respondToSessionExtensionRequest
 );
 
+route.get(
+  "/trainee-notes/:traineeId",
+  trainerMiddleware.isTrainer,
+  trainerC.getTraineeNote
+);
+route.put(
+  "/trainee-notes/:traineeId",
+  trainerMiddleware.isTrainer,
+  trainerC.upsertTraineeNote
+);
+route.delete(
+  "/trainee-notes/:traineeId",
+  trainerMiddleware.isTrainer,
+  trainerC.deleteTraineeNote
+);
+route.get(
+  "/nudge-candidates",
+  trainerMiddleware.isTrainer,
+  trainerC.getNudgeCandidates
+);
+route.post(
+  "/trainee-nudge",
+  trainerMiddleware.isTrainer,
+  trainerC.sendTraineeNudge
+);
+
+route.post(
+  "/session-recap",
+  trainerMiddleware.isTrainer,
+  trainerC.postSessionRecap
+);
+
 export const trainerRoute: Router = route;

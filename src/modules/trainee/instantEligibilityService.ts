@@ -109,7 +109,9 @@ export async function checkInstantLessonEligibility(params: {
 
   const trainer = await user
     .findById(trainerId)
-    .select("showAsOnline time_zone extraInfo.availabilityInfo")
+    .select(
+      "showAsOnline time_zone extraInfo.availabilityInfo auto_decline_outside_business_hours"
+    )
     .lean();
 
   if (!trainer) {
@@ -121,9 +123,19 @@ export async function checkInstantLessonEligibility(params: {
     if ((trainer as any).showAsOnline === false) {
       reasons.push("Coach is not available for instant lessons.");
     }
-    const avail = await isTrainerInWeeklyAvailabilityNow(trainerId, now);
-    if (!avail.ok) {
-      reasons.push("Coach is outside their availability hours.");
+    /**
+     * Trainers who've toggled OFF "Decline outside business hours" want to
+     * be reachable for ad-hoc instant lessons anytime they're showing as
+     * online — so skip the weekly availability gate for them. Default
+     * (TRUE) preserves the historical strict behaviour.
+     */
+    const enforceHours =
+      (trainer as any).auto_decline_outside_business_hours !== false;
+    if (enforceHours) {
+      const avail = await isTrainerInWeeklyAvailabilityNow(trainerId, now);
+      if (!avail.ok) {
+        reasons.push("Coach is outside their availability hours.");
+      }
     }
   }
 

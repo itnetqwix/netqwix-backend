@@ -6,11 +6,131 @@ import { TrainerService } from "./trainerService";
 import { SessionExtensionService } from "../trainee/sessionExtensionService";
 import { Request, Response } from "express";
 import * as _ from "lodash";
+import { trainerNotesService } from "./trainerNotesService";
+import { traineeNudgeService } from "./traineeNudgeService";
 
 export class trainerController {
   public logger = log.getLogger();
   public trainerService = new TrainerService();
   public sessionExtensionService = new SessionExtensionService();
+
+  public getTraineeNote = async (req: Request, res: Response) => {
+    try {
+      const trainerId = String(req["authUser"]?._id ?? "");
+      const traineeId = String(req.params?.traineeId ?? "");
+      const result = await trainerNotesService.getNote(trainerId, traineeId);
+      return res.status(result.code).send(
+        result.status === CONSTANCE.FAIL
+          ? { status: CONSTANCE.FAIL, error: result.error }
+          : { status: CONSTANCE.SUCCESS, data: result.result }
+      );
+    } catch (err: any) {
+      return res
+        .status(500)
+        .send({ status: CONSTANCE.FAIL, error: err?.message ?? "Internal error" });
+    }
+  };
+
+  public upsertTraineeNote = async (req: Request, res: Response) => {
+    try {
+      const trainerId = String(req["authUser"]?._id ?? "");
+      const traineeId = String(req.params?.traineeId ?? "");
+      const result = await trainerNotesService.upsertNote(trainerId, traineeId, {
+        text: req.body?.text,
+        tags: req.body?.tags,
+      });
+      return res.status(result.code).send(
+        result.status === CONSTANCE.FAIL
+          ? { status: CONSTANCE.FAIL, error: result.error }
+          : { status: CONSTANCE.SUCCESS, data: result.result }
+      );
+    } catch (err: any) {
+      return res
+        .status(500)
+        .send({ status: CONSTANCE.FAIL, error: err?.message ?? "Internal error" });
+    }
+  };
+
+  public deleteTraineeNote = async (req: Request, res: Response) => {
+    try {
+      const trainerId = String(req["authUser"]?._id ?? "");
+      const traineeId = String(req.params?.traineeId ?? "");
+      const result = await trainerNotesService.deleteNote(trainerId, traineeId);
+      return res.status(result.code).send(
+        result.status === CONSTANCE.FAIL
+          ? { status: CONSTANCE.FAIL, error: result.error }
+          : { status: CONSTANCE.SUCCESS, data: result.result }
+      );
+    } catch (err: any) {
+      return res
+        .status(500)
+        .send({ status: CONSTANCE.FAIL, error: err?.message ?? "Internal error" });
+    }
+  };
+
+  public sendTraineeNudge = async (req: Request, res: Response) => {
+    try {
+      const trainerId = String(req["authUser"]?._id ?? "");
+      const traineeId = String(req.body?.traineeId ?? req.params?.traineeId ?? "");
+      const template = String(req.body?.template ?? "comeback");
+      const customMessage = typeof req.body?.message === "string" ? req.body.message : undefined;
+      const result = await traineeNudgeService.sendNudge({
+        trainerId,
+        traineeId,
+        template: template as any,
+        customMessage,
+      });
+      return res.status(result.code).send(
+        result.status === CONSTANCE.FAIL
+          ? { status: CONSTANCE.FAIL, error: result.error }
+          : { status: CONSTANCE.SUCCESS, data: result.result }
+      );
+    } catch (err: any) {
+      return res
+        .status(500)
+        .send({ status: CONSTANCE.FAIL, error: err?.message ?? "Internal error" });
+    }
+  };
+
+  public postSessionRecap = async (req: Request, res: Response) => {
+    try {
+      const trainerId = String(req["authUser"]?._id ?? "");
+      const { sessionId, summary, drills, homework, traineeId } = req.body ?? {};
+      const { sessionRecapService } = require("./sessionRecapService");
+      const result = await sessionRecapService.sendRecap({
+        trainerId,
+        traineeId: traineeId ? String(traineeId) : undefined,
+        sessionId: sessionId ? String(sessionId) : undefined,
+        summary,
+        drills,
+        homework,
+      });
+      return res.status(result.code).send(
+        result.status === CONSTANCE.FAIL
+          ? { status: CONSTANCE.FAIL, error: result.error }
+          : { status: CONSTANCE.SUCCESS, data: result.result }
+      );
+    } catch (err: any) {
+      return res
+        .status(500)
+        .send({ status: CONSTANCE.FAIL, error: err?.message ?? "Internal error" });
+    }
+  };
+
+  public getNudgeCandidates = async (req: Request, res: Response) => {
+    try {
+      const trainerId = String(req["authUser"]?._id ?? "");
+      const result = await traineeNudgeService.listInactiveCandidates(trainerId);
+      return res.status(result.code).send({
+        status: CONSTANCE.SUCCESS,
+        data: result.result,
+      });
+    } catch (err: any) {
+      return res
+        .status(500)
+        .send({ status: CONSTANCE.FAIL, error: err?.message ?? "Internal error" });
+    }
+  };
 
   public respondToSessionExtensionRequest = async (req: Request, res: Response) => {
     try {

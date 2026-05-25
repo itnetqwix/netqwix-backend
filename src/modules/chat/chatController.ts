@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
 import { ChatService } from "./chatService";
+import { ChatExtrasService } from "./chatExtrasService";
 import { CONSTANCE } from "../../config/constance";
 import { validateChatSendBody } from "./chatSendValidator";
 
 export class ChatController {
   private chatService = new ChatService();
+  private extras = new ChatExtrasService();
 
   public getConversations = async (req: Request, res: Response) => {
     try {
@@ -362,6 +364,154 @@ export class ChatController {
       );
       return res.status(result.code).send({ status: CONSTANCE.SUCCESS, data: result.result });
     } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  // ─── Reactions / forward / pins / search / transcribe / TTL / receipts / schedule ───
+  public reactToMessage = async (req: Request, res: Response) => {
+    try {
+      const { messageId, emoji } = req.body || {};
+      if (!messageId || !emoji) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "messageId and emoji required" });
+      }
+      const r = await this.extras.toggleReaction(req["authUser"]["_id"], messageId, emoji);
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public forwardMessage = async (req: Request, res: Response) => {
+    try {
+      const { messageId, targets } = req.body || {};
+      if (!messageId || !Array.isArray(targets)) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "messageId and targets[] required" });
+      }
+      const r = await this.extras.forwardMessage(req["authUser"]["_id"], messageId, targets);
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public pinMessage = async (req: Request, res: Response) => {
+    try {
+      const { messageId } = req.body || {};
+      if (!messageId) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "messageId required" });
+      }
+      const r = await this.extras.pinMessage(req["authUser"]["_id"], messageId);
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public unpinMessage = async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.body || {};
+      if (!conversationId) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "conversationId required" });
+      }
+      const r = await this.extras.unpinMessage(req["authUser"]["_id"], conversationId);
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public getPinnedMessage = async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.params;
+      if (!conversationId) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "conversationId required" });
+      }
+      const r = await this.extras.getPinnedMessage(req["authUser"]["_id"], conversationId);
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public searchAllMessages = async (req: Request, res: Response) => {
+    try {
+      const q = String(req.query.q || "");
+      const limit = Math.min(Number(req.query.limit) || 25, 50);
+      const r = await this.extras.searchAllMessages(req["authUser"]["_id"], q, limit);
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public transcribeVoiceMessage = async (req: Request, res: Response) => {
+    try {
+      const { messageId } = req.body || {};
+      if (!messageId) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "messageId required" });
+      }
+      const r = await this.extras.transcribeVoiceMessage(req["authUser"]["_id"], messageId);
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public setDisappearingTtl = async (req: Request, res: Response) => {
+    try {
+      const { conversationId, minutes } = req.body || {};
+      if (!conversationId) {
+        return res.status(400).send({ status: CONSTANCE.FAIL, error: "conversationId required" });
+      }
+      const r = await this.extras.setDisappearingTtl(
+        req["authUser"]["_id"],
+        conversationId,
+        Number(minutes)
+      );
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public setReadReceiptsEnabled = async (req: Request, res: Response) => {
+    try {
+      const { enabled } = req.body || {};
+      const r = await this.extras.setReadReceiptsEnabled(
+        req["authUser"]["_id"],
+        !!enabled
+      );
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public scheduleMessage = async (req: Request, res: Response) => {
+    try {
+      const r = await this.extras.scheduleMessage(req["authUser"]["_id"], req.body || {});
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public listScheduledMessages = async (req: Request, res: Response) => {
+    try {
+      const r = await this.extras.listScheduledMessages(req["authUser"]["_id"]);
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+    }
+  };
+
+  public cancelScheduledMessage = async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const r = await this.extras.cancelScheduledMessage(req["authUser"]["_id"], id);
+      return res.status(r.code).send({ status: CONSTANCE.SUCCESS, data: r.result });
+    } catch {
       return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
     }
   };

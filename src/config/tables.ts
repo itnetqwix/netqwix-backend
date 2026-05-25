@@ -43,4 +43,6 @@ export class Tables {
     public static readonly trainee_guest_activity = "trainee_guest_activity";
     public static readonly magic_link_tokens = "magic_link_tokens";
     public static readonly booking_reminder_log = "booking_reminder_log";
+    public static readonly trainer_trainee_notes = "trainer_trainee_notes";
+    public static readonly scheduled_chat_messages = "scheduled_chat_messages";
 }

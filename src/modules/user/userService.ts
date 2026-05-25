@@ -1661,6 +1661,21 @@ export class UserService {
   }
 
 
+  public async updateAutoDeclineOutsideHours(userId: string, enabled: boolean) {
+    const updated = await user
+      .findByIdAndUpdate(
+        userId,
+        { $set: { auto_decline_outside_business_hours: enabled } },
+        { new: true, projection: { auto_decline_outside_business_hours: 1 } }
+      )
+      .lean();
+    return {
+      auto_decline_outside_business_hours: Boolean(
+        updated?.auto_decline_outside_business_hours
+      ),
+    };
+  }
+
   public async setOnlineAvailability(
     userId: string,
     showAsOnline: boolean

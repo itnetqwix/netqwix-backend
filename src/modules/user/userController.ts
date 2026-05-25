@@ -1215,6 +1215,26 @@ export class userController {
     }
   };
 
+  public setAutoDeclineOutsideHours = async (req, res) => {
+    try {
+      if (!req["authUser"]) {
+        return res.status(401).json({ status: CONSTANCE.FAIL, error: "Unauthorized" });
+      }
+      const raw = req.body?.auto_decline_outside_business_hours ?? req.body?.enabled;
+      if (typeof raw !== "boolean") {
+        return res.status(400).json({
+          status: CONSTANCE.FAIL,
+          error: "auto_decline_outside_business_hours (boolean) is required",
+        });
+      }
+      const userId = String(req.authUser._id);
+      const updated = await this.userService.updateAutoDeclineOutsideHours(userId, raw);
+      return res.status(200).json({ status: CONSTANCE.SUCCESS, data: updated });
+    } catch (err) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: (err as Error).message });
+    }
+  };
+
   public updateTrainerStatus = async (req, res) => {
     try {
       if (req["authUser"]) {

@@ -200,6 +200,49 @@ export class WalletController {
     }
   };
 
+  public getTrainerPulse = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const data = await walletPaymentService.getTrainerPulse(userId);
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data });
+    } catch (err: any) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public getTrainerEarningsSeries = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const range = String(req.query?.range ?? "weekly");
+      const data = await walletPaymentService.getTrainerEarningsSeries(
+        userId,
+        range === "monthly" ? "monthly" : "weekly"
+      );
+      return res.status(200).send({ status: CONSTANCE.SUCCESS, data });
+    } catch (err: any) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
+  public exportTrainerEarningsCsv = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id);
+      const range = String(req.query?.range ?? "monthly");
+      const csv = await walletPaymentService.exportTrainerEarningsCsv(
+        userId,
+        range === "weekly" ? "weekly" : "monthly"
+      );
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="netqwix-earnings-${range}.csv"`
+      );
+      return res.status(200).send(csv);
+    } catch (err: any) {
+      return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
+    }
+  };
+
   public getConfig = async (_req: Request, res: Response) => {
     return res.status(200).send({
       status: CONSTANCE.SUCCESS,

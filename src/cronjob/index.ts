@@ -109,6 +109,17 @@ const aiService = new AIService();
     });
     void bookingRemindersJob.start();
 
+    const scheduledChatDispatchJob = cron.schedule("* * * * *", () => {
+      try {
+        const { ChatExtrasService } = require("../modules/chat/chatExtrasService");
+        const svc = new ChatExtrasService();
+        void svc.dispatchDueScheduledMessages();
+      } catch (err) {
+        console.log("err on scheduled chat dispatch job:", err);
+      }
+    });
+    void scheduledChatDispatchJob.start();
+
     const refundTransferReconcileJob = cron.schedule("*/10 * * * *", () => {
       try {
         const {

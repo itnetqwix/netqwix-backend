@@ -126,6 +126,10 @@ route.put("/update-mobile-number",userC.updateMobileNumber);
 route.patch("/update-notifications-settings",userC.updateNotificationSettings);
 route.put("/update-trainer-status",userC.updateTrainerStatus.bind(userC));
 route.put("/online-availability", userC.setOnlineAvailability.bind(userC));
+route.put(
+  "/auto-decline-outside-hours",
+  userC.setAutoDeclineOutsideHours.bind(userC)
+);
 route.delete("/delete-user/:id", isValidMongoMiddleware.isValidTokenInReqParams, userC.deleteUser.bind(userC));
 route.delete("/me", userC.deleteOwnAccount.bind(userC));
 route.get("/approve-expert/:id",userC.approveTrainer.bind(userC));

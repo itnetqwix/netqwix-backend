@@ -105,15 +105,28 @@ export class ChatService {
         .lean();
 
       const now = new Date();
+      /**
+       * Read receipts are gated on the *reader's* opt-in. When the
+       * reader has disabled receipts we still mark `isRead` so unread
+       * counts stay accurate, but we keep `status` at 'delivered' and
+       * leave `readAt` null so the sender never sees a blue tick.
+       */
+      const me: any = await user.findById(userId).select("privacy").lean();
+      const sendsReadReceipts = me?.privacy?.read_receipts_enabled !== false;
+
+      const baseRead = sendsReadReceipts
+        ? { isRead: true, status: "read", readAt: now }
+        : { isRead: true };
+
       if (conversation.isGroup) {
         await ChatMessage.updateMany(
           { conversationId, senderId: { $ne: userId }, isRead: false },
-          { isRead: true, status: "read", readAt: now }
+          baseRead
         );
       } else {
         await ChatMessage.updateMany(
           { conversationId, receiverId: userId, isRead: false },
-          { isRead: true, status: "read", readAt: now }
+          baseRead
         );
       }
 
@@ -133,7 +146,8 @@ export class ChatService {
     type = "text",
     mediaUrl: string | null = null,
     conversationId: string | null = null,
-    replyToMessageId: string | null = null
+    replyToMessageId: string | null = null,
+    extras: { forwardedFromMessageId?: string | null } = {}
   ): Promise<ResponseBuilder> {
     try {
       let conversation: any = null;
@@ -184,6 +198,9 @@ export class ChatService {
         }
       }
 
+      const ttlMinutes = Number(conversation.disappearingTtlMinutes || 0);
+      const expiresAt = ttlMinutes > 0 ? new Date(Date.now() + ttlMinutes * 60_000) : null;
+
       const message = await ChatMessage.create({
         conversationId: conversation._id,
         senderId,
@@ -192,6 +209,8 @@ export class ChatService {
         type,
         mediaUrl,
         replyToMessageId: replyToMessageId || null,
+        forwardedFromMessageId: extras.forwardedFromMessageId || null,
+        expiresAt,
       });
 
       if (!isGroup && type === "text" && content && finalReceiverId) {

@@ -73,6 +73,21 @@ const userSchema: Schema = new Schema(
     chat_public_key: { type: String, default: null },
     /** When false, trainer stays hidden from online lists even if socket is connected. */
     showAsOnline: { type: Boolean, default: true },
+    /**
+     * When TRUE (default), instant booking requests that fall outside the
+     * trainer's weekly availability template are auto-declined before they
+     * ever ping the trainer's device. Trainers can flip this OFF if they
+     * want to be reachable for ad-hoc instant lessons 24/7.
+     */
+    auto_decline_outside_business_hours: { type: Boolean, default: true },
+    /**
+     * Privacy preferences. We currently only need read-receipt opt-out
+     * (mirrors WhatsApp's switch — when off the sender no longer sees
+     * blue ticks from this user).
+     */
+    privacy: {
+      read_receipts_enabled: { type: Boolean, default: true },
+    },
     friendRequests: [
       {
         senderId: { type: Schema.Types.ObjectId, ref: 'user' },

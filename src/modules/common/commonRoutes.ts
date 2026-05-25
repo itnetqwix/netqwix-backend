@@ -81,6 +81,18 @@ route.post("/chat-group/:conversationId/exit", chatC.exitGroup);
 route.post("/chat-group/:conversationId/delete", chatC.deleteGroup);
 route.post("/chat-group/:conversationId/update", chatC.updateGroup);
 route.get("/chat-policy", chatC.getChatPolicy);
+route.post("/chat-react", chatC.reactToMessage);
+route.post("/chat-forward", chatC.forwardMessage);
+route.post("/chat-pin", chatC.pinMessage);
+route.post("/chat-unpin", chatC.unpinMessage);
+route.get("/chat-pinned/:conversationId", chatC.getPinnedMessage);
+route.get("/chat-search", chatC.searchAllMessages);
+route.post("/chat-transcribe", chatC.transcribeVoiceMessage);
+route.post("/chat-disappearing", chatC.setDisappearingTtl);
+route.post("/chat-read-receipts", chatC.setReadReceiptsEnabled);
+route.post("/chat-scheduled", chatC.scheduleMessage);
+route.get("/chat-scheduled", chatC.listScheduledMessages);
+route.delete("/chat-scheduled/:id", chatC.cancelScheduledMessage);
 route.get("/chat-flagged", (req, res, next) => {
   const { assertAdminUser } = require("../admin/adminPermission");
   const denied = assertAdminUser(req["authUser"]);
