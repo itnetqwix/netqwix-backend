@@ -17,6 +17,37 @@ const DELIVERY_LOG_CAP = 10_000;
 const EMAIL_CONCURRENCY = 10;
 const SMS_CONCURRENCY = 5;
 
+/**
+ * Inline helper so SMS broadcasts respect the user's quiet hours
+ * without the broadcast service needing to import the full
+ * notifications service (avoids a circular dependency).
+ */
+function isInsideQuietHoursForUser(q: {
+  start_minutes?: number;
+  end_minutes?: number;
+  timezone?: string;
+}): boolean {
+  try {
+    const tz = q.timezone || "UTC";
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(new Date());
+    const h = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+    const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+    const now = h * 60 + m;
+    const start = Number(q.start_minutes ?? 22 * 60);
+    const end = Number(q.end_minutes ?? 7 * 60);
+    if (start === end) return false;
+    if (start < end) return now >= start && now < end;
+    return now >= start || now < end;
+  } catch {
+    return false;
+  }
+}
+
 export class BroadcastService {
   private smsService: SMSService | null = null;
   private whatsAppService: WhatsAppService | null = null;
@@ -224,9 +255,18 @@ export class BroadcastService {
       doc.stats.sms.failed += eligible.length;
       return;
     }
-    const eligible = recipients.filter(
-      (u) => u.mobile_no && u.notifications?.promotional?.sms !== false
-    );
+    const eligible = recipients.filter((u) => {
+      if (!u.mobile_no) return false;
+      if (u.notifications?.promotional?.sms === false) return false;
+      // Honour granular SMS marketing switch and quiet-hours.
+      if (u.notifications?.channels?.marketing?.sms === false) return false;
+      const mute = u.notifications?.mute_until;
+      if (mute && new Date(mute).getTime() > Date.now()) return false;
+      if (u.notifications?.quiet_hours?.enabled) {
+        if (isInsideQuietHoursForUser(u.notifications.quiet_hours)) return false;
+      }
+      return true;
+    });
 
     await this.runWithConcurrency(eligible, SMS_CONCURRENCY, async (u) => {
       const to = normalizeSignupPhone(u.mobile_no);

@@ -22,5 +22,9 @@ route.post("/subscription", notificationsController.getSubscription);
 route.patch('/update', notificationsController.updateNotificationsStatus);
 route.post("/register-push-token", notificationsController.registerPushToken);
 route.delete("/unregister-push-token/:deviceId", notificationsController.unregisterPushToken);
+route.get("/preferences", notificationsController.getPreferences);
+route.put("/preferences", notificationsController.updatePreferences);
+route.post("/mute", notificationsController.setMuteUntil);
+route.post("/quiet-hours", notificationsController.setQuietHours);
 
 export const notificationRoute: Router = route;

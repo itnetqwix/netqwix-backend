@@ -116,6 +116,60 @@ const userSchema: Schema = new Schema(
         enum: ["standard", "minimal", "aggressive", "off"],
         default: "standard",
       },
+      /**
+       * Per-category × per-channel switches. Each category (messages /
+       * bookings / payments / marketing) can be independently enabled on
+       * push, email, and SMS. Read in `NotificationsService` *before*
+       * dispatching anything — when the user opts out, we skip silently.
+       *
+       * Booleans, no enums: lets us add new channels without a migration.
+       */
+      channels: {
+        messages: {
+          push: { type: Boolean, default: true },
+          email: { type: Boolean, default: false },
+          sms: { type: Boolean, default: false },
+        },
+        bookings: {
+          push: { type: Boolean, default: true },
+          email: { type: Boolean, default: true },
+          sms: { type: Boolean, default: true },
+        },
+        payments: {
+          push: { type: Boolean, default: true },
+          email: { type: Boolean, default: true },
+          sms: { type: Boolean, default: false },
+        },
+        marketing: {
+          push: { type: Boolean, default: true },
+          email: { type: Boolean, default: true },
+          sms: { type: Boolean, default: false },
+        },
+      },
+      /**
+       * "Mute notifications until …" — when set in the future every push
+       * delivery is suppressed regardless of channel switches. Cleared
+       * by the user or auto-cleared once we pass it.
+       */
+      mute_until: { type: Date, default: null },
+      /**
+       * Quiet hours window — both `start_minutes` and `end_minutes` are
+       * minutes-since-midnight in the user's `timezone`. When `enabled`
+       * we skip non-urgent pushes/SMS that arrive inside the window and
+       * defer them to the next morning (handled in the dispatcher).
+       *
+       * Categories listed in `urgent_categories` always punch through.
+       */
+      quiet_hours: {
+        enabled: { type: Boolean, default: false },
+        start_minutes: { type: Number, default: 22 * 60 },
+        end_minutes: { type: Number, default: 7 * 60 },
+        timezone: { type: String, default: "UTC" },
+        urgent_categories: {
+          type: [String],
+          default: ["instant_lesson", "session_starting"],
+        },
+      },
     },
     interests: {
       type: [String],

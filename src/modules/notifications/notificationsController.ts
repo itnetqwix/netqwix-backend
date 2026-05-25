@@ -71,4 +71,50 @@ export class NotificationsController {
             return res.status(500).send({ status: CONSTANCE.FAIL, error: err.msg || err.error });
         }
     };
+
+    public getPreferences = async (req: any, res: Response) => {
+        try {
+            const userId = req["authUser"]?.["_id"];
+            const data = await this.notificationsService.getPreferences(userId);
+            return res.status(data.code).send({ status: CONSTANCE.SUCCESS, data: data.result });
+        } catch (err) {
+            this.logger.error(err);
+            return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+        }
+    };
+
+    public updatePreferences = async (req: any, res: Response) => {
+        try {
+            const userId = req["authUser"]?.["_id"];
+            const data = await this.notificationsService.updatePreferences(userId, req.body || {});
+            return res.status(data.code).send({ status: CONSTANCE.SUCCESS, data: data.result });
+        } catch (err) {
+            this.logger.error(err);
+            return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+        }
+    };
+
+    public setMuteUntil = async (req: any, res: Response) => {
+        try {
+            const userId = req["authUser"]?.["_id"];
+            const raw = req.body?.until;
+            const until = raw === null ? null : raw ? new Date(raw) : null;
+            const data = await this.notificationsService.setMuteUntil(userId, until);
+            return res.status(data.code).send({ status: CONSTANCE.SUCCESS, data: data.result });
+        } catch (err) {
+            this.logger.error(err);
+            return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+        }
+    };
+
+    public setQuietHours = async (req: any, res: Response) => {
+        try {
+            const userId = req["authUser"]?.["_id"];
+            const data = await this.notificationsService.setQuietHours(userId, req.body || {});
+            return res.status(data.code).send({ status: CONSTANCE.SUCCESS, data: data.result });
+        } catch (err) {
+            this.logger.error(err);
+            return res.status(500).send({ status: CONSTANCE.FAIL, error: "Internal server error" });
+        }
+    };
 }
