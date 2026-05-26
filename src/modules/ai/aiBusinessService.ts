@@ -7,6 +7,32 @@ import mongoose from "mongoose";
 
 const aiService = new AIService();
 
+/** Client-side error strings we must not feed back into the model context. */
+const POISONED_ASSISTANT_SNIPPETS = [
+  "having trouble connecting",
+  "temporarily unavailable",
+  "couldn't process that",
+];
+
+function sanitizeChatMessages(
+  messages: unknown[]
+): { role: "user" | "assistant"; content: string }[] {
+  const out: { role: "user" | "assistant"; content: string }[] = [];
+  for (const raw of messages) {
+    if (!raw || typeof raw !== "object") continue;
+    const role = (raw as { role?: string }).role;
+    const content = String((raw as { content?: unknown }).content ?? "").trim();
+    if (role !== "user" && role !== "assistant") continue;
+    if (!content) continue;
+    if (role === "assistant") {
+      const lower = content.toLowerCase();
+      if (POISONED_ASSISTANT_SNIPPETS.some((s) => lower.includes(s))) continue;
+    }
+    out.push({ role, content: content.slice(0, 4000) });
+  }
+  return out.slice(-10);
+}
+
 export class AIBusinessService {
   // ─── 1. Trainer Recommendations ─────────────────────────
   async getRecommendedTrainers(authUser: any): Promise<ResponseBuilder> {
@@ -84,25 +110,37 @@ export class AIBusinessService {
 
   // ─── 2. Chat Assistant ──────────────────────────────────
   async chatWithAssistant(authUser: any, body: any): Promise<ResponseBuilder> {
+    const sanitized = sanitizeChatMessages(body?.messages ?? []);
+    if (!sanitized.length) {
+      return ResponseBuilder.badRequest("Messages array is required.");
+    }
+
+    let userName = "User";
+    let userType = "Trainee";
+    let category: string | undefined;
     try {
-      const { messages } = body;
-      if (!messages || !Array.isArray(messages) || !messages.length) {
-        return ResponseBuilder.badRequest("Messages array is required.");
+      if (authUser?._id) {
+        const userData = await user
+          .findById(authUser._id)
+          .select("fullname account_type category")
+          .lean();
+        userName = (userData as any)?.fullname || userName;
+        userType = (userData as any)?.account_type || userType;
+        category = (userData as any)?.category || undefined;
       }
+    } catch (lookupErr) {
+      console.warn("[AI] chatAssistant user lookup failed:", lookupErr);
+    }
 
-      const userData = await user.findById(authUser._id).select("fullname account_type category").lean();
+    const context = { userName, userType, category };
 
-      const { reply, actions } = await aiService.chatAssistant(messages, {
-        userName: (userData as any)?.fullname || "User",
-        userType: (userData as any)?.account_type || "Trainee",
-        category: (userData as any)?.category || undefined,
-      });
-
-      const data: any = { reply, actions };
-      return ResponseBuilder.data(data, "AI assistant response.");
+    try {
+      const { reply, actions } = await aiService.chatAssistant(sanitized, context);
+      return ResponseBuilder.data({ reply, actions }, "AI assistant response.");
     } catch (err) {
-      console.error("[AI] chatAssistant error:", err);
-      return ResponseBuilder.errorMessage("AI assistant is temporarily unavailable.");
+      console.error("[AI] chatAssistant error, using fallback:", err);
+      const { reply, actions } = aiService.chatAssistantFallback(sanitized, context);
+      return ResponseBuilder.data({ reply, actions }, "AI assistant response.");
     }
   }
 

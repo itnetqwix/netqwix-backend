@@ -68,12 +68,21 @@ function parseAssistantResponse(raw: string): { reply: string; actions: AiAction
 
 let _client: OpenAI | null = null;
 
+/** Normalise key from `.env` / PM2 (trim, strip accidental quotes). */
+export function getOpenAiApiKey(): string | undefined {
+  const raw = process.env.OPENAI_API_KEY;
+  if (!raw) return undefined;
+  const trimmed = raw.trim().replace(/^['"]|['"]$/g, "");
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function client(): OpenAI {
   if (!_client) {
-    if (!process.env.OPENAI_API_KEY) {
+    const apiKey = getOpenAiApiKey();
+    if (!apiKey) {
       throw new Error("OPENAI_API_KEY is not set in environment variables.");
     }
-    _client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    _client = new OpenAI({ apiKey });
   }
   return _client;
 }
@@ -128,10 +137,63 @@ Only return the JSON array, no other text.`;
   }
 
   // ─── Chat Assistant ──────────────────────────────────────
+
+  /**
+   * Rule-based fallback when OpenAI is unavailable (missing key, quota,
+   * network). Returns 200-shaped content so mobile never shows a hard
+   * failure for common intents.
+   */
+  /** Public so the business layer can return 200 when OpenAI or DB fails. */
+  chatAssistantFallback(
+    messages: { role: "user" | "assistant"; content: string }[],
+    context: { userName?: string; userType?: string; category?: string }
+  ): { reply: string; actions: AiActionSuggestion[] } {
+    const lastUser = [...messages]
+      .reverse()
+      .find((m) => m.role === "user" && m.content?.trim())?.content
+      .toLowerCase() ?? "";
+    const sport = context.category || "your sport";
+    const name = context.userName || "there";
+
+    let reply =
+      `Hi ${name}! I'm the NetQwix assistant. I can help you book coaches, check your schedule, or find support. What would you like to do?`;
+    const actions: AiActionSuggestion[] = [];
+
+    if (/book|trainer|coach|lesson|yoga|golf|tennis|find|near/.test(lastUser)) {
+      reply =
+        `You can browse coaches in Book Expert — filter by sport like ${sport}, read ratings, and book an instant or scheduled lesson. Want me to open that for you?`;
+      actions.push({ type: "open-book-lesson", label: "Book a lesson" });
+    } else if (/schedule|calendar|upcoming|session/.test(lastUser)) {
+      reply =
+        "Your upcoming sessions live under Sessions. Trainers can also open their schedule from the calendar tab.";
+      actions.push({
+        type: context.userType === "Trainer" ? "open-schedule" : "open-upcoming-sessions",
+        label: "View sessions",
+      });
+    } else if (/wallet|pay|top.?up|balance/.test(lastUser)) {
+      reply =
+        "You can top up your wallet before booking. Each trainer sets their own rate — you'll see the total before you confirm.";
+      actions.push({ type: "open-wallet-topup", label: "Open wallet" });
+    } else if (/support|help|issue|problem/.test(lastUser)) {
+      reply =
+        "Sorry you're stuck — you can chat with support in-app or report a technical issue from Settings.";
+      actions.push({ type: "open-support-chat", label: "Chat with support" });
+    } else if (/hi|hello|hey/.test(lastUser)) {
+      reply = `Hey ${name}! How can I help you on NetQwix today?`;
+    }
+
+    return { reply, actions };
+  }
+
   async chatAssistant(
     messages: { role: "user" | "assistant"; content: string }[],
     context: { userName?: string; userType?: string; category?: string; platformInfo?: string }
   ): Promise<{ reply: string; actions: AiActionSuggestion[] }> {
+    if (!getOpenAiApiKey()) {
+      console.warn("[AI] OPENAI_API_KEY missing — using fallback chat assistant");
+      return this.chatAssistantFallback(messages, context);
+    }
+
     const systemPrompt = `You are NetQwix AI Assistant, a helpful, friendly, and concise assistant for a sports coaching platform called NetQwix.
 
 NetQwix connects trainees (learners) with expert trainers (coaches) for live video lessons in sports like Golf, Tennis, and more.
@@ -164,20 +226,25 @@ Guidelines:
     open-report-issue, open-faq
   Return [] when no action fits.`;
 
-    const resp = await client().chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
-      ],
-      temperature: 0.7,
-      max_tokens: 380,
-    });
+    try {
+      const resp = await client().chat.completions.create({
+        model: MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+        ],
+        temperature: 0.7,
+        max_tokens: 380,
+      });
 
-    const raw = resp.choices[0]?.message?.content?.trim() ||
-      "I'm sorry, I couldn't process that. Please try again.";
+      const raw = resp.choices[0]?.message?.content?.trim() ||
+        "I'm sorry, I couldn't process that. Please try again.";
 
-    return parseAssistantResponse(raw);
+      return parseAssistantResponse(raw);
+    } catch (err) {
+      console.error("[AI] OpenAI chatAssistant failed, using fallback:", err);
+      return this.chatAssistantFallback(messages, context);
+    }
   }
 
   // ─── Lesson Summarization ────────────────────────────────
