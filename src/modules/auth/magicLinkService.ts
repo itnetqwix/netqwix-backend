@@ -81,7 +81,13 @@ export class MagicLinkService {
      * account is deleted/disabled, we silently skip the email — but the
      * client gets the same body so it can't probe for existing emails.
      */
-    if (userDoc && !userDoc.deleted_at && userDoc.status !== "rejected") {
+    if (
+      userDoc &&
+      !userDoc.deleted_at &&
+      !(userDoc as any).pending_deletion_at &&
+      !(userDoc as any).hibernated_at &&
+      userDoc.status !== "rejected"
+    ) {
       try {
         const token = crypto.randomBytes(32).toString("hex");
         const code = generateCode();

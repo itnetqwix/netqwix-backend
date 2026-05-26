@@ -5,6 +5,25 @@ import { adminFinanceController } from "../wallet/adminFinanceController";
 import { opsAdminController } from "../ops/opsAdminController";
 import { trainerReviewAdminController } from "../verification/trainerReviewAdminController";
 import { mountAdminClipRoutes } from "../clips/clipsRoutes";
+import {
+  adminListTips,
+  adminCreateTip,
+  adminUpdateTip,
+  adminDeleteTip,
+  adminToggleTip,
+} from "../tips/tipsController";
+import {
+  adminListBanners,
+  adminCreateBanner,
+  adminUpdateBanner,
+  adminDeleteBanner,
+  adminToggleBanner,
+} from "../banners/bannersController";
+import {
+  adminListAccountDeletions,
+  adminRestoreAccountDeletion,
+  adminAddAccountDeletionNote,
+} from "./accountDeletionAdminController";
 
 const route: Router = Router();
 const authorizeMiddleware = new AuthorizeMiddleware();
@@ -47,6 +66,22 @@ route.post("/trainer-verifications/:userId/approve", trainerReviewAdminControlle
 route.post("/trainer-verifications/:userId/reject", trainerReviewAdminController.reject);
 
 mountAdminClipRoutes(route);
+
+route.get("/tips", adminListTips);
+route.post("/tips", adminCreateTip);
+route.patch("/tips/:id", adminUpdateTip);
+route.patch("/tips/:id/toggle", adminToggleTip);
+route.delete("/tips/:id", adminDeleteTip);
+
+route.get("/banners", adminListBanners);
+route.post("/banners", adminCreateBanner);
+route.patch("/banners/:id", adminUpdateBanner);
+route.patch("/banners/:id/toggle", adminToggleBanner);
+route.delete("/banners/:id", adminDeleteBanner);
+
+route.get("/account-deletions", adminListAccountDeletions);
+route.post("/account-deletions/:id/restore", adminRestoreAccountDeletion);
+route.post("/account-deletions/:id/notes", adminAddAccountDeletionNote);
 
 route.get("/messaging-health", async (_req, res) => {
   try {

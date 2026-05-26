@@ -207,6 +207,25 @@ const userSchema: Schema = new Schema(
      */
     deleted_at: { type: Date, default: null, index: true },
     deletion_reason: { type: String, default: null },
+    /**
+     * Self-serve, OTP-gated account deletion (Phase 2).
+     *
+     * `pending_deletion_at` is set the moment the user confirms the OTP and
+     * starts a 15-day soft-delete window during which support can restore.
+     * Login is allowed during the window (so users can cancel themselves).
+     * A nightly job hard-deletes everything whose `pending_deletion_at`
+     * is older than 15 days.
+     */
+    pending_deletion_at: { type: Date, default: null, index: true },
+    /**
+     * Account hibernation (Phase 2).
+     *
+     * When `hibernated_at` is set, the account is hidden from listings,
+     * cannot receive new bookings, and login requires a fresh email/SMS
+     * OTP wake-up. Cleared automatically once the user verifies the OTP.
+     */
+    hibernated_at: { type: Date, default: null, index: true },
+    hibernated_reason: { type: String, default: null },
     /** IANA zone (e.g. America/New_York) for availability display and scheduling context. */
     time_zone: {
       type: String,

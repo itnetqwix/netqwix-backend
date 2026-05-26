@@ -20,6 +20,14 @@ import {
   listTrustedDevices,
   revokeTrustedDevice,
 } from "./userPrivacyController";
+import {
+  requestAccountDeletion,
+  confirmAccountDeletion,
+  cancelAccountDeletion,
+  requestHibernate,
+  confirmHibernate,
+  getLifecycleState,
+} from "./accountLifecycleController";
 
 const isValidMongoMiddleware = new IsValidMongoId();
 const route: Router = Router();
@@ -160,6 +168,13 @@ route.put(
 );
 route.delete("/delete-user/:id", isValidMongoMiddleware.isValidTokenInReqParams, userC.deleteUser.bind(userC));
 route.delete("/me", userC.deleteOwnAccount.bind(userC));
+
+route.get("/me/lifecycle", getLifecycleState);
+route.post("/me/deletion/request", requestAccountDeletion);
+route.post("/me/deletion/confirm", confirmAccountDeletion);
+route.post("/me/deletion/cancel", cancelAccountDeletion);
+route.post("/me/hibernate/request", requestHibernate);
+route.post("/me/hibernate/confirm", confirmHibernate);
 route.get("/approve-expert/:id",userC.approveTrainer.bind(userC));
 
 

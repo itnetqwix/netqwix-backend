@@ -131,6 +131,20 @@ const aiService = new AIService();
       }
     });
     void refundTransferReconcileJob.start();
+
+    // Daily at 03:15 — hard-delete accounts whose 15-day soft-delete
+    // window has lapsed (Phase 2 item 15).
+    const accountDeletionPurgeJob = cron.schedule("15 3 * * *", () => {
+      try {
+        const {
+          processOverdueAccountDeletions,
+        } = require("./accountDeletionPurgeJob");
+        void processOverdueAccountDeletions();
+      } catch (err) {
+        console.log("err on account-deletion purge job:", err);
+      }
+    });
+    void accountDeletionPurgeJob.start();
   };
 
 const meetingConfirmationJob = async () => {

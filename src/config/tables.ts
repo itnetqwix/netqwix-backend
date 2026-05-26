@@ -45,4 +45,7 @@ export class Tables {
     public static readonly booking_reminder_log = "booking_reminder_log";
     public static readonly trainer_trainee_notes = "trainer_trainee_notes";
     public static readonly scheduled_chat_messages = "scheduled_chat_messages";
+    public static readonly tip = "tip";
+    public static readonly home_banner = "home_banner";
+    public static readonly account_deletion_request = "account_deletion_request";
 }

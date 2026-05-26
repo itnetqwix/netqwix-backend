@@ -16,6 +16,7 @@ import {
   authSignupOtpLimiter,
 } from "../../middleware/rateLimit.middleware";
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
+import { startWakeUp, confirmWakeUp } from "./wakeUpController";
 
 const route: Router = Router();
 const authC = new authController();
@@ -38,6 +39,9 @@ route.post("/magic-link/request", authLoginLimiter, authC.requestMagicLink);
 route.post("/magic-link/verify", authLoginLimiter, authC.verifyMagicLink);
 route.post("/refresh", authC.refreshToken);
 route.post("/logout", authC.logout);
+
+route.post("/wake-up/start", authLoginLimiter, startWakeUp);
+route.post("/wake-up/confirm", authLoginLimiter, confirmWakeUp);
 
 route.post("/sessions/register", (req, res, next) => {
   req["byPassRoute"] = [];
