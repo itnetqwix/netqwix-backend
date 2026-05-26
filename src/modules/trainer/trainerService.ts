@@ -297,6 +297,94 @@ export class TrainerService {
     }
   }
 
+  /**
+   * Aggregate the signed-in trainer's own rating data from booked sessions.
+   *
+   * Ratings are persisted directly on each booked session
+   * (`booked_sessions.ratings.trainee.sessionRating`) — the trainee writes
+   * this when they leave feedback. The dashboard "rating pulse" tile and
+   * the trainer's own profile both need an aggregate view, so we mirror the
+   * same `$lookup`/`$avg` pipeline already used in `traineeService` but
+   * scoped to a single trainer id.
+   *
+   * Returns `{ avgRating, reviewCount, reviews[] }`, where `reviews` is the
+   * most-recent first list of trainee comments (capped at 20 to keep the
+   * payload small for the dashboard widget).
+   */
+  public async getMyStats(authUser): Promise<ResponseBuilder> {
+    try {
+      const trainerId = authUser?._id
+        ? new mongoose.Types.ObjectId(String(authUser._id))
+        : null;
+      if (!trainerId) {
+        return ResponseBuilder.errorMessage("Unauthorized");
+      }
+      const reviewsPipeline: PipelineStage[] = [
+        { $match: { trainer_id: trainerId } },
+        {
+          $match: {
+            "ratings.trainee.sessionRating": { $exists: true, $ne: null },
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "trainee_id",
+            foreignField: "_id",
+            as: "trainee_info",
+            pipeline: [
+              { $project: { fullname: 1, profile_picture: 1 } },
+            ],
+          },
+        },
+        { $sort: { updatedAt: -1 } },
+        { $limit: 20 },
+        {
+          $project: {
+            _id: 1,
+            updatedAt: 1,
+            status: 1,
+            ratings: 1,
+            trainee_fullname: { $arrayElemAt: ["$trainee_info.fullname", 0] },
+            trainee_picture: {
+              $arrayElemAt: ["$trainee_info.profile_picture", 0],
+            },
+          },
+        },
+      ];
+      const reviews = await booked_session.aggregate(reviewsPipeline);
+
+      const aggPipeline: PipelineStage[] = [
+        {
+          $match: {
+            trainer_id: trainerId,
+            "ratings.trainee.sessionRating": { $exists: true, $ne: null },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            avgRating: { $avg: "$ratings.trainee.sessionRating" },
+            reviewCount: { $sum: 1 },
+          },
+        },
+      ];
+      const [agg] = await booked_session.aggregate(aggPipeline);
+
+      return ResponseBuilder.data(
+        {
+          avgRating: agg?.avgRating ?? null,
+          reviewCount: agg?.reviewCount ?? 0,
+          reviews,
+        },
+        l10n.t("DONE") || "ok"
+      );
+    } catch (error) {
+      console.error("Error fetching trainer stats:", error);
+      return ResponseBuilder.errorMessage("Internal server error");
+    }
+  }
+
   public async updateProfile(reqBody, authUser): Promise<ResponseBuilder> {
     
     try {

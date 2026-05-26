@@ -1507,7 +1507,38 @@ export class UserService {
       const list = await ReferredUser.find({ referrerId: new mongoose.Types.ObjectId(userId) })
         .sort({ createdAt: -1 })
         .lean();
-      return ResponseBuilder.data(list ?? [], "Fetched successfully");
+
+      // Enrich each row with `joined` + `joinedAt` so the mobile invite-tracker
+      // can bucket invitees into Pending vs Joined without a second round trip.
+      // We use a single bulk lookup on `users.email` instead of an N+1 query.
+      const emails = (list ?? [])
+        .map((r) => (typeof r?.email === "string" ? r.email.trim().toLowerCase() : ""))
+        .filter(Boolean);
+      let joinedByEmail = new Map<string, { _id: any; createdAt?: Date }>();
+      if (emails.length > 0) {
+        const usersWithEmail = await user
+          .find({ email: { $in: emails } }, { email: 1, createdAt: 1 })
+          .lean();
+        joinedByEmail = new Map(
+          usersWithEmail.map((u: any) => [
+            String(u.email).toLowerCase(),
+            { _id: u._id, createdAt: u.createdAt },
+          ])
+        );
+      }
+
+      const enriched = (list ?? []).map((r) => {
+        const email = typeof r?.email === "string" ? r.email.trim().toLowerCase() : "";
+        const match = email ? joinedByEmail.get(email) : null;
+        return {
+          ...r,
+          joined: !!match,
+          joinedAt: match?.createdAt ?? null,
+          joinedUserId: match?._id ?? null,
+        };
+      });
+
+      return ResponseBuilder.data(enriched, "Fetched successfully");
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
     }

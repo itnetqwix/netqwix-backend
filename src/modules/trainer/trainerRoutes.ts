@@ -62,6 +62,11 @@ route.get("/get-trainers", trainerC.getTrainers);
 
 route.get("/get-recent-trainees", trainerC.recentTrainees);
 
+// Signed-in trainer's own rating + recent reviews aggregate, for the
+// dashboard rating-pulse widget. Falls back to {} when the trainer has
+// no completed reviews yet.
+route.get("/my-stats", trainerMiddleware.isTrainer, trainerC.getMyStats);
+
 route.post("/get-trainee-clips", trainerC.traineeClips);
 
 // update profile
