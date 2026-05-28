@@ -83,9 +83,26 @@ export class TopUpService {
       },
     };
 
-    const pi = await stripe.paymentIntents.create(stripeConfig, {
-      idempotencyKey: idempotencyKey.slice(0, 255),
-    });
+    let pi: any;
+    try {
+      pi = await stripe.paymentIntents.create(stripeConfig, {
+        idempotencyKey: idempotencyKey.slice(0, 255),
+      });
+    } catch (err: any) {
+      const rawMessage = String(err?.raw?.message ?? err?.message ?? "");
+      const lowered = rawMessage.toLowerCase();
+      if (
+        lowered.includes("api key provided") &&
+        lowered.includes("ip address") &&
+        (lowered.includes("doesn't allow") || lowered.includes("not allowed"))
+      ) {
+        return ResponseBuilder.badRequest(
+          "Payment gateway key is restricted by IP. Please update Stripe key restrictions (allow backend egress IP) and ensure mobile uses a publishable key.",
+          502
+        );
+      }
+      throw err;
+    }
     await wallet_topups.findByIdAndUpdate(topup._id, {
       stripe_payment_intent_id: pi.id,
     });
