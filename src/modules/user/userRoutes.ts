@@ -43,6 +43,7 @@ route.use([
     req.byPassRoute = [
       '/sign-up',
       '/stripe-account-verification',
+      '/write-us',
     ];
     
     if (req.byPassRoute.includes(req.path)) {
