@@ -406,10 +406,69 @@ Only return the JSON object, no other text.`;
   }
 
   // ─── Review & Feedback Analysis ──────────────────────────
+  reviewAnalysisFallback(
+    reviews: { sessionRating: number; recommendRating?: number; title?: string; remarks?: string }[]
+  ): { overallSentiment: string; strengths: string[]; improvements: string[]; summary: string } {
+    const ratings = reviews
+      .map((r) => Number(r.sessionRating))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const avg = ratings.length
+      ? ratings.reduce((a, b) => a + b, 0) / ratings.length
+      : 0;
+    const overallSentiment =
+      avg >= 4.2 ? "positive" : avg >= 3.2 ? "mixed" : ratings.length ? "negative" : "mixed";
+
+    const high = reviews.filter((r) => Number(r.sessionRating) >= 4);
+    const low = reviews.filter(
+      (r) => Number(r.sessionRating) > 0 && Number(r.sessionRating) < 3.5
+    );
+
+    const snippet = (r: (typeof reviews)[0]) =>
+      (r.remarks || r.title || "").trim() ||
+      `Trainees rated sessions around ${r.sessionRating}/5.`;
+
+    const strengths = high
+      .slice(0, 3)
+      .map(snippet)
+      .filter((s) => s.length > 0);
+    const improvements = low
+      .slice(0, 3)
+      .map((r) => `Address feedback: ${snippet(r)}`)
+      .filter((s) => s.length > 0);
+
+    if (!strengths.length && avg >= 3.5) {
+      strengths.push("Trainees are rating your sessions positively overall.");
+    }
+    if (!improvements.length && avg < 4 && ratings.length) {
+      improvements.push("Ask trainees for written feedback after each session.");
+    }
+
+    const summary =
+      ratings.length >= 2
+        ? `Based on ${ratings.length} rated sessions, your average is ${avg.toFixed(1)}/5. ${
+            overallSentiment === "positive"
+              ? "Keep doing what works and highlight your strengths in your profile."
+              : overallSentiment === "negative"
+                ? "Focus on the improvement themes below in your next lessons."
+                : "There is a mix of feedback — lean into your strengths while addressing weaker areas."
+          }`
+        : "Complete more rated sessions to unlock deeper AI insights.";
+
+    return {
+      overallSentiment,
+      strengths: strengths.length ? strengths : ["Solid session completion rate"],
+      improvements: improvements.length
+        ? improvements
+        : ["Encourage trainees to leave detailed written reviews"],
+      summary,
+    };
+  }
+
   async analyzeReviews(
-    reviews: { sessionRating: number; recommendRating: number; title?: string; remarks?: string }[]
+    reviews: { sessionRating: number; recommendRating?: number; title?: string; remarks?: string }[]
   ): Promise<{ overallSentiment: string; strengths: string[]; improvements: string[]; summary: string }> {
-    const prompt = `You are a review analyst for a sports coaching platform. Analyze these session reviews and provide actionable insights for the trainer.
+    try {
+      const prompt = `You are a review analyst for a sports coaching platform. Analyze these session reviews and provide actionable insights for the trainer.
 
 Reviews:
 ${JSON.stringify(reviews.slice(0, 30), null, 2)}
@@ -423,24 +482,27 @@ Return a JSON object:
 }
 Only return the JSON object, no other text.`;
 
-    const resp = await client().chat.completions.create({
-      model: MODEL,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.3,
-      max_tokens: 400,
-    });
+      const resp = await client().chat.completions.create({
+        model: MODEL,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.3,
+        max_tokens: 400,
+      });
 
-    try {
       const text = resp.choices[0]?.message?.content?.trim() || "{}";
       const cleaned = text.replace(/```json\n?/g, "").replace(/```/g, "").trim();
-      return JSON.parse(cleaned);
-    } catch {
+      const parsed = JSON.parse(cleaned);
       return {
-        overallSentiment: "mixed",
-        strengths: ["Consistent availability"],
-        improvements: ["Gather more detailed feedback"],
-        summary: "Not enough review data to provide a detailed analysis.",
+        overallSentiment: String(parsed.overallSentiment || "mixed"),
+        strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],
+        improvements: Array.isArray(parsed.improvements)
+          ? parsed.improvements.map(String)
+          : [],
+        summary: String(parsed.summary || ""),
       };
+    } catch (err) {
+      console.warn("[AI] analyzeReviews fallback:", (err as Error)?.message || err);
+      return this.reviewAnalysisFallback(reviews);
     }
   }
 

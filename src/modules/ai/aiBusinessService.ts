@@ -296,7 +296,8 @@ export class AIBusinessService {
   // ─── 8. Review Analysis ─────────────────────────────────
   async getReviewAnalysis(authUser: any): Promise<ResponseBuilder> {
     try {
-      if (authUser.account_type !== "Trainer") {
+      const accountType = String(authUser?.account_type ?? "").toLowerCase();
+      if (accountType !== "trainer") {
         return ResponseBuilder.badRequest("Only trainers can view review analysis.");
       }
 
@@ -307,7 +308,13 @@ export class AIBusinessService {
 
       const reviews = sessions
         .map((s: any) => s.ratings?.trainee)
-        .filter((r: any) => r && (r.sessionRating || r.title || r.remarksInfo));
+        .filter((r: any) => r && (r.sessionRating || r.title || r.remarksInfo))
+        .map((r: any) => ({
+          sessionRating: Number(r.sessionRating) || 0,
+          recommendRating: Number(r.recommendRating) || 0,
+          title: r.title ? String(r.title) : undefined,
+          remarks: (r.remarks || r.remarksInfo || "").trim() || undefined,
+        }));
 
       if (reviews.length < 2) {
         const data: any = {
@@ -325,7 +332,16 @@ export class AIBusinessService {
       return ResponseBuilder.data(data, "Review analysis complete.");
     } catch (err) {
       console.error("[AI] reviewAnalysis error:", err);
-      return ResponseBuilder.errorMessage("Failed to analyze reviews.");
+      const data: any = {
+        overallSentiment: "mixed",
+        strengths: ["You're collecting trainee feedback"],
+        improvements: ["Complete a few more rated sessions for richer insights"],
+        summary:
+          "We could not reach the AI service right now, but you can still read individual reviews on your dashboard.",
+        reviewCount: 0,
+        degraded: true,
+      };
+      return ResponseBuilder.data(data, "Review analysis (offline summary).");
     }
   }
 
