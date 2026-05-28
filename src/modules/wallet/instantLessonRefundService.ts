@@ -86,6 +86,23 @@ export async function refundSessionEscrow(
 
     if (booking.trainee_id) {
       try {
+        const latest = await booked_session
+          .findById(sessionId)
+          .select("refund_transfer.amount_minor")
+          .lean();
+        const transferMinor = Number((latest as any)?.refund_transfer?.amount_minor);
+        const fallbackMinor =
+          typeof (hold as any)?.gross_minor === "number"
+            ? Number((hold as any).gross_minor)
+            : 0;
+        const processedRefundMinor =
+          Number.isFinite(transferMinor) && transferMinor > 0
+            ? transferMinor
+            : fallbackMinor;
+        if (processedRefundMinor <= 0) {
+          return { refunded: true };
+        }
+
         const {
           notifySessionUser,
           INSTANT_NOTIFICATION,
