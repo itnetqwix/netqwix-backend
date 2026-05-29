@@ -34,6 +34,29 @@ export class ReportService {
     );
 
     if (report) {
+      const traineeId = data?.trainee ? String(data.trainee) : "";
+      const trainerId = data?.trainer ? String(data.trainer) : "";
+      const sessionId = data?.sessions ? String(data.sessions) : "";
+      const title = data?.title ? String(data.title).trim() : "Session game plan";
+      if (traineeId && mongoose.isValidObjectId(traineeId)) {
+        try {
+          const { NotificationsService } = require("../notifications/notificationsService");
+          const push = new NotificationsService();
+          void push.sendPushNotification(
+            traineeId,
+            "New session plan",
+            `${title} is ready in your locker.`,
+            {
+              category: "game_plan",
+              sessionId,
+              trainerId,
+              kind: "game_plan_saved",
+            }
+          );
+        } catch (notifyErr) {
+          console.warn("[createReport] trainee push skipped", notifyErr);
+        }
+      }
       return ResponseBuilder.data(report, l10n.t("REPORT_GENERATED"));
     } else {
       return ResponseBuilder.errorMessage(l10n.t("ERR_INTERNAL_SERVER"));
