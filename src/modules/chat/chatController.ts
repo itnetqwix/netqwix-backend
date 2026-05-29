@@ -49,7 +49,7 @@ export class ChatController {
 
   public sendMessage = async (req: Request, res: Response) => {
     try {
-      const { receiverId, content, type, mediaUrl, conversationId, replyToMessageId } =
+      const { receiverId, content, type, mediaUrl, conversationId, replyToMessageId, clientMessageId } =
         req.body;
       if (!receiverId && !conversationId) {
         return res.status(400).send({ status: CONSTANCE.FAIL, error: "receiverId or conversationId is required" });
@@ -65,7 +65,8 @@ export class ChatController {
         type || "text",
         mediaUrl,
         conversationId,
-        replyToMessageId ?? null
+        replyToMessageId ?? null,
+        { clientMessageId: clientMessageId ?? null }
       );
       return res
         .status(result.code)

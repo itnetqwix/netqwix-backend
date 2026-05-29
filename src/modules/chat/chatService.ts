@@ -147,9 +147,22 @@ export class ChatService {
     mediaUrl: string | null = null,
     conversationId: string | null = null,
     replyToMessageId: string | null = null,
-    extras: { forwardedFromMessageId?: string | null } = {}
+    extras: { forwardedFromMessageId?: string | null; clientMessageId?: string | null } = {}
   ): Promise<ResponseBuilder> {
     try {
+      if (extras.clientMessageId) {
+        const dup = await ChatMessage.findOne({
+          clientMessageId: extras.clientMessageId,
+          senderId,
+        }).lean();
+        if (dup) {
+          const rb = new ResponseBuilder();
+          rb.code = 200;
+          rb.result = { message: dup, conversationId: dup.conversationId, idempotent: true };
+          return rb;
+        }
+      }
+
       let conversation: any = null;
       if (conversationId) {
         conversation = await ChatConversation.findOne({
@@ -210,6 +223,7 @@ export class ChatService {
         mediaUrl,
         replyToMessageId: replyToMessageId || null,
         forwardedFromMessageId: extras.forwardedFromMessageId || null,
+        clientMessageId: extras.clientMessageId || null,
         expiresAt,
       });
 
@@ -245,6 +259,14 @@ export class ChatService {
             conversationId: convId,
           });
         }
+      }
+
+      const ioMsg = getIo();
+      if (ioMsg) {
+        ioMsg.to(`chat:${convId}`).emit(EVENTS.CHAT.MESSAGE, {
+          ...msgPayload,
+          conversationId: convId,
+        });
       }
 
       const rb = new ResponseBuilder();

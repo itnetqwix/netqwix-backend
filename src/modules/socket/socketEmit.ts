@@ -50,6 +50,19 @@ export function emitToUsers(
   }
 }
 
+/** Notify devices that an auth session was revoked (multi-device policy). */
+export function emitAuthSessionRevoked(
+  userId: string,
+  sessionIds: string[],
+  reason: "revoked" | "revoked_all" | "revoked_others" = "revoked"
+): void {
+  emitToUser(userId, "AUTH_SESSION_REVOKED", {
+    sessionIds,
+    reason,
+    timestamp: Date.now(),
+  });
+}
+
 export function emitToSession(
   sessionId: string,
   event: string,

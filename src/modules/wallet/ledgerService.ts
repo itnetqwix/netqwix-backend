@@ -89,9 +89,8 @@ export class LedgerService {
 
   /** Double-entry posting; legs must balance (sum credits === sum debits). */
   async post(request: PostingRequest): Promise<{ entryIds: string[]; idempotent: boolean }> {
-    const existing = await wallet_ledger_entries
-      .findOne({ idempotency_key: request.idempotencyKey })
-      .lean();
+    const firstLegKey = `${request.idempotencyKey}:0`;
+    const existing = await wallet_ledger_entries.findOne({ idempotency_key: firstLegKey }).lean();
     if (existing) {
       const siblings = await wallet_ledger_entries
         .find({ reference_id: request.referenceId, reference_type: request.referenceType })

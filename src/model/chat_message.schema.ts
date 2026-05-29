@@ -40,6 +40,8 @@ const chatMessageSchema: Schema = new Schema(
       default: null,
     },
     editedAt: { type: Date, default: null },
+    /** Client-generated id for send dedupe / offline queue reconciliation. */
+    clientMessageId: { type: String, default: null, index: true, sparse: true },
     deletedForAll: { type: Boolean, default: false },
     /**
      * Emoji reactions. Capped at one reaction per (user, message) — the

@@ -132,6 +132,16 @@ const aiService = new AIService();
     });
     void refundTransferReconcileJob.start();
 
+    const failedRefundReconcileJob = cron.schedule("0 */6 * * *", () => {
+      try {
+        const { reconcileFailedRefundTransfers } = require("../modules/wallet/escrowReconcileService");
+        void reconcileFailedRefundTransfers();
+      } catch (err) {
+        console.log("err on failed refund reconcile job:", err);
+      }
+    });
+    void failedRefundReconcileJob.start();
+
     // Daily at 03:15 — hard-delete accounts whose 15-day soft-delete
     // window has lapsed (Phase 2 item 15).
     const accountDeletionPurgeJob = cron.schedule("15 3 * * *", () => {

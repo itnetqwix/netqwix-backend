@@ -105,6 +105,21 @@ export class EscrowService {
   }
 
   async createCardEscrowRecord(params: EscrowCreateParams) {
+    if (params.stripePaymentIntentId) {
+      const byPi = await escrow_holds
+        .findOne({ stripe_payment_intent_id: params.stripePaymentIntentId })
+        .lean();
+      if (byPi) return byPi;
+    }
+    if ((params.kind ?? "booking") !== "extension") {
+      const bySession = await escrow_holds.findOne({
+        session_id: params.sessionId,
+        kind: params.kind ?? "booking",
+        status: { $in: ["held", "disputed"] },
+      });
+      if (bySession) return bySession;
+    }
+
     /** Card-funded escrow: funds on platform via Stripe PI; ledger records liability in escrow_held */
     const trainer = await user.findById(params.trainerId).select("commission").lean();
     const commissionRate = Number(trainer?.commission ?? 0.15);

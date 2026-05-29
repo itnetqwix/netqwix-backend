@@ -357,6 +357,24 @@ export class SessionExtensionService {
           );
         }
         approvedAmount = Number(reqDoc.amount);
+        if (reqDoc.payment_intent_id) {
+          try {
+            const existing = await stripe.paymentIntents.retrieve(reqDoc.payment_intent_id);
+            if (existing?.client_secret) {
+              return ResponseBuilder.data(
+                {
+                  client_secret: existing.client_secret,
+                  id: existing.id,
+                  amount: existing.amount,
+                  idempotent: true,
+                },
+                "EXTENSION_PAYMENT_INTENT"
+              );
+            }
+          } catch {
+            /* create a fresh PI below */
+          }
+        }
       } else {
         const quoteRes = await this.getQuote(body.sessionId, body.minutes, body._userId);
         if (quoteRes.code !== 200) {
@@ -383,7 +401,7 @@ export class SessionExtensionService {
         );
       }
 
-      return this.stripeHelper.createPaymentIntent({
+      const piRes = await this.stripeHelper.createPaymentIntent({
         amount: approvedAmount,
         destination: trainer?.stripe_account_id,
         commission: trainer?.commission ?? "0",
@@ -395,6 +413,21 @@ export class SessionExtensionService {
         sessionId: body.sessionId,
         trainer_id: String(booking.trainer_id),
       });
+
+      if (body.requestId && piRes.code === 200) {
+        const piId = (piRes.result as { id?: string })?.id;
+        if (piId) {
+          await booked_session.updateOne(
+            {
+              _id: body.sessionId,
+              "extension_requests._id": new mongoose.Types.ObjectId(String(body.requestId)),
+            },
+            { $set: { "extension_requests.$.payment_intent_id": piId } }
+          );
+        }
+      }
+
+      return piRes;
     } catch (err) {
       return ResponseBuilder.error(err, "ERR_INTERNAL_SERVER");
     }
@@ -532,7 +565,9 @@ export class SessionExtensionService {
             amountDollars: extensionAmount,
             pinSessionToken: pin_session_token,
             kind: "extension",
-            idempotencyKey: `ext:wallet:${sessionId}:${minutes}:${_userId}`,
+            idempotencyKey: requestId
+              ? `ext:wallet:${sessionId}:${requestId}`
+              : `ext:wallet:${sessionId}:${minutes}:${_userId}`,
           });
         }
       } else if (payment_intent_id) {
@@ -669,21 +704,21 @@ export class SessionExtensionService {
         return ResponseBuilder.badRequest("Invalid extension duration.", 400);
       }
 
-      const booking = await booked_session.findById(sessionId);
-      if (!booking || String(booking.trainee_id) !== String(_userId)) {
+      const existingBooking = await booked_session.findById(sessionId);
+      if (!existingBooking || String(existingBooking.trainee_id) !== String(_userId)) {
         return ResponseBuilder.badRequest("Session not found.", 404);
       }
 
       const { getLessonTimerSnapshot } = require("../socket/socket.service");
       const timerState = getLessonTimerSnapshot(sessionId);
       const eligibility = validateExtensionEligibility(
-        booking.toObject(),
+        existingBooking.toObject(),
         minutes,
         timerState
       );
       if (!eligibility.allowed) {
         if ((eligibility as any).liveRequestId) {
-          const existing = findRequestById(booking, (eligibility as any).liveRequestId);
+          const existing = findRequestById(existingBooking, (eligibility as any).liveRequestId);
           if (existing) {
             return ResponseBuilder.data(
               {
@@ -702,7 +737,7 @@ export class SessionExtensionService {
        *  schedule conflict / availability issue up front so the trainee can
        *  pick a different duration or wait. */
       const availability = await isTrainerInWeeklyAvailabilityNow(
-        String(booking.trainer_id),
+        String(existingBooking.trainer_id),
         new Date()
       );
       if (!availability.ok) {
@@ -712,17 +747,17 @@ export class SessionExtensionService {
         );
       }
 
-      const effectiveEnd = getEffectiveEnd(booking);
+      const effectiveEnd = getEffectiveEnd(existingBooking);
       const proposedEnd = new Date(effectiveEnd.getTime() + minutes * 60 * 1000);
-      const conflictStart = booking.start_time
-        ? new Date(booking.start_time)
-        : new Date(booking.booked_date);
+      const conflictStart = existingBooking.start_time
+        ? new Date(existingBooking.start_time)
+        : new Date(existingBooking.booked_date);
       const conflictEnd = new Date(
         proposedEnd.getTime() + INSTANT_BUFFER_AFTER_SESSION_MS
       );
       const conflictMsg = await checkBothPartiesBookingConflict(
-        String(booking.trainer_id),
-        String(booking.trainee_id),
+        String(existingBooking.trainer_id),
+        String(existingBooking.trainee_id),
         conflictStart,
         conflictEnd,
         String(sessionId)
@@ -732,7 +767,7 @@ export class SessionExtensionService {
       }
 
       const trainer = await user
-        .findById(booking.trainer_id)
+        .findById(existingBooking.trainer_id)
         .select("extraInfo.hourly_rate")
         .lean();
       const hourlyRate = Number(trainer?.extraInfo?.hourly_rate ?? 0);
@@ -742,23 +777,53 @@ export class SessionExtensionService {
         Date.now() + SESSION_EXTENSION.REQUEST_AUTO_REJECT_SECONDS * 1000
       );
 
-      booking.extension_requests = [
-        ...(booking.extension_requests || []),
+      const newRequestDoc = {
+        minutes,
+        amount,
+        status: "pending",
+        requested_by: _userId,
+        requested_at: new Date(),
+        expires_at: expiresAt,
+      };
+
+      const updatedBooking = await booked_session.findOneAndUpdate(
         {
-          minutes,
-          amount,
-          status: "pending",
-          requested_by: _userId,
-          requested_at: new Date(),
-          expires_at: expiresAt,
-        } as any,
-      ];
+          _id: sessionId,
+          trainee_id: _userId,
+          $or: [
+            { extension_requests: { $exists: false } },
+            { extension_requests: { $size: 0 } },
+            {
+              extension_requests: {
+                $not: {
+                  $elemMatch: { status: { $in: ["pending", "accepted"] } },
+                },
+              },
+            },
+          ],
+        },
+        { $push: { extension_requests: newRequestDoc } },
+        { new: true }
+      );
 
-      await booking.save();
-      const newReq = (booking.extension_requests as any[])[
-        (booking.extension_requests as any[]).length - 1
-      ];
+      if (!updatedBooking) {
+        const again = await booked_session.findById(sessionId);
+        const live = (again?.extension_requests || []).find((r: any) =>
+          ["pending", "accepted"].includes(String(r.status))
+        );
+        if (live) {
+          return ResponseBuilder.data(
+            { allowed: false, reason: "Extension request already in progress.", request: asPendingSnapshot(live) },
+            "EXTENSION_REQUEST_EXISTS"
+          );
+        }
+        return ResponseBuilder.badRequest("Could not create extension request.", 409);
+      }
 
+      const newReq = (updatedBooking.extension_requests as any[])[
+        (updatedBooking.extension_requests as any[]).length - 1
+      ];
+      const booking = updatedBooking;
       const {
         pauseLessonTimer,
         setPendingExtensionRequest,
@@ -962,16 +1027,38 @@ export class SessionExtensionService {
     reason: string
   ) {
     try {
-      const booking = await booked_session.findById(sessionId);
+      const reqOid = new mongoose.Types.ObjectId(String(requestId));
+      const booking = await booked_session.findOneAndUpdate(
+        {
+          _id: sessionId,
+          extension_requests: {
+            $elemMatch: {
+              _id: reqOid,
+              status: { $in: ["pending", "accepted"] },
+            },
+          },
+        },
+        {
+          $set: {
+            "extension_requests.$[elem].status": "expired",
+            "extension_requests.$[elem].terminal_reason": reason,
+            "extension_requests.$[elem].decided_at": new Date(),
+          },
+        },
+        {
+          arrayFilters: [
+            {
+              "elem._id": reqOid,
+              "elem.status": { $in: ["pending", "accepted"] },
+            },
+          ],
+          new: true,
+        }
+      );
       if (!booking) return;
-      const reqDoc = findRequestById(booking, requestId);
-      if (!reqDoc) return;
-      if (!["pending", "accepted"].includes(reqDoc.status)) return;
 
-      reqDoc.status = "expired";
-      reqDoc.terminal_reason = reason;
-      reqDoc.decided_at = new Date();
-      await booking.save();
+      const reqDoc = findRequestById(booking, requestId);
+      if (!reqDoc || reqDoc.status !== "expired") return;
 
       const {
         resumeLessonTimer,

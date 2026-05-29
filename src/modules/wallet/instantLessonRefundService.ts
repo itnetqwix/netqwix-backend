@@ -25,9 +25,11 @@ export async function refundSessionEscrow(
       .lean();
 
     let stripeRefundId: string | null = null;
+    let stripeRefundOk = false;
 
     if (hold && WALLET_CONFIG.escrowEnabled) {
       await releaseService.refundHold(String(hold._id), reason);
+      stripeRefundOk = true;
     } else if (booking.payment_intent_id) {
       const stripe = require("stripe")(process.env.STRIPE_SECRET);
       try {
@@ -35,8 +37,20 @@ export async function refundSessionEscrow(
           payment_intent: booking.payment_intent_id,
         });
         stripeRefundId = stripeRefund?.id ?? null;
+        stripeRefundOk = !!stripeRefundId;
       } catch (stripeErr: any) {
         console.error("[refundSessionEscrow] Stripe refund failed", stripeErr?.message);
+        await booked_session.findByIdAndUpdate(sessionId, {
+          $set: {
+            refund_status: "failed",
+            refund_reason: reason,
+            status: BOOKED_SESSIONS_STATUS.cancel,
+            instant_phase: booking.is_instant ? "cancelled" : booking.instant_phase,
+            "refund_transfer.status": "failed",
+            "refund_transfer.failure_reason": stripeErr?.message || "Stripe refund failed",
+          },
+        });
+        return { refunded: false, error: stripeErr?.message || "Stripe refund failed" };
       }
       try {
         const { recordRefundTransfer } = require("./refundTransferService");
@@ -49,6 +63,12 @@ export async function refundSessionEscrow(
       } catch (e) {
         console.error("[refundSessionEscrow] recordRefundTransfer", e);
       }
+    } else {
+      stripeRefundOk = true;
+    }
+
+    if (!stripeRefundOk && !hold) {
+      return { refunded: false, error: "No escrow hold or payment intent to refund" };
     }
 
     await booked_session.findByIdAndUpdate(sessionId, {

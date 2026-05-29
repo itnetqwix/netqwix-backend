@@ -1063,6 +1063,11 @@ export const handleSocketEvents = (socket, connections = {}) => {
       
       let session = lessonSessionsGet(sessionId);
       if (!session) {
+        session = (await hydrateLessonSessionFromRedis(String(sessionId))) as
+          | LessonSessionState
+          | undefined;
+      }
+      if (!session) {
         // Fetch booked session to get duration
         try {
           const bookedSession = await booked_session.findById(sessionId);
@@ -1202,6 +1207,8 @@ export const handleSocketEvents = (socket, connections = {}) => {
           socket.emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
           console.log(`[TIMER] [${new Date().toISOString()}] Sent existing timer state to joining/reconnecting user for session ${sessionId}`);
         }
+
+        lessonSessionsSet(sessionId, session);
       }
     }
     
@@ -1270,22 +1277,17 @@ export const handleSocketEvents = (socket, connections = {}) => {
     if (!session) return;
 
     const roomName = `session:${sessionId}`;
+    emitLessonStateSync(socket, roomName, session);
+
     if (session.status === "running" && session.startedAt != null) {
-      // Send un-adjusted remainingSeconds; frontend computes currentRemaining = remainingSeconds - (now - startedAt)
-      const statePayload = {
-        sessionId,
-        status: "running",
+      const timerPayload = {
+        sessionId: session.sessionId,
         startedAt: session.startedAt,
         duration: session.duration,
         remainingSeconds: session.remainingSeconds,
-        trainerConnected: session.coachJoined,
-        traineeConnected: session.userJoined,
       };
-      socket.emit("LESSON_STATE_SYNC", statePayload);
-      return;
+      socket.emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
     }
-
-    emitLessonStateSync(socket, roomName, session);
   });
 
   socket.on("LESSON_TIMER_START_REQUEST", ({ sessionId }) => {
@@ -1413,8 +1415,21 @@ export const handleSocketEvents = (socket, connections = {}) => {
     relayPeerByUserId(userInfo?.to_user, EVENTS.ON_UNDO, payload);
   });
 
-  socket.on(EVENTS.VIDEO_CALL.MUTE_ME, ({ muteStatus, userInfo }) => {
-    relayPeerByUserId(userInfo?.to_user, EVENTS.VIDEO_CALL.MUTE_ME, { muteStatus });
+  socket.on(EVENTS.VIDEO_CALL.MUTE_ME, (payload) => {
+    const { muteStatus, isMuted, isClicked, userInfo } = payload ?? {};
+    const muted =
+      typeof isMuted === "boolean"
+        ? isMuted
+        : typeof muteStatus === "boolean"
+          ? muteStatus
+          : typeof isClicked === "boolean"
+            ? isClicked
+            : false;
+    relayPeerByUserId(userInfo?.to_user, EVENTS.VIDEO_CALL.MUTE_ME, {
+      muteStatus: muted,
+      isMuted: muted,
+      userInfo,
+    });
   });
 
   socket.on(EVENTS.VIDEO_CALL.STOP_FEED, ({ feedStatus, userInfo }) => {
@@ -2145,14 +2160,21 @@ const listenChatEvents = (socket) => {
       try {
         const { conversationId, readerId } = payload || {};
         if (!conversationId) return;
+        const reader = String(readerId || socket?.user?._doc?._id || "");
+        if (!reader) return;
+
+        const User = require("../../model/user.schema").default;
+        const readerDoc = await User.findById(reader).select("privacy.read_receipts_enabled").lean();
+        if (readerDoc?.privacy?.read_receipts_enabled === false) return;
+
         const now = new Date();
         await ChatMessage.updateMany(
-          { conversationId, receiverId: readerId || socket?.user?._doc?._id, isRead: false },
+          { conversationId, receiverId: reader, isRead: false },
           { isRead: true, status: "read", readAt: now }
         );
         void publishSocketEventToChat(conversationId, EVENTS.CHAT.READ, {
           conversationId,
-          readerId: readerId || String(socket?.user?._doc?._id),
+          readerId: reader,
           readAt: now.toISOString(),
         });
       } catch (_err) {

@@ -738,7 +738,10 @@ export class TraineeService {
 
       try {
         const { WALLET_CONFIG } = require("../../config/wallet");
-        if (WALLET_CONFIG.escrowEnabled && finalPrice > 0) {
+        const paidByWallet = payload.payment_method === "wallet";
+        const paidByCardPi = !!payload.payment_intent_id;
+        /** Wallet path already creates a hold via payFromWallet; card PI is handled by Stripe webhook. */
+        if (WALLET_CONFIG.escrowEnabled && finalPrice > 0 && !paidByWallet && !paidByCardPi) {
           const { escrowService } = require("../wallet/escrowService");
           await escrowService.createCardEscrowRecord({
             sessionId: String(bookingData._id),
@@ -746,7 +749,7 @@ export class TraineeService {
             trainerId: String(payload.trainer_id),
             grossMinor: Math.round(finalPrice * 100),
             platformFeeMinor: 0,
-            fundingSource: payload.payment_intent_id ? "card" : "wallet",
+            fundingSource: "card",
             stripePaymentIntentId: payload.payment_intent_id,
             kind: "booking",
             idempotencyKey: `book:escrow:${bookingData._id}`,
@@ -971,7 +974,9 @@ export class TraineeService {
 
       try {
         const { WALLET_CONFIG } = require("../../config/wallet");
-        if (WALLET_CONFIG.escrowEnabled && chargingPrice > 0) {
+        const paidByWallet = payload.payment_method === "wallet";
+        const paidByCardPi = !!payload.payment_intent_id;
+        if (WALLET_CONFIG.escrowEnabled && chargingPrice > 0 && !paidByWallet && !paidByCardPi) {
           const { escrowService } = require("../wallet/escrowService");
           await escrowService.createCardEscrowRecord({
             sessionId: String(bookingData._id),
@@ -979,7 +984,7 @@ export class TraineeService {
             trainerId: String(trainer_id),
             grossMinor: Math.round(chargingPrice * 100),
             platformFeeMinor: 0,
-            fundingSource: payload.payment_intent_id ? "card" : "wallet",
+            fundingSource: "card",
             stripePaymentIntentId: payload.payment_intent_id,
             kind: "booking",
             idempotencyKey: `instant:escrow:${bookingData._id}`,

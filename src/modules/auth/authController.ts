@@ -403,6 +403,12 @@ export class authController {
       if (!ok) {
         return res.status(404).json({ status: CONSTANCE.FAIL, error: "Session not found." });
       }
+      try {
+        const { emitAuthSessionRevoked } = require("../socket/socketEmit");
+        emitAuthSessionRevoked(userId, [sessionId], "revoked");
+      } catch {
+        /* optional */
+      }
       if (currentSessionId && currentSessionId === sessionId) {
         const refresh_token = String(req.body?.refresh_token ?? "").trim();
         if (refresh_token) await refreshTokenService.revokeRefreshToken(refresh_token);
@@ -421,7 +427,17 @@ export class authController {
     try {
       const userId = String(req["authUser"]?._id ?? "");
       const keepSessionId = String(req.headers["x-nq-session-id"] || "").trim() || undefined;
+      const before = await authSessionService.listForUser(userId, keepSessionId);
       const count = await authSessionService.revokeAllExcept(userId, keepSessionId);
+      if (count > 0) {
+        try {
+          const { emitAuthSessionRevoked } = require("../socket/socketEmit");
+          const revokedIds = before.filter((s) => !s.isCurrent).map((s) => s.id);
+          if (revokedIds.length) emitAuthSessionRevoked(userId, revokedIds, "revoked_others");
+        } catch {
+          /* optional */
+        }
+      }
       return res.status(200).json({ status: CONSTANCE.SUCCESS, data: { revokedCount: count } });
     } catch (error) {
       this.logger.error(error);
