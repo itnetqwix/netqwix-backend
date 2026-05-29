@@ -478,8 +478,9 @@ export class SessionExtensionService {
     }
   ) {
     try {
-      const { sessionId, minutes, requestId, payment_intent_id, payment_method, pin_session_token, _userId } =
+      const { sessionId, minutes, requestId, payment_method, pin_session_token, _userId } =
         body;
+      let payment_intent_id = body.payment_intent_id as string | undefined;
       const booking = await booked_session.findById(sessionId);
       if (!booking || String(booking.trainee_id) !== String(_userId)) {
         return ResponseBuilder.badRequest("Session not found.", 404);

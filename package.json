@@ -9,7 +9,7 @@
     "tsc": "tsc",
     "lint": "tslint -c tslint.json 'src/**/*.ts'",
     "start": "npx tsc -w & nodemon --inspect dist/src/index.js",
-    "build": "tsc  --alwaysStrict && mkdir -p dist/src/templates && cp -R src/templates/* dist/src/templates",
+    "build": "tsc -p tsconfig.build.json --alwaysStrict && mkdir -p dist/src/templates && cp -R src/templates/* dist/src/templates",
     "dev": "ts-node-dev --respawn --transpile-only ./src/index.ts",
     "prod": "node ./dist/src/index.js"
   },
