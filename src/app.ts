@@ -10,6 +10,7 @@ const { ExpressPeerServer } = require("peer");
 
 import * as bodyParser from "body-parser";
 import "./config/loadEnv";
+import { CORS_ALLOWED_HEADERS } from "./config/corsAllowedHeaders";
 import { resolveCorsOrigins, type ResolvedCorsOrigin } from "./config/corsOrigins";
 
 function formatCorsOriginsForLog(origin: ResolvedCorsOrigin): string {
@@ -68,17 +69,7 @@ export class App {
       origin: corsOrigin,
       credentials: true,
       methods: ["GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"],
-      allowedHeaders: [
-        "Content-Type",
-        "Authorization",
-        "X-Requested-With",
-        "Origin",
-        "Accept",
-        "Access-Control-Allow-Origin",
-        "X-Session-Id",
-        "Idempotency-Key",
-        "X-Idempotency-Key",
-      ],
+      allowedHeaders: [...CORS_ALLOWED_HEADERS],
     };
     this.app.use(cors(corsOptions));
     this.app.options("*", cors(corsOptions));
