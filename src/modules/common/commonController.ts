@@ -195,6 +195,39 @@ export class commonController {
     }
   };
 
+  public abortChatMediaUpload = async (req: Request, res: Response) => {
+    try {
+      return await this.commonService.abortChatMediaUpload(req, res);
+    } catch (error) {
+      this.logger.error(error);
+      const statusCode = error.code ? error.code : CONSTANCE.RES_CODE.error.internalServerError;
+      const errorMessage = error.message || "Internal Server Error";
+      return res.status(statusCode).json({ status: "error", message: errorMessage });
+    }
+  };
+
+  public getLessonCallSlotStatus = async (req: Request, res: Response) => {
+    try {
+      return await this.commonService.getLessonCallSlotStatus(req, res);
+    } catch (error) {
+      this.logger.error(error);
+      const statusCode = error.code ? error.code : CONSTANCE.RES_CODE.error.internalServerError;
+      const errorMessage = error.message || "Internal Server Error";
+      return res.status(statusCode).json({ status: "error", message: errorMessage });
+    }
+  };
+
+  public takeoverLessonCallSlot = async (req: Request, res: Response) => {
+    try {
+      return await this.commonService.takeoverLessonCallSlot(req, res);
+    } catch (error) {
+      this.logger.error(error);
+      const statusCode = error.code ? error.code : CONSTANCE.RES_CODE.error.internalServerError;
+      const errorMessage = error.message || "Internal Server Error";
+      return res.status(statusCode).json({ status: "error", message: errorMessage });
+    }
+  };
+
   public addExtendedSessionEndTime = async (req: Request, res: Response) => {
     try {
         const { sessionId, extendedEndTime,extended_session_end_time } = req.body;

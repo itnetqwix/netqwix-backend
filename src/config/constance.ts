@@ -105,6 +105,12 @@ export class EVENTS {
     ON_CALL_JOIN: "ON_CALL_JOIN",  
     ON_BOTH_JOIN: "ON_BOTH_JOIN",
     ON_CALL_LEAVE: "ON_CALL_LEAVE",
+    /** Emitted when the same user joins from another device/session. */
+    CALL_JOIN_DENIED: "CALL_JOIN_DENIED",
+    /** Client requests to replace the active device for this session. */
+    CALL_JOIN_TAKEOVER: "CALL_JOIN_TAKEOVER",
+    /** Previous device was displaced by CALL_JOIN_TAKEOVER. */
+    CALL_SLOT_TAKEN_OVER: "CALL_SLOT_TAKEN_OVER",
 
   };
   public static readonly PUSH_NOTIFICATIONS = {

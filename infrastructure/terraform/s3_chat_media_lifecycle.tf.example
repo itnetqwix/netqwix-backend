@@ -1,0 +1,31 @@
+# Example — copy into your Terraform stack and set aws_bucket_name.
+
+variable "aws_bucket_name" {
+  type        = string
+  description = "NetQwix S3 bucket (AWS_BUCKET_NAME)"
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "chat_media" {
+  bucket = var.aws_bucket_name
+
+  rule {
+    id     = "expire-chat-media-orphans"
+    status = "Enabled"
+
+    filter {
+      prefix = "chat-media/"
+    }
+
+    expiration {
+      days = 7
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}

@@ -115,6 +115,14 @@ export class SocketInit {
         if (userInfo?.user) {
           this.logger.info(`User Connected --> ${userInfo.user._id}`);
           socket.user = userInfo.user;
+          const headers = socket.handshake?.headers ?? {};
+          const auth = socket.handshake?.auth ?? {};
+          (socket as any).nqDeviceId =
+            String(headers["x-nq-device-id"] ?? auth.deviceId ?? "").trim() ||
+            undefined;
+          (socket as any).nqAuthSessionId =
+            String(headers["x-nq-auth-session-id"] ?? auth.authSessionId ?? "").trim() ||
+            undefined;
           return next();
         }
 

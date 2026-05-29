@@ -44,6 +44,13 @@ import {
   shouldSkipDuplicateNotify,
   INSTANT_NOTIFICATION,
 } from "../session/sessionNotificationService";
+import { bindLessonCallSlotIo } from "./lessonCallSlotIo";
+import {
+  claimLessonCallSlot,
+  releaseAllLessonCallSlotsForSession,
+  releaseLessonCallSlot,
+  takeoverLessonCallSlot,
+} from "./lessonCallSlotStore";
 import {
   bindSocketIo,
   publishSocketEventToChat,
@@ -170,6 +177,7 @@ export const getIo = () => ioInstance;
 export const setIoInstance = (io: any) => {
   ioInstance = io;
   bindSocketIo(io);
+  bindLessonCallSlotIo(() => ioInstance);
   
   // Start periodic heartbeat check to detect stale connections
   setInterval(() => {
@@ -187,9 +195,18 @@ export const setIoInstance = (io: any) => {
       socketHeartbeats.delete(socketId);
       const staleSocket = io.sockets.sockets.get(socketId);
       if (staleSocket) {
+        const staleUserId = socketAttachedUserId(staleSocket);
         // Notify peers in the same room that this socket is stale
         staleSocket.rooms.forEach((roomName) => {
           if (roomName.startsWith("session:")) {
+            const sessionId = roomName.replace("session:", "");
+            if (staleUserId) {
+              void releaseLessonCallSlot({
+                sessionId,
+                userId: String(staleUserId),
+                socketId,
+              });
+            }
             staleSocket.to(roomName).emit("PARTICIPANT_STALE", {
               socketId,
               timestamp: now,
@@ -223,7 +240,9 @@ type LessonSessionState = {
   remainingSeconds: number; // canonical remaining time in seconds
   status: "waiting" | "running" | "paused" | "ended";
   trainerLeftPaused?: boolean; // true when timer was auto-paused because trainer disconnected
+  /** @deprecated use warningTimeoutIds */
   warningTimeoutId?: NodeJS.Timeout | null;
+  warningTimeoutIds?: NodeJS.Timeout[];
   endTimeoutId?: NodeJS.Timeout | null;
   isInstant?: boolean;
   coachFirstJoinedAt?: number | null;
@@ -419,9 +438,43 @@ const emitLessonStateSync = (socket: any, roomName: string, session: LessonSessi
 
 const clearLessonTimeouts = (session: LessonSessionState) => {
   if (session.warningTimeoutId) clearTimeout(session.warningTimeoutId);
-  if (session.endTimeoutId) clearTimeout(session.endTimeoutId);
   session.warningTimeoutId = null;
+  if (session.warningTimeoutIds?.length) {
+    for (const t of session.warningTimeoutIds) clearTimeout(t);
+  }
+  session.warningTimeoutIds = [];
+  if (session.endTimeoutId) clearTimeout(session.endTimeoutId);
   session.endTimeoutId = null;
+};
+
+type LessonWarningKind = "five" | "two" | "one" | "thirty";
+
+const LESSON_WARNING_SCHEDULE: { kind: LessonWarningKind; atSeconds: number }[] = [
+  { kind: "five", atSeconds: 300 },
+  { kind: "two", atSeconds: 120 },
+  { kind: "one", atSeconds: 60 },
+  { kind: "thirty", atSeconds: 30 },
+];
+
+const scheduleLessonWarnings = (
+  roomName: string,
+  session: LessonSessionState
+) => {
+  session.warningTimeoutIds = [];
+  const remainingMs = Math.max(0, session.remainingSeconds) * 1000;
+  for (const entry of LESSON_WARNING_SCHEDULE) {
+    const fireIn = remainingMs - entry.atSeconds * 1000;
+    if (fireIn <= 0) continue;
+    const tid = setTimeout(() => {
+      if (session.status !== "running" && session.status !== "paused") return;
+      lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.WARNING, {
+        sessionId: session.sessionId,
+        kind: entry.kind,
+        remainingSeconds: entry.atSeconds,
+      });
+    }, fireIn);
+    session.warningTimeoutIds.push(tid);
+  }
 };
 
 export function getLessonTimerSnapshot(sessionId: string): {
@@ -651,9 +704,12 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
     };
     lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.ENDED, endedPayload);
     emitLessonStateSync(socket, roomName, session);
+    void releaseAllLessonCallSlotsForSession(session.sessionId);
     lessonSessionsDelete(session.sessionId);
     return;
   }
+
+  scheduleLessonWarnings(roomName, session);
 
   session.endTimeoutId = setTimeout(() => {
     session.remainingSeconds = 0;
@@ -665,6 +721,7 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
     };
     lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.ENDED, endedPayload);
     emitLessonStateSync(socket, roomName, session);
+    void releaseAllLessonCallSlotsForSession(session.sessionId);
     lessonSessionsDelete(session.sessionId);
   }, remainingMs);
 };
@@ -780,6 +837,11 @@ export const handleSocketEvents = (socket, connections = {}) => {
     socket.rooms.forEach((roomName) => {
       if (!roomName.startsWith("session:")) return;
       const sessionId = roomName.replace("session:", "");
+      void releaseLessonCallSlot({
+        sessionId,
+        userId: String(userId),
+        socketId,
+      });
       const session = lessonSessionsGet(sessionId);
       if (!session) return;
 
@@ -1006,7 +1068,10 @@ export const handleSocketEvents = (socket, connections = {}) => {
     // socket.broadcast.emit('offer', offer);
   });
 
-  socket.on(EVENTS.VIDEO_CALL.ON_CALL_JOIN, async ({ userInfo }) => {
+  const processOnCallJoin = async (
+    socket: any,
+    { userInfo }: { userInfo?: any }
+  ) => {
     const toUserId = MemCache.getDetail(
       process.env.SOCKET_CONFIG,
       userInfo?.to_user
@@ -1055,6 +1120,41 @@ export const handleSocketEvents = (socket, connections = {}) => {
         console.warn(`[SESSION] Denied join for user ${userId} on session ${sessionId}`);
         return;
       }
+
+      let isInstantLesson = false;
+      try {
+        const slotMeta = await booked_session
+          .findById(sessionId)
+          .select("is_instant")
+          .lean();
+        isInstantLesson = !!slotMeta?.is_instant;
+      } catch {
+        /* non-fatal */
+      }
+
+      const slot = await claimLessonCallSlot({
+        sessionId: String(sessionId),
+        userId: String(userId),
+        socketId: socket.id,
+        authSessionId: (socket as any).nqAuthSessionId,
+        deviceId: (socket as any).nqDeviceId,
+        isInstant: isInstantLesson,
+      });
+      if (slot.ok === false) {
+        const denyReason = slot.reason;
+        console.warn(
+          `[SESSION] Call slot denied for user ${userId} on session ${sessionId}: ${denyReason}`
+        );
+        socket.emit(EVENTS.VIDEO_CALL.CALL_JOIN_DENIED, {
+          sessionId: String(sessionId),
+          reason: denyReason,
+          canTakeOver: denyReason === "already_active_elsewhere",
+          message:
+            "This lesson is already active on another device. Leave the other device or use that session to continue.",
+        });
+        return;
+      }
+
       // Join the room immediately when user joins (don't wait for both parties)
       const roomName = `session:${sessionId}`;
       socket.join(roomName);
@@ -1224,6 +1324,65 @@ export const handleSocketEvents = (socket, connections = {}) => {
     } else {
       console.error("[VideoCall:ON_CALL_JOIN] 🚨 CANNOT FORWARD — missing to_user");
     }
+  };
+
+  socket.on(EVENTS.VIDEO_CALL.ON_CALL_JOIN, (payload) => {
+    void processOnCallJoin(socket, payload);
+  });
+
+  socket.on(EVENTS.VIDEO_CALL.CALL_JOIN_TAKEOVER, async ({ userInfo }) => {
+    const sessionId =
+      userInfo?.sessionId || userInfo?.meetingId || userInfo?.lessonId;
+    const userId = socketAttachedUserId(socket);
+    if (!sessionId || !mongoose.isValidObjectId(sessionId) || !userId) {
+      return;
+    }
+
+    const { assertSessionParticipant } = require("../../helpers/chatBlockCheck");
+    const allowed = await assertSessionParticipant(String(sessionId), String(userId));
+    if (!allowed) {
+      return;
+    }
+
+    let isInstantLesson = false;
+    try {
+      const slotMeta = await booked_session
+        .findById(sessionId)
+        .select("is_instant")
+        .lean();
+      isInstantLesson = !!slotMeta?.is_instant;
+    } catch {
+      /* non-fatal */
+    }
+
+    const takeover = await takeoverLessonCallSlot({
+      sessionId: String(sessionId),
+      userId: String(userId),
+      socketId: socket.id,
+      authSessionId: (socket as any).nqAuthSessionId,
+      deviceId: (socket as any).nqDeviceId,
+      isInstant: isInstantLesson,
+    });
+    if (!takeover.ok) {
+      socket.emit(EVENTS.VIDEO_CALL.CALL_JOIN_DENIED, {
+        sessionId: String(sessionId),
+        reason: "takeover_failed",
+        canTakeOver: false,
+        message: "Could not take over this lesson on this device.",
+      });
+      return;
+    }
+
+    if (takeover.previousSocketId) {
+      const prev = getIo()?.sockets?.sockets?.get(takeover.previousSocketId);
+      prev?.emit(EVENTS.VIDEO_CALL.CALL_SLOT_TAKEN_OVER, {
+        sessionId: String(sessionId),
+        message:
+          "This lesson was continued on another device. You have left the call on this device.",
+      });
+    }
+
+    await processOnCallJoin(socket, { userInfo });
   });
 
   socket.on(EVENTS.VIDEO_CALL.ON_BOTH_JOIN, async (socketReq) => {
@@ -1288,6 +1447,18 @@ export const handleSocketEvents = (socket, connections = {}) => {
       };
       socket.emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
     }
+  });
+
+  /** Trainee (or reconnecting party) asks the trainer client to re-emit clip/layout state. */
+  socket.on("LESSON_MEDIA_REPLAY_REQUEST", ({ sessionId }) => {
+    if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
+    const requesterId = socketAttachedUserId(socket);
+    if (!requesterId) return;
+    const roomName = `session:${sessionId}`;
+    lessonRoomEmit(roomName, "LESSON_MEDIA_REPLAY_REQUEST", {
+      sessionId: String(sessionId),
+      requesterId,
+    });
   });
 
   socket.on("LESSON_TIMER_START_REQUEST", ({ sessionId }) => {

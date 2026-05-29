@@ -248,4 +248,26 @@ export class TopUpService {
   }
 }
 
+/** Heal top-ups stuck in `pending` when the app died before client confirm. */
+export async function reconcilePendingTopUps(maxAgeMinutes = 30) {
+  const cutoff = new Date(Date.now() - maxAgeMinutes * 60_000);
+  const pending = await wallet_topups
+    .find({ status: "pending", createdAt: { $lt: cutoff }, stripe_payment_intent_id: { $ne: null } })
+    .limit(40)
+    .lean();
+  const svc = new TopUpService();
+  for (const row of pending) {
+    try {
+      const pi = await stripe.paymentIntents.retrieve(String(row.stripe_payment_intent_id));
+      if (pi.status === "succeeded") {
+        await svc.completeTopUpFromWebhook(String(row.stripe_payment_intent_id), `reconcile:${row._id}`);
+      } else if (pi.status === "canceled" || pi.status === "requires_payment_method") {
+        await wallet_topups.updateOne({ _id: row._id }, { $set: { status: "failed" } });
+      }
+    } catch (err) {
+      console.warn("[topUp] reconcile pending failed", row._id, err);
+    }
+  }
+}
+
 export const topUpService = new TopUpService();

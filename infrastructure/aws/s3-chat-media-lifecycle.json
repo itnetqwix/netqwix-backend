@@ -1,0 +1,20 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-unreferenced-chat-media",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "chat-media/"
+      },
+      "Expiration": {
+        "Days": 7
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 1
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    }
+  ]
+}

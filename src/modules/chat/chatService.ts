@@ -214,18 +214,48 @@ export class ChatService {
       const ttlMinutes = Number(conversation.disappearingTtlMinutes || 0);
       const expiresAt = ttlMinutes > 0 ? new Date(Date.now() + ttlMinutes * 60_000) : null;
 
-      const message = await ChatMessage.create({
-        conversationId: conversation._id,
-        senderId,
-        receiverId: finalReceiverId,
-        content,
-        type,
-        mediaUrl,
-        replyToMessageId: replyToMessageId || null,
-        forwardedFromMessageId: extras.forwardedFromMessageId || null,
-        clientMessageId: extras.clientMessageId || null,
-        expiresAt,
-      });
+      let message: any;
+      try {
+        message = await ChatMessage.create({
+          conversationId: conversation._id,
+          senderId,
+          receiverId: finalReceiverId,
+          content,
+          type,
+          mediaUrl,
+          replyToMessageId: replyToMessageId || null,
+          forwardedFromMessageId: extras.forwardedFromMessageId || null,
+          clientMessageId: extras.clientMessageId || null,
+          expiresAt,
+        });
+      } catch (createErr: any) {
+        if (createErr?.code === 11000 && extras.clientMessageId) {
+          const dup = await ChatMessage.findOne({
+            clientMessageId: extras.clientMessageId,
+            senderId,
+          }).lean();
+          if (dup) {
+            const rb = new ResponseBuilder();
+            rb.code = 200;
+            rb.result = {
+              message: dup,
+              conversationId: dup.conversationId,
+              idempotent: true,
+            };
+            return rb;
+          }
+        }
+        throw createErr;
+      }
+
+      if (mediaUrl) {
+        const {
+          chatMediaKeyFromUrl,
+          clearPendingChatMedia,
+        } = require("../common/chatMediaPendingStore");
+        const mediaKey = chatMediaKeyFromUrl(mediaUrl);
+        if (mediaKey) void clearPendingChatMedia(mediaKey);
+      }
 
       if (!isGroup && type === "text" && content && finalReceiverId) {
         checkChatPolicy(senderId, finalReceiverId, content, String(conversation._id), String(message._id)).catch(() => {});

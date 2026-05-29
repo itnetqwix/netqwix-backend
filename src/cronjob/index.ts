@@ -142,6 +142,36 @@ const aiService = new AIService();
     });
     void failedRefundReconcileJob.start();
 
+    const pendingTopUpJob = cron.schedule("*/15 * * * *", () => {
+      try {
+        const { reconcilePendingTopUps } = require("../modules/wallet/topUpService");
+        void reconcilePendingTopUps();
+      } catch (err) {
+        console.log("err on pending top-up reconcile job:", err);
+      }
+    });
+    void pendingTopUpJob.start();
+
+    const extensionReconcileJob = cron.schedule("*/5 * * * *", () => {
+      try {
+        const { runExtensionReconcileJob } = require("./extensionReconcileJob");
+        void runExtensionReconcileJob();
+      } catch (err) {
+        console.log("err on extension reconcile job:", err);
+      }
+    });
+    void extensionReconcileJob.start();
+
+    const chatMediaSweepJob = cron.schedule("0 */6 * * *", () => {
+      try {
+        const { runChatMediaSweepJob } = require("./chatMediaSweepJob");
+        void runChatMediaSweepJob();
+      } catch (err) {
+        console.log("err on chat media sweep job:", err);
+      }
+    });
+    void chatMediaSweepJob.start();
+
     // Daily at 03:15 — hard-delete accounts whose 15-day soft-delete
     // window has lapsed (Phase 2 item 15).
     const accountDeletionPurgeJob = cron.schedule("15 3 * * *", () => {

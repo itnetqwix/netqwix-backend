@@ -447,7 +447,9 @@ export class SessionExtensionService {
     const idemKey =
       body.payment_intent_id && body.sessionId
         ? `extension-confirm:${body.sessionId}:${body.payment_intent_id}`
-        : null;
+        : body.payment_method === "wallet" && body.requestId && body.sessionId
+          ? `extension-confirm:wallet:${body.sessionId}:${body.requestId}`
+          : null;
     if (idemKey) {
       try {
         return await withIdempotency(idemKey, () => this.confirmExtensionCore(body));
@@ -509,13 +511,28 @@ export class SessionExtensionService {
         if (String(approvedRequest.requested_by) !== String(_userId)) {
           return ResponseBuilder.badRequest("Extension request not found.", 404);
         }
-        if (approvedRequest.status !== "accepted") {
+        const paidButUnapplied =
+          approvedRequest.status === "paid" &&
+          (approvedRequest.extension_index == null ||
+            booking.extensions?.[approvedRequest.extension_index]?.status !==
+              "applied");
+        if (approvedRequest.status === "paid" && !paidButUnapplied) {
+          return ResponseBuilder.data(
+            { booking, idempotent: true },
+            "EXTENSION_APPLIED"
+          );
+        }
+        if (approvedRequest.status !== "accepted" && !paidButUnapplied) {
           return ResponseBuilder.badRequest(
             `Extension request is ${approvedRequest.status}; cannot confirm.`,
             400
           );
         }
-        if (approvedRequest.expires_at && new Date(approvedRequest.expires_at) < new Date()) {
+        if (
+          !paidButUnapplied &&
+          approvedRequest.expires_at &&
+          new Date(approvedRequest.expires_at) < new Date()
+        ) {
           return ResponseBuilder.badRequest(
             "Extension request expired before payment completed.",
             400
@@ -547,46 +564,12 @@ export class SessionExtensionService {
         return ResponseBuilder.badRequest("Invalid extension duration.", 400);
       }
 
-      let extensionAmount = 0;
-
-      if (payment_method === "wallet") {
-        const { walletPaymentService } = require("../wallet/walletPaymentService");
-        const trainer = await user
-          .findById(booking.trainer_id)
-          .select("extraInfo.hourly_rate")
-          .lean();
-        const hourlyRate = Number(trainer?.extraInfo?.hourly_rate ?? 0);
-        extensionAmount = Number(((hourlyRate / 60) * minutes).toFixed(2));
-        if (extensionAmount > 0) {
-          await walletPaymentService.payFromWallet({
-            traineeId: _userId,
-            sessionId,
-            trainerId: String(booking.trainer_id),
-            amountDollars: extensionAmount,
-            pinSessionToken: pin_session_token,
-            kind: "extension",
-            idempotencyKey: requestId
-              ? `ext:wallet:${sessionId}:${requestId}`
-              : `ext:wallet:${sessionId}:${minutes}:${_userId}`,
-          });
-        }
-      } else if (payment_intent_id) {
-        const intent = await stripe.paymentIntents.retrieve(payment_intent_id);
-        if (intent.status !== "succeeded") {
-          return ResponseBuilder.badRequest("Payment has not completed.", 400);
-        }
-        extensionAmount = Number((intent.amount / 100).toFixed(2));
-      } else {
-        const trainer = await user
-          .findById(booking.trainer_id)
-          .select("extraInfo.hourly_rate")
-          .lean();
-        const hourlyRate = Number(trainer?.extraInfo?.hourly_rate ?? 0);
-        extensionAmount = Number(((hourlyRate / 60) * minutes).toFixed(2));
-        if (extensionAmount > 0) {
-          return ResponseBuilder.badRequest("Payment is required for this extension.", 400);
-        }
-      }
+      const trainerForRate = await user
+        .findById(booking.trainer_id)
+        .select("extraInfo.hourly_rate")
+        .lean();
+      const hourlyRate = Number(trainerForRate?.extraInfo?.hourly_rate ?? 0);
+      let extensionAmount = Number(((hourlyRate / 60) * minutes).toFixed(2));
 
       const effectiveEnd = getEffectiveEnd(booking);
       const newEnd = new Date(effectiveEnd.getTime() + minutes * 60 * 1000);
@@ -606,6 +589,40 @@ export class SessionExtensionService {
         return ResponseBuilder.badRequest(conflictMsg, 409);
       }
 
+      const walletIdempotencyKey = requestId
+        ? `ext:wallet:${sessionId}:${requestId}`
+        : `ext:wallet:${sessionId}:${minutes}:${_userId}`;
+
+      const skipChargeBecausePaid =
+        !!approvedRequest && approvedRequest.status === "paid";
+
+      if (skipChargeBecausePaid) {
+        extensionAmount = Number(approvedRequest.amount ?? extensionAmount);
+        payment_intent_id =
+          payment_intent_id || approvedRequest.payment_intent_id || undefined;
+      } else if (payment_method === "wallet") {
+        const { walletPaymentService } = require("../wallet/walletPaymentService");
+        if (extensionAmount > 0) {
+          await walletPaymentService.payFromWallet({
+            traineeId: _userId,
+            sessionId,
+            trainerId: String(booking.trainer_id),
+            amountDollars: extensionAmount,
+            pinSessionToken: pin_session_token,
+            kind: "extension",
+            idempotencyKey: walletIdempotencyKey,
+          });
+        }
+      } else if (payment_intent_id) {
+        const intent = await stripe.paymentIntents.retrieve(payment_intent_id);
+        if (intent.status !== "succeeded") {
+          return ResponseBuilder.badRequest("Payment has not completed.", 400);
+        }
+        extensionAmount = Number((intent.amount / 100).toFixed(2));
+      } else if (extensionAmount > 0) {
+        return ResponseBuilder.badRequest("Payment is required for this extension.", 400);
+      }
+
       const newEndHm = DateFormat.addMinutes(
         effectiveEnd,
         minutes,
@@ -623,16 +640,31 @@ export class SessionExtensionService {
         requested_by: _userId,
       };
 
-      booking.extensions = [...(booking.extensions || []), extensionEntry];
-      booking.total_extended_minutes =
-        Number(booking.total_extended_minutes || 0) + minutes;
+      const reapplyPaidExtension =
+        !!approvedRequest && approvedRequest.status === "paid";
+      const reapplyInPlace =
+        reapplyPaidExtension && approvedRequest.extension_index != null;
+
+      let extensionIndex: number;
+      if (reapplyInPlace) {
+        extensionIndex = Number(approvedRequest.extension_index);
+        const arr = [...(booking.extensions || [])];
+        while (arr.length <= extensionIndex) {
+          arr.push(undefined as any);
+        }
+        arr[extensionIndex] = extensionEntry;
+        booking.extensions = arr;
+      } else {
+        booking.extensions = [...(booking.extensions || []), extensionEntry];
+        extensionIndex = (booking.extensions as any[]).length - 1;
+        booking.total_extended_minutes =
+          Number(booking.total_extended_minutes || 0) + minutes;
+        booking.amount = String(Number((prevAmount + extensionAmount).toFixed(2)));
+      }
       booking.extended_end_time = newEnd;
       booking.end_time = newEnd;
       booking.extended_session_end_time = newEndHm;
       booking.session_end_time = newEndHm;
-      booking.amount = String(Number((prevAmount + extensionAmount).toFixed(2)));
-
-      const extensionIndex = (booking.extensions as any[]).length - 1;
 
       if (requestId) {
         const reqDoc = (booking.extension_requests as any).id?.(requestId)
@@ -646,7 +678,25 @@ export class SessionExtensionService {
         clearExtensionTimer(String(sessionId), String(requestId));
       }
 
-      await booking.save();
+      try {
+        await booking.save();
+      } catch (saveErr) {
+        if (payment_method === "wallet" && extensionAmount > 0) {
+          try {
+            const { walletPaymentService } = require("../wallet/walletPaymentService");
+            await walletPaymentService.refundWalletPaymentForSession({
+              sessionId,
+              traineeId: _userId,
+              kind: "extension",
+              idempotencyKey: walletIdempotencyKey,
+              reason: "extension_save_failed",
+            });
+          } catch (rollbackErr) {
+            console.warn("[sessionExtension] wallet rollback failed", rollbackErr);
+          }
+        }
+        throw saveErr;
+      }
 
       const { extendLessonTimer, setPendingExtensionRequest, broadcastSessionExtensionEvent } =
         require("../socket/socket.service");
@@ -1060,6 +1110,21 @@ export class SessionExtensionService {
       const reqDoc = findRequestById(booking, requestId);
       if (!reqDoc || reqDoc.status !== "expired") return;
 
+      if (reqDoc.payment_intent_id || Number(reqDoc.amount) > 0) {
+        try {
+          const { walletPaymentService } = require("../wallet/walletPaymentService");
+          await walletPaymentService.refundWalletPaymentForSession({
+            sessionId: String(sessionId),
+            traineeId: String(reqDoc.requested_by),
+            kind: "extension",
+            idempotencyKey: `ext:wallet:${sessionId}:${requestId}`,
+            reason: `extension_expired:${reason}`,
+          });
+        } catch (refundErr) {
+          console.warn("[sessionExtension] expire refund failed", refundErr);
+        }
+      }
+
       const {
         resumeLessonTimer,
         setPendingExtensionRequest,
@@ -1077,4 +1142,151 @@ export class SessionExtensionService {
       console.warn("[sessionExtension] expireRequest failed", err);
     }
   }
+}
+
+/**
+ * Cron: finish extension requests that were paid (or PI succeeded) but never
+ * fully applied to the booking / lesson timer.
+ */
+export async function reconcilePaidUnappliedExtensions(): Promise<{
+  scanned: number;
+  applied: number;
+  errors: number;
+  refunded: number;
+  skipped: number;
+}> {
+  const { isExtensionWalletSettled } = require("./extensionWalletSettled");
+  const service = new SessionExtensionService();
+  let scanned = 0;
+  let applied = 0;
+  let errors = 0;
+  let refunded = 0;
+  let skipped = 0;
+
+  const cursor = booked_session
+    .find({
+      extension_requests: {
+        $elemMatch: {
+          $or: [
+            { status: "accepted" },
+            {
+              status: "paid",
+              $or: [
+                { extension_index: { $exists: false } },
+                { extension_index: null },
+              ],
+            },
+            {
+              status: "paid",
+              extension_index: { $exists: true, $ne: null },
+            },
+          ],
+        },
+      },
+    })
+    .select("_id extension_requests extensions trainee_id")
+    .limit(50)
+    .cursor();
+
+  for await (const doc of cursor) {
+    const sessionId = String(doc._id);
+    for (const req of doc.extension_requests || []) {
+      const requestId = String(req._id);
+      const status = String(req.status || "");
+      const piId = req.payment_intent_id ? String(req.payment_intent_id) : "";
+
+      if (status === "paid") {
+        const idx = req.extension_index;
+        const ext =
+          idx != null && doc.extensions?.[idx]
+            ? doc.extensions[idx]
+            : null;
+        if (ext?.status === "applied") continue;
+      } else if (status !== "accepted") {
+        continue;
+      }
+
+      let useWallet = false;
+      let paymentReady = false;
+      if (status === "accepted") {
+        if (piId) {
+          try {
+            const intent = await stripe.paymentIntents.retrieve(piId);
+            paymentReady = intent.status === "succeeded";
+          } catch {
+            paymentReady = false;
+          }
+        } else {
+          useWallet = await isExtensionWalletSettled(sessionId, requestId);
+          paymentReady = useWallet;
+        }
+        if (!paymentReady) {
+          skipped += 1;
+          continue;
+        }
+      }
+
+      scanned += 1;
+      try {
+        const res = await service.confirmExtension({
+          sessionId,
+          minutes: Number(req.minutes),
+          requestId,
+          payment_intent_id: useWallet ? undefined : piId || undefined,
+          payment_method: useWallet ? "wallet" : undefined,
+          _userId: String(req.requested_by),
+        });
+        if (res?.code === 200 || res?.code === 201) {
+          applied += 1;
+        } else if (res?.code === 409) {
+          if (useWallet) {
+            try {
+              const { walletPaymentService } = require("../wallet/walletPaymentService");
+              const rb = await walletPaymentService.refundWalletPaymentForSession({
+                sessionId,
+                traineeId: String(req.requested_by),
+                kind: "extension",
+                idempotencyKey: `ext:wallet:${sessionId}:${requestId}`,
+                reason: "extension_reconcile_conflict",
+              });
+              if (rb?.refunded) refunded += 1;
+            } catch (refundErr) {
+              console.warn("[extensionReconcile] wallet refund failed", refundErr);
+            }
+          } else if (piId) {
+            try {
+              const {
+                refundExtensionStripePaymentIntent,
+              } = require("./extensionStripeRefund");
+              const rb = await refundExtensionStripePaymentIntent({
+                sessionId,
+                requestId,
+                paymentIntentId: piId,
+                reason: "extension_reconcile_conflict",
+              });
+              if (rb?.refunded) refunded += 1;
+            } catch (refundErr) {
+              console.warn("[extensionReconcile] stripe refund failed", refundErr);
+            }
+          }
+          errors += 1;
+        } else if (res?.code && res.code >= 400) {
+          errors += 1;
+        }
+      } catch (err) {
+        errors += 1;
+        console.warn(
+          `[extensionReconcile] session=${sessionId} request=${requestId}`,
+          err
+        );
+      }
+    }
+  }
+
+  if (scanned > 0 || errors > 0) {
+    console.log(
+      `[extensionReconcile] scanned=${scanned} applied=${applied} errors=${errors} refunded=${refunded} skipped=${skipped}`
+    );
+  }
+  return { scanned, applied, errors, refunded, skipped };
 }

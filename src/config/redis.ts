@@ -15,10 +15,14 @@ export const REDIS_PREFIX = process.env.REDIS_KEY_PREFIX || "nq";
 export const REDIS_KEYS = {
   socketRegistry: (userId: string) => `${REDIS_PREFIX}:socket:${userId}`,
   lessonTimer: (sessionId: string) => `${REDIS_PREFIX}:lesson:${sessionId}`,
+  lessonCallSlot: (sessionId: string, userId: string) =>
+    `${REDIS_PREFIX}:callslot:${sessionId}:${userId}`,
   cache: (segment: string) => `${REDIS_PREFIX}:cache:${segment}`,
   idempotency: (key: string) => `${REDIS_PREFIX}:idempotency:${key}`,
   lock: (resource: string) => `${REDIS_PREFIX}:lock:${resource}`,
   rateLimit: (name: string, id: string) => `${REDIS_PREFIX}:rl:${name}:${id}`,
+  chatMediaPending: (s3Key: string) =>
+    `${REDIS_PREFIX}:chat-media-pending:${s3Key}`,
 } as const;
 
 export const REDIS_TTL = {
@@ -26,6 +30,10 @@ export const REDIS_TTL = {
   SOCKET_REGISTRY_SEC: 86400,
   /** Lesson timer snapshot — max session length + buffer. */
   LESSON_TIMER_SEC: 6 * 60 * 60,
+  /** Active call lease per user per session (scheduled lessons). */
+  LESSON_CALL_SLOT_SEC: 4 * 60 * 60,
+  /** Shorter lease for instant lessons — faster recovery if disconnect is missed. */
+  LESSON_CALL_SLOT_INSTANT_SEC: 90 * 60,
   /** Scheduled meetings list per user/tab. */
   SESSIONS_LIST_SEC: 60,
   /** Trainer discovery / slots. */
@@ -38,4 +46,6 @@ export const REDIS_TTL = {
   IDEMPOTENCY_SEC: 86400,
   /** Distributed lock hold time. */
   LOCK_SEC: 15,
+  /** Presigned chat media not yet committed via /chat-send. */
+  CHAT_MEDIA_PENDING_SEC: 48 * 60 * 60,
 } as const;

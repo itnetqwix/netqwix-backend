@@ -88,9 +88,115 @@ export class commonService {
         return res.status(500).json({ success: 0, message: "Failed to generate upload URL" });
       }
       const publicUrl = `https://${S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+      const { registerPendingChatMedia } = require("./chatMediaPendingStore");
+      await registerPendingChatMedia(String(userId), key);
       return res.status(200).json({ success: 1, uploadUrl: url, mediaUrl: publicUrl, key });
     } catch (error) {
       console.error("Error generating chat media upload URL:", error);
+      return res.status(500).json({ success: 0, message: "Internal server error" });
+    }
+  }
+
+  /** Whether this user can claim the call slot before entering the meeting UI. */
+  public async getLessonCallSlotStatus(req: any, res: Response) {
+    try {
+      const userId = req?.authUser?._id;
+      if (!userId) {
+        return res.status(401).json({ success: 0, message: "Unauthorized" });
+      }
+      const sessionId = String(req.params?.sessionId ?? "").trim();
+      if (!sessionId) {
+        return res.status(400).json({ success: 0, message: "sessionId is required" });
+      }
+      const { assertSessionParticipant } = require("../../helpers/chatBlockCheck");
+      const allowed = await assertSessionParticipant(sessionId, String(userId));
+      if (!allowed) {
+        return res.status(403).json({ success: 0, message: "Not a participant" });
+      }
+      const headers = req.headers ?? {};
+      const authSessionId =
+        String(headers["x-nq-auth-session-id"] ?? "").trim() || undefined;
+      const deviceId = String(headers["x-nq-device-id"] ?? "").trim() || undefined;
+      const { getLessonCallSlotStatus } = require("../socket/lessonCallSlotStore");
+      const status = await getLessonCallSlotStatus({
+        sessionId,
+        userId: String(userId),
+        authSessionId,
+        deviceId,
+      });
+      return res.status(200).json({ success: 1, ...status });
+    } catch (error) {
+      console.error("Error reading lesson call slot:", error);
+      return res.status(500).json({ success: 0, message: "Internal server error" });
+    }
+  }
+
+  /** Force-release call slot so this device can join (pre-call lobby). */
+  public async takeoverLessonCallSlot(req: any, res: Response) {
+    try {
+      const userId = req?.authUser?._id;
+      if (!userId) {
+        return res.status(401).json({ success: 0, message: "Unauthorized" });
+      }
+      const sessionId = String(req.params?.sessionId ?? "").trim();
+      if (!sessionId) {
+        return res.status(400).json({ success: 0, message: "sessionId is required" });
+      }
+      const { assertSessionParticipant } = require("../../helpers/chatBlockCheck");
+      const allowed = await assertSessionParticipant(sessionId, String(userId));
+      if (!allowed) {
+        return res.status(403).json({ success: 0, message: "Not a participant" });
+      }
+
+      const { takeoverLessonCallSlotHttp } = require("../socket/lessonCallSlotStore");
+      const { isLessonCallSocketLive } = require("../socket/lessonCallSlotIo");
+      const { getIo } = require("../socket/socket.service");
+      const { EVENTS } = require("../../config/constance");
+
+      const result = await takeoverLessonCallSlotHttp({
+        sessionId,
+        userId: String(userId),
+      });
+      if (!result.ok) {
+        return res.status(409).json({ success: 0, message: result.reason });
+      }
+
+      if (result.previousSocketId && isLessonCallSocketLive(result.previousSocketId)) {
+        const io = getIo();
+        const prev = io?.sockets?.sockets?.get(result.previousSocketId);
+        prev?.emit(EVENTS.VIDEO_CALL.CALL_SLOT_TAKEN_OVER, {
+          sessionId,
+          message:
+            "This lesson was continued on another device. You have left the call on this device.",
+        });
+      }
+
+      return res.status(200).json({ success: 1, sessionId, tookOver: true });
+    } catch (error) {
+      console.error("Error taking over lesson call slot:", error);
+      return res.status(500).json({ success: 0, message: "Internal server error" });
+    }
+  }
+
+  /** Delete an orphaned chat-media object after a failed /chat-send. */
+  public async abortChatMediaUpload(req: any, res: Response) {
+    try {
+      const userId = req?.authUser?._id;
+      if (!userId) {
+        return res.status(401).json({ success: 0, message: "Unauthorized" });
+      }
+      const { key } = req.body ?? {};
+      const keyStr = String(key ?? "").trim();
+      const prefix = `chat-media/${userId}/`;
+      if (!keyStr || !keyStr.startsWith(prefix)) {
+        return res.status(400).json({ success: 0, message: "Invalid media key" });
+      }
+      await s3.deleteObject({ Bucket: S3_BUCKET, Key: keyStr }).promise();
+      const { clearPendingChatMedia } = require("./chatMediaPendingStore");
+      await clearPendingChatMedia(keyStr);
+      return res.status(200).json({ success: 1 });
+    } catch (error) {
+      console.error("Error aborting chat media upload:", error);
       return res.status(500).json({ success: 0, message: "Internal server error" });
     }
   }

@@ -714,7 +714,26 @@ export class TraineeService {
           );
         }
       }
-      var bookingData = await sessionObj.save();
+      let bookingData;
+      try {
+        bookingData = await sessionObj.save();
+      } catch (saveErr) {
+        if (payload.payment_method === "wallet" && finalPrice > 0) {
+          try {
+            const { walletPaymentService } = require("../wallet/walletPaymentService");
+            await walletPaymentService.refundWalletPaymentForSession({
+              sessionId: String(bookingId),
+              traineeId: String(_id),
+              kind: "booking",
+              idempotencyKey: `book:wallet:${bookingId}`,
+              reason: "booking_save_failed",
+            });
+          } catch (rollbackErr) {
+            console.error("[BOOKING] Wallet rollback after save failure:", rollbackErr);
+          }
+        }
+        throw saveErr;
+      }
 
       if (appliedPromoCode && promoDiscountAmount > 0) {
         const promoService = new PromoCodeService();
@@ -970,7 +989,26 @@ export class TraineeService {
 
       const userObj = new booked_session({ ...bookingFields, _id: bookingId });
 
-      const bookingData = await userObj.save();
+      let bookingData;
+      try {
+        bookingData = await userObj.save();
+      } catch (saveErr) {
+        if (payload.payment_method === "wallet" && chargingPrice > 0) {
+          try {
+            const { walletPaymentService } = require("../wallet/walletPaymentService");
+            await walletPaymentService.refundWalletPaymentForSession({
+              sessionId: String(bookingId),
+              traineeId: String(_id),
+              kind: "booking",
+              idempotencyKey: `instant:wallet:${bookingId}`,
+              reason: "instant_booking_save_failed",
+            });
+          } catch (rollbackErr) {
+            console.error("[INSTANT BOOKING] Wallet rollback after save failure:", rollbackErr);
+          }
+        }
+        throw saveErr;
+      }
 
       try {
         const { WALLET_CONFIG } = require("../../config/wallet");

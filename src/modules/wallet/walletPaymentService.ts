@@ -115,6 +115,38 @@ export class WalletPaymentService {
   }
 
   /**
+   * Compensating refund when booking/extension save fails after wallet debit.
+   * Idempotent via escrow hold status + ledger idempotency keys.
+   */
+  async refundWalletPaymentForSession(params: {
+    sessionId: string;
+    traineeId: string;
+    kind: "booking" | "extension";
+    idempotencyKey?: string;
+    reason: string;
+  }): Promise<{ refunded: boolean }> {
+    const escrow_holds = require("../../model/escrow_holds.schema").default;
+    const hold = await escrow_holds
+      .findOne({
+        session_id: params.sessionId,
+        kind: params.kind,
+        status: { $in: ["held", "disputed"] },
+        funding_source: "wallet",
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+    if (!hold?._id) {
+      return { refunded: false };
+    }
+    const { releaseService } = require("./releaseService");
+    await releaseService.refundHold(
+      String(hold._id),
+      params.reason || "wallet_payment_rollback"
+    );
+    return { refunded: true };
+  }
+
+  /**
    * Pulse card for the trainer dashboard. Returns a quick "show me the money
    * + my people" hero strip: earnings credited in the last 7 days, week-
    * over-week delta, and an active-students count from confirmed/completed

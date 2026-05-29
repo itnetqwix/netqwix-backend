@@ -169,11 +169,30 @@ export async function getChatPolicyInfo(
   dailyCount: number;
   dailyLimit: number;
   remainingToday: number;
+  blocked: boolean;
 }> {
+  const { isChatBlocked } = require("../../helpers/chatBlockCheck");
+  const blocked = await isChatBlocked(userId, otherUserId);
+  if (blocked) {
+    return {
+      hasPaidSession: false,
+      dailyCount: 0,
+      dailyLimit: DAILY_MESSAGE_LIMIT_UNPAID,
+      remainingToday: 0,
+      blocked: true,
+    };
+  }
+
   const hasPaidSession = await hasPaidSessionBetween(userId, otherUserId);
 
   if (hasPaidSession) {
-    return { hasPaidSession: true, dailyCount: 0, dailyLimit: Infinity, remainingToday: Infinity };
+    return {
+      hasPaidSession: true,
+      dailyCount: 0,
+      dailyLimit: Infinity,
+      remainingToday: Infinity,
+      blocked: false,
+    };
   }
 
   const todayStart = new Date();
@@ -189,5 +208,6 @@ export async function getChatPolicyInfo(
     dailyCount,
     dailyLimit: DAILY_MESSAGE_LIMIT_UNPAID,
     remainingToday: Math.max(0, DAILY_MESSAGE_LIMIT_UNPAID - dailyCount),
+    blocked: false,
   };
 }

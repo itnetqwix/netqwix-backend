@@ -108,13 +108,41 @@ export class PayoutService {
     });
 
     if (req.method === "bank" && trainer?.stripe_account_id) {
-      const transfer = await stripe.transfers.create({
-        amount: req.amount_minor,
-        currency: (req.currency || "usd").toLowerCase(),
-        destination: trainer.stripe_account_id,
-      });
-      req.stripe_transfer_id = transfer.id;
-      req.status = "processing";
+      try {
+        const transfer = await stripe.transfers.create({
+          amount: req.amount_minor,
+          currency: (req.currency || "usd").toLowerCase(),
+          destination: trainer.stripe_account_id,
+        });
+        req.stripe_transfer_id = transfer.id;
+        req.status = "processing";
+      } catch (transferErr: any) {
+        await ledgerService.post({
+          idempotencyKey: `payout:reverse:${req._id}`,
+          referenceType: "payout",
+          referenceId: String(req._id),
+          actor: "system",
+          legs: [
+            {
+              walletAccountId: new mongoose.Types.ObjectId(String(platform._id)),
+              bucket: "available",
+              entryType: "debit",
+              amountMinor: req.amount_minor,
+            },
+            {
+              walletAccountId: new mongoose.Types.ObjectId(String(wallet._id)),
+              bucket: "available",
+              entryType: "credit",
+              amountMinor: req.amount_minor,
+            },
+          ],
+        });
+        req.status = "failed";
+        (req as any).failure_reason =
+          transferErr?.message || "Stripe transfer failed";
+        await req.save();
+        throw new Error("Payout transfer failed. Your balance has been restored.");
+      }
     } else {
       req.status = "completed";
     }
