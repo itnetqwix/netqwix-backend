@@ -1,706 +1,448 @@
-# NetQwix — Payment Processing Fees, Taxes & Break-Even Pricing
+# NetQwix — Payments, Fees & Pricing (US & Canada)
 
-**Status:** Policy & implementation spec (design document)  
-**Last updated:** 2026-05-28  
-**Markets:** **United States (USA)** and **Canada (CA)** only  
-**Applies to:** `nq-backend-main`, `nq-frontend-main`, `nq-mobile`  
-**Payment provider:** Stripe (Connect + PaymentIntents + Stripe Tax)
-
----
-
-## 1. Purpose
-
-This document defines how NetQwix calculates **checkout totals in the USA and Canada** so every transaction covers:
-
-1. **Stripe processing fees** (varies by country, payment method, and card origin)
-2. **Sales tax / GST-HST-PST-QST** (based on the buyer’s state or province)
-3. **Platform operating costs** (live sessions, storage, PDF/video, API/socket infra)
-4. **Trainer payout** (the list price the trainer set, e.g. **$100 USD/hr** or **$135 CAD/hr**)
-5. **NetQwix margin** (commission / service fee)
-
-**Scope:** All pricing, quotes, PaymentIntents, escrow splits, storage plans, and tax logic must resolve through a **`region`** of `US` or `CA`. No other countries in this spec.
+| | |
+|---|---|
+| **Audience** | Leadership, Finance, Product, Operations |
+| **Version** | 2.0 (management edition) |
+| **Last updated** | May 28, 2026 |
+| **Markets** | United States · Canada only |
+| **Payments** | Stripe (Connect, PaymentIntents, Stripe Tax) |
+| **Platforms** | Web · Mobile · Admin |
 
 ---
 
-## 2. Regional model (USA + Canada)
+## How to use this document
 
-### 2.1 Supported regions
-
-| Region | Country code | Currency | Minor unit | Stripe account | Wallet (today) |
-|--------|--------------|----------|------------|----------------|----------------|
-| **USA** | `US` | **USD** | cents (¢) | US platform account | Enabled |
-| **Canada** | `CA` | **CAD** | cents (¢) | CA platform account *or* US account with CAD charges* | Disabled (enable at launch) |
-
-\* Prefer a **Canadian Stripe account** (or Stripe multi-currency setup) so domestic CAD cards settle in CAD without FX markup. Verify with your Stripe dashboard.
-
-### 2.2 How region is determined
-
-| Priority | Source | Used for |
-|----------|--------|----------|
-| 1 | Trainee billing address country (`US` / `CA`) | Tax jurisdiction, currency, fee table |
-| 2 | Trainee profile `country` / `region` | Fallback quote |
-| 3 | Trainer list-price currency | Trainer must publish in region currency |
-| 4 | `DEFAULT` → `US` / USD | Legacy users |
-
-**Rule:** A trainee in Canada always checks out in **CAD**. A trainee in the USA always checks out in **USD**. Cross-border sessions (US trainer, CA trainee) use **trainee region currency**; FX conversion of trainer list price happens at quote time using admin FX rate or trainer-set dual pricing.
-
-### 2.3 Trainer list pricing by region
-
-| Mode | Description |
-|------|-------------|
-| **Single currency** | Trainer sets hourly rate in home country currency only |
-| **Dual list (recommended)** | Trainer sets `hourly_rate_usd` and `hourly_rate_cad` independently |
-| **FX auto-convert** | One base rate × daily `USD/CAD` admin rate (display “approx.” until checkout) |
+| If you need… | Go to |
+|--------------|--------|
+| The 2-minute story (who pays what) | [Executive summary](#executive-summary) |
+| A dollar example ($100 session) | [Reference transaction](#reference-transaction-100-session) |
+| How we set commission | [Commission policy](#commission-policy) |
+| What trainees see at checkout | [Trainee checkout](#trainee-checkout-transparency) |
+| What trainers earn and withdraw | [Trainer earnings & payouts](#trainer-earnings--payouts) |
+| What’s live vs in progress | [Delivery status](#delivery-status) |
+| Decisions we still need | [Open decisions](#open-decisions-for-leadership) |
+| Engineering / tax detail | [Appendices](#appendix-a-payment-processing-rates) |
 
 ---
 
-## 3. Current system (as implemented)
+## Executive summary
 
-| Area | Current behavior | Target (this doc) |
-|------|------------------|-------------------|
-| Payment methods (web) | `card`, `amazon_pay`, `cashapp`, `link` + Apple/Google Pay | Region-filtered (see §5) |
-| Stripe PI | `automatic_payment_methods`; amount = trainer price − promo | Quote total incl. fees + tax |
-| Commission | Escrow ~15%; admin default 5% | Unify; same % both countries |
-| Escrow | USD holds | USD or CAD holds by region |
-| Storage | USD only ($3 / $5 / $10) | USD + CAD list prices (§10) |
-| Tax | Not implemented | Stripe Tax US + CA |
-| `supportedCurrencies` | `usd`, `eur`, `gbp` | Add **`cad`**; restrict checkout to `usd` / `cad` |
+NetQwix is a **two-sided marketplace**: trainers set session prices; trainees book and pay; NetQwix holds funds in **escrow** until the session completes, then pays the trainer their **net** share.
 
-Code refs: `src/helpers/stripe.ts`, `escrowService.ts`, `src/config/wallet.ts`, `src/config/storage.ts`.
-
----
-
-## 4. Money flow (escrow — both countries)
+### Three money flows
 
 ```mermaid
-flowchart LR
-  T[Trainee US or CA] -->|Charge in USD or CAD| Stripe
-  Stripe -->|Gross| Escrow[Platform escrow hold]
-  Escrow -->|Session complete| Split{Release}
-  Split -->|Trainer net| Trainer
-  Split -->|Platform fee| Platform
-  Stripe -->|Processing fee| StripeFees[Stripe fees]
+flowchart TB
+  subgraph checkout [1. Trainee books a session]
+    T[Trainee] -->|Pays total| Stripe
+    Stripe --> Escrow[Platform escrow]
+  end
+  subgraph release [2. Session completes]
+    Escrow -->|Trainer net| TR[Trainer]
+    Escrow -->|Commission + fees| NQ[NetQwix]
+  end
+  subgraph wallet [3. Optional: wallet & payout]
+    T2[Trainee] -->|Add funds| W[Wallet]
+    W -->|Pay session| Escrow
+    TR -->|Withdraw| Bank[Bank via Stripe Connect]
+  end
 ```
 
-Stripe deducts processing from the **platform Stripe balance**. Commission must cover processing **or** processing is passed to the trainee (recommended).
+### Policy in one table
 
----
-
-## 5. Payment methods by country
-
-### 5.1 United States — enabled methods
-
-| Method ID | UI label | Variable fee | Fixed fee (USD) | Notes |
-|-----------|----------|--------------|-----------------|-------|
-| `card_domestic_us` | US credit / debit card | **2.90%** | **$0.30** | `card.country === 'US'` |
-| `card_international_us` | Non-US card on US charge | **4.40%** | **$0.30** | 2.9% + 1.5% intl surcharge |
-| `apple_pay_us` | Apple Pay | *inherit card* | *inherit* | Underlying card rate |
-| `google_pay_us` | Google Pay | *inherit card* | *inherit* | Underlying card rate |
-| `link_us` | Link | **2.90%** | **$0.30** | Same as domestic unless intl card |
-| `amazon_pay_us` | Amazon Pay | **2.90%** | **$0.30** | Web only |
-| `cashapp_us` | Cash App Pay | **2.90%** | **$0.30** | **US only** |
-| `wallet_us` | NetQwix Wallet | **0%** | **$0.00** | Fee taken at top-up |
-| `wallet_mixed_us` | Wallet + card | Prorated | Prorated | Card rate on card portion only |
-
-*Source: [Stripe US pricing](https://stripe.com/us/pricing) — confirm on your dashboard contract.*
-
-### 5.2 Canada — enabled methods
-
-| Method ID | UI label | Variable fee | Fixed fee (CAD) | Notes |
-|-----------|----------|--------------|-----------------|-------|
-| `card_domestic_ca` | Canadian credit / debit card | **2.90%** | **C$0.30** | `card.country === 'CA'` |
-| `card_international_ca` | Non-CA card on CAD charge | **3.70%** | **C$0.30** | 2.9% + 0.8% intl surcharge |
-| `apple_pay_ca` | Apple Pay | *inherit card* | *inherit* | |
-| `google_pay_ca` | Google Pay | *inherit card* | *inherit* | |
-| `link_ca` | Link | **2.90%** | **C$0.30** | |
-| `interac_ca` | Interac (if enabled) | **2.90%** | **C$0.30** | Enable in Stripe CA dashboard |
-| `wallet_ca` | NetQwix Wallet | **0%** | **C$0.00** | When `regionCurrency.CA` enabled |
-| `wallet_mixed_ca` | Wallet + card | Prorated | Prorated | |
-
-**Not available in Canada (disable in Elements / Payment Sheet):** `amazon_pay`, `cashapp`.
-
-*Source: [Stripe Canada pricing](https://stripe.com/en-ca/pricing) — confirm on dashboard.*
-
-### 5.3 FX / currency-conversion surcharge
-
-| Scenario | Stripe extra fee | NetQwix rule |
-|----------|------------------|--------------|
-| US account charges **CAD** card | +**2%** conversion | Avoid — use CA Stripe account |
-| CA account charges **USD** card | +**2%** conversion | Avoid — charge trainee in CAD |
-| Presentment = settlement currency | **0%** | **Always** present in local currency |
-
----
-
-## 6. Processing fee formulas
-
-All math in **minor units** (¢).
-
-```
-processingFeeMinor = round(chargeBaseMinor × variableRate) + fixedFeeMinor
-```
-
-**Charge base (recommended):** `sessionSubtotal + platformServiceFee` (after promos).
-
-**Gross-up** (trainer must receive exact net):
-
-```
-totalMinor = ceil((chargeBaseMinor + fixedFeeMinor) / (1 - variableRate))
-processingFeeMinor = totalMinor - chargeBaseMinor - taxMinor
-```
-
-### 6.1 When rate is known
-
-| Stage | Action |
+| Topic | Policy |
 |-------|--------|
-| Quote (pre-PM) | Default **domestic card** for trainee region |
-| PM attached | Re-quote if intl card detected; reject if delta > tolerance |
-| Wallet-only | Zero processing at checkout |
+| **Trainer list price** | Trainer sets the session fee (e.g. **$100/hr**). This is the anchor for all math. |
+| **NetQwix commission** | **% of list price**, taken from the **trainer’s** share — **not** added as a separate line on the trainee receipt. Typical target: **~20%** (admin-configurable). |
+| **Platform fees** | Small flat fees per session (default **$0.50** trainee + **$0.50** trainer), admin-editable. |
+| **Card / Apple Pay / etc.** | Processing cost is passed to the **trainee** at checkout (NetQwix does not subsidize Stripe on sessions). |
+| **Sales tax** | Based on trainee **state/province**; collected via **Stripe Tax** where enabled. |
+| **Wallet top-up** | **No** commission on money added to wallet; trainee gets face value credited (Stripe cost handled per finance policy). |
+| **Trainer withdrawal** | Target: deduct payout processing (and tax if required) before bank transfer — **in development**. |
+| **Regions** | **US → USD** · **CA → CAD** — trainee’s market drives currency and tax. |
+
+### Why this matters for the business
+
+1. **Transparent checkout** builds trainee trust (every fee line item before pay).  
+2. **Configurable commission** protects margin while allowing VIP trainer rates.  
+3. **Pass-through processing** avoids NetQwix paying Stripe out of commission.  
+4. **Escrow + quote snapshot** reduces disputes and supports clean refunds.  
+5. **US + CA only** keeps tax and pricing complexity bounded.
 
 ---
 
-## 7. Sales tax — United States
+## Reference transaction: $100 session
 
-### 7.1 Engine
+**Assumptions:** 1-hour session, trainer list price **$100**, commission **20%**, trainee platform fee **$0.50**, Texas sales tax **8.25%**, US domestic card.
 
-**Stripe Tax** with US registrations. Enable `automatic_tax: { enabled: true }` on PaymentIntent.
+### What the trainee pays
 
-Collect: **street, city, state, ZIP**, country `US`.
+| Line item | Amount | Notes |
+|-----------|--------|--------|
+| Session price | **$100.00** | Trainer’s published rate |
+| Platform fee | **$0.50** | Shown on receipt |
+| Card processing | **$3.21** | ~2.9% + $0.30 on charge base |
+| Sales tax (TX) | **$8.56** | On taxable subtotal |
+| **Total charged** | **$112.27** | Stripe charge amount |
 
-### 7.2 US tax types
+*Commission is **not** listed on the trainee receipt.*
 
-| Type | Applies to |
-|------|------------|
-| **State sales tax** | 45 states + DC (rates vary 0%–10.25%+) |
-| **Local tax** | City/county/district (e.g. RTD, MTA) |
-| **Marketplace facilitator** | NetQwix may owe tax on **platform fee** and **trainer services** in states where registered |
+### What the trainer receives (after session)
 
-### 7.3 Sample US combined rates (2025 reference — Stripe Tax is authoritative)
+| Line item | Amount | Notes |
+|-----------|--------|--------|
+| Session gross | $100.00 | From list price |
+| NetQwix commission (20%) | −$20.00 | Deducted at release |
+| Trainer platform fee | −$0.50 | Deducted at release |
+| **Trainer net** | **$79.50** | Paid to wallet / Connect |
 
-| State | Example locality | Combined rate | Notes |
-|-------|------------------|---------------|-------|
-| **Texas** | Austin | **8.25%** | No state income tax; common benchmark |
-| **California** | Los Angeles | **9.50%** | High local variance |
-| **New York** | NYC | **8.875%** | |
-| **Florida** | Miami-Dade | **7.00%** | |
-| **Washington** | Seattle | **10.25%** | |
-| **Oregon** | Portland | **0%** | No general sales tax |
-| **Delaware** | — | **0%** | |
-| **Montana** | — | **0%** | |
-| **New Hampshire** | — | **0%** | |
-| **Alaska** | Anchorage | **0%** state | Local only |
+### What NetQwix retains (approximate)
 
-### 7.4 US product tax codes (Stripe Tax)
+| Component | Amount |
+|-----------|--------|
+| Commission + both platform fees | $21.00 |
+| Less Stripe processing (paid by trainee but nets against platform balance) | −$3.21 |
+| Less infrastructure (COGS estimate) | −$0.40 |
+| **Approx. platform margin** | **~$17.39** |
 
-| Line item | Tax code | Typical treatment |
-|-----------|----------|-------------------|
-| Live coaching session | `txcd_20030000` | Taxable in many states (live digital service) |
-| Platform / marketplace fee | `txcd_10000000` | Taxable where nexus |
-| Storage subscription | `txcd_10103000` / `10103001` | SaaS — state-specific |
-| Digital clip | `txcd_30011000` | Digital goods |
-| Processing fee pass-through | `txcd_10000000` | Often taxable when service is |
-| Wallet top-up | — | **Non-taxable** (stored value) |
-
-> CPA review required for marketplace facilitator registration by state.
+> Other US states and Canadian provinces change **tax** and slightly change **total**; commission math stays on the **$100** list price. See [Appendix B](#appendix-b-tax-quick-reference) for tax ranges.
 
 ---
 
-## 8. Sales tax — Canada
+## Commission policy
 
-### 8.1 Engine
+### How commission works
 
-**Stripe Tax** with **Canadian tax registrations** (GST/HST account + provincial where required).
+- Commission applies to the **session subtotal** (after promo discounts).  
+- It is deducted when funds are **released to the trainer**, not as an extra charge to the trainee.  
+- **Promo codes** reduce the subtotal first, then commission is calculated.
 
-Collect: **street, city, province, postal code**, country `CA`.
+### Who sets the rate (priority order)
 
-### 8.2 Canadian tax structure
+| Priority | Set by | Applies to |
+|----------|--------|------------|
+| 1 | **Per-trainer override** | That trainer only (Admin → Manage trainers) |
+| 2 | **Global default** | All trainers without an override (Admin dashboard) |
+| 3 | **Regional default** | Fallback in Pricing & fees (US / CA tabs) |
 
-| System | Provinces | Rate | Administered by |
-|--------|-----------|------|-----------------|
-| **GST** | All provinces | **5%** | CRA |
-| **HST** (GST + provincial combined) | ON, NS, NB, NL, PE | **13%–15%** | CRA |
-| **GST + PST** | BC, SK, MB | **5% + 6–7%** | CRA + province |
-| **GST + QST** | Quebec | **5% + 9.975% ≈ 14.975%** | CRA + Revenu Québec |
+**Example:** Global 20%, Trainer A has override 15% → Trainer A pays **15%**, everyone else **20%**.
 
-### 8.3 Province reference table (2025 — confirm annually)
+### Management controls (Admin)
 
-| Province / territory | Code | Tax type | Total rate |
-|----------------------|------|----------|------------|
-| **Alberta** | AB | GST only | **5%** |
-| **British Columbia** | BC | GST + PST | **12%** (5 + 7) |
-| **Manitoba** | MB | GST + PST | **12%** (5 + 7) |
-| **New Brunswick** | NB | HST | **15%** |
-| **Newfoundland & Labrador** | NL | HST | **15%** |
-| **Northwest Territories** | NT | GST only | **5%** |
-| **Nova Scotia** | NS | HST | **15%** |
-| **Nunavut** | NU | GST only | **5%** |
-| **Ontario** | ON | HST | **13%** |
-| **Prince Edward Island** | PE | HST | **15%** |
-| **Quebec** | QC | GST + QST | **14.975%** |
-| **Saskatchewan** | SK | GST + PST | **11%** (5 + 6) |
-| **Yukon** | YT | GST only | **5%** |
+| Control | Location | Purpose |
+|---------|----------|---------|
+| Global commission % | Admin home | Default for all coaches |
+| Per-trainer % | Manage trainers | Negotiated / promotional rates |
+| Default & floor % | Pricing & fees → US/CA | Regional fallback and minimum margin guardrail |
+| Live preview | Pricing & fees → Quote simulator | See trainee total & trainer net before publishing changes |
 
-### 8.4 Canadian product tax treatment
+### What trainers should see (requirement)
 
-| Line item | Typical treatment |
-|-----------|-------------------|
-| Live coaching / training | Taxable — **B2C** services in province of consumption |
-| Platform fee | Taxable when NetQwix registered for GST/HST |
-| SaaS / storage subscription | Taxable in most provinces |
-| Digital goods / clips | Taxable |
-| Wallet top-up | **Non-taxable** stored value |
-| Processing fee pass-through | Taxable if underlying service is taxable (province-specific) |
+| Screen | Information |
+|--------|-------------|
+| Profile / earnings | **Your NetQwix commission: X%** (actual resolved rate) |
+| Upcoming / completed sessions | Gross, commission $, platform fee, **estimated net** |
+| Withdrawal | Requested amount, fees, **net to bank** |
 
-> Register for GST/HST when revenue exceeds **C$30,000** small-supplier threshold (or register voluntarily). QST separate in Quebec.
+**Status:** Commission math is live in the backend; trainer-facing display still being unified (some apps show static “~20%” copy).
 
 ---
 
-## 9. Platform session fees (trainee + trainer)
+## Trainee checkout transparency
 
-Each **live session** (scheduled booking, instant lesson, session extension) includes **two flat platform fees**, both default **$0.50 USD / C$0.50 CAD** (admin-editable):
+Every booking (web + mobile) should show a **line-item receipt** before payment:
 
-| Fee | Charged to | When | Checkout line item? |
-|-----|------------|------|---------------------|
-| **Trainee platform fee** | Trainee | Added to PaymentIntent / wallet debit | **Yes** — "Platform fee" |
-| **Trainer platform fee** | Trainer | Deducted from trainer payout at escrow release | **No** — internal split |
+| Shown to trainee | Example label |
+|------------------|---------------|
+| Session price | Session with [Coach name] |
+| Discount | Promo code (if any) |
+| Platform fee | Platform fee |
+| Processing | Card processing fee / Apple Pay fee |
+| Tax | Sales tax (TX) · HST (ON) · etc. |
+| **Total** | **Total** |
 
-These flat fees are **in addition to** the admin-configurable **% commission** on the session subtotal.
+**Not shown to trainee:** commission %, trainer net, trainer-side platform fee.
 
-```
-trainerNetMinor = sessionSubtotalMinor − round(sessionSubtotalMinor × commissionRate) − trainerPlatformFeeMinor
-platformRevenue = platformFeePercentMinor + traineePlatformFeeMinor + trainerPlatformFeeMinor − processingFeeMinor − cogsMinor
-```
+### Payment methods (by country)
 
-> The trainer $0.50 is **not** a second charge on the trainee's card — it reduces what the trainer receives after the session completes.
+| United States | Canada |
+|---------------|--------|
+| Credit / debit (US & international rates) | Credit / debit (CA & international rates) |
+| Apple Pay, Google Pay | Apple Pay, Google Pay |
+| Link, Amazon Pay, Cash App | Link, Interac (if enabled) |
+| NetQwix Wallet | NetQwix Wallet (when CA wallet launched) |
 
----
+**Canada:** Amazon Pay and Cash App are **not** offered.
 
-## 10. Platform commission & COGS (both countries)
-
-### 10.1 Commission (same rate both countries)
-
-Priority: trainer `commission` → `admin_setting.commission` → default **15%** sessions.
-
-```
-platformFeeMinor = round(sessionSubtotalMinor × commissionRate)
-trainerNetMinor  = sessionSubtotalMinor - platformFeeMinor - trainerPlatformFeeMinor
-```
-
-### 10.2 COGS floor (internal — USD reference; scale CAD by FX or separate config)
-
-| Product | US COGS (USD) | CA COGS (CAD) | Drivers |
-|---------|---------------|---------------|---------|
-| Live 1:1 session / hr | $0.15 – $0.75 | C$0.20 – C$1.00 | Signaling, API, Redis |
-| Group class / seat-hr | $0.10 – $0.50 | C$0.15 – C$0.65 | Fan-out |
-| Session PDF / game plan | $0.02 – $0.10 | C$0.03 – C$0.13 | S3 |
-| Clip storage / GB-mo | ~$0.023 | ~C$0.031 | S3 ca-central-1 |
-| Wallet ledger / txn | $0.01 | C$0.01 | DB + audit |
-
-```
-minCommissionRate = (processingFeeMinor + cogsMinor) / sessionSubtotalMinor
-```
-
-Enforce on backend at PI creation.
+Processing rates follow [Stripe published pricing](https://stripe.com/pricing) (confirm on our contract). Domestic US card: **2.9% + $0.30**; international cards carry a surcharge. Details in [Appendix A](#appendix-a-payment-processing-rates).
 
 ---
 
-## 10. Product catalog — regional list prices
+## Trainer earnings & payouts
 
-### 10.1 Live sessions
+### Session products using this fee stack
 
-Trainer sets hourly rate in **local currency** for their primary market. Examples at **$100 USD / ~$135 CAD** parity (admin FX or dual list):
+| Product | Commission? | Platform fees? |
+|---------|-------------|------------------|
+| Scheduled 1:1 booking | Yes | Yes |
+| Instant lesson | Yes | Yes |
+| Session extension | Yes | Yes |
+| Storage subscription (coach) | Separate catalog | Configurable |
+| Trainee wallet top-up | **No** | **No** |
 
-| | USA | Canada |
-|---|-----|--------|
-| Trainer list (1 hr) | **$100.00 USD** | **$135.00 CAD** |
-| Commission 15% | $15.00 | C$20.25 |
-| Trainer net | $85.00 | C$114.75 |
+### Wallet top-up (trainee adds money)
 
-### 10.2 Storage plans (trainer billing)
-
-| Plan | Quota | **USA (USD/mo)** | **Canada (CAD/mo)** | **USA yearly** | **Canada yearly** |
-|------|-------|------------------|---------------------|----------------|-------------------|
-| Free | 2 GB | $0 | C$0 | $0 | C$0 |
-| Plus | 5 GB | **$3.00** | **C$4.00** | **$32.40** (~10% off) | **C$43.20** |
-| Pro | 10 GB | **$5.00** | **C$6.50** | **$54.00** | **C$70.20** |
-| Max | 25 GB | **$10.00** | **C$13.00** | **$108.00** | **C$140.40** |
-
-CAD prices = ~**1.33× USD** rounded to friendly cents (adjust in admin).
-
-### 10.3 Other products
-
-| Product | USA | Canada |
-|---------|-----|--------|
-| Clip one-time purchase | USD list + US tax | CAD list + CA tax |
-| Session extension | Pro-rate USD hourly | Pro-rate CAD hourly |
-| PDF / game plan upload | Included in session COGS | Same |
-| Instant lesson | Same fee stack as booking | Same |
-
----
-
-## 11. Checkout formula (region-aware)
-
-```
-discountedSubtotal = sessionSubtotal − promoDiscount
-traineePlatformFee = productFee.traineePlatformFeeMinor        // default 50¢
-trainerPlatformFee = productFee.trainerPlatformFeeMinor        // default 50¢ (payout only)
-chargeBase         = discountedSubtotal + traineePlatformFee
-processingFee      = chargeBase × f + F                       // by payment method
-tax                = StripeTax(chargeBase + processingFee)     // US or CA
-chargeTotal        = chargeBase + processingFee + tax            // PaymentIntent amount
-
-platformFeePercent = round(discountedSubtotal × commissionRate)
-trainerNet           = discountedSubtotal − platformFeePercent − trainerPlatformFee
-netPlatformMargin    = platformFeePercent + traineePlatformFee + trainerPlatformFee − processingFee − cogs
-```
-
----
-
-## 12. Worked examples — $100 USD / $135 CAD live session
-
-**Shared assumptions**
-
-- Commission **15%** (deducted from trainer side; not added to trainee total)
-- Platform service fee to trainee: **$0**
-- COGS: **$0.40 USD** / **C$0.53 CAD**
-- Escrow release after session complete
-
----
-
-### 12.1 USA — Texas (8.25% sales tax) — $100 USD/hr
-
-| Line | Calculation | Amount |
-|------|-------------|--------|
-| Session (trainer list) | — | **$100.00** |
-| Platform fee (trainee) | flat | **$0.50** |
-| Processing (US domestic card) | 2.9% × $100.50 + $0.30 | **$3.21** |
-| Taxable amount | $100.50 + $3.21 | $103.71 |
-| Sales tax (8.25%) | | **$8.56** |
-| **Trainee pays** | | **$112.27** |
-| % commission (internal) | 15% × $100 | $15.00 |
-| Platform fee (trainer deduction) | flat | **$0.50** |
-| **Trainer receives** | $100 − $15 − $0.50 | **$84.50** |
-| Platform net | $15 + $0.50 + $0.50 − $3.21 − $0.40 | **$12.39** |
-
-**US international card:** processing **$4.70** → total **$113.34** → platform net **$9.90**.
-
-**US Apple Pay / Link / Amazon Pay / Cash App (domestic card):** same as domestic **$111.71**.
-
-**US wallet (pre-funded):** processing **$0** → tax on $100 → total **$108.25** → platform net **$14.60**.
-
----
-
-### 12.2 USA — California, Los Angeles (9.50%) — $100 USD/hr
-
-| Line | Amount |
+| Rule | Detail |
 |------|--------|
-| Session | $100.00 |
-| Processing (domestic) | $3.20 |
-| Tax (9.50% on $103.20) | **$9.80** |
-| **Trainee pays** | **$113.00** |
+| Commission | **None** |
+| Platform session fees | **None** |
+| Sales tax | **None** (stored value) |
+| Credit amount | **$100 added → $100 balance** (recommended UX) |
+| Stripe cost | Absorbed by platform on load, or grossed up — **finance sign-off** ([Open decisions](#open-decisions-for-leadership)) |
+
+### Withdrawal to bank (trainer)
+
+| Today | Target |
+|-------|--------|
+| Full requested amount sent to Stripe Connect | **Quote first:** show processing fee and any required withholding; transfer **net** |
+| No breakdown in app | “Withdraw $500 → receive $485” style UI |
+
+**Requires:** CPA input on withholding; engineering payout-quote API.
 
 ---
 
-### 12.3 USA — Oregon (0% sales tax) — $100 USD/hr
+## Markets & currency
 
-| Line | Amount |
+| Market | Currency | Wallet today | Tax engine |
+|--------|----------|--------------|------------|
+| **United States** | USD | Enabled | Stripe Tax (when enabled) + estimates |
+| **Canada** | CAD | Planned | Stripe Tax (when enabled) + estimates |
+
+**Rules**
+
+- Canadian trainees checkout in **CAD**; US trainees in **USD**.  
+- Tax jurisdiction = trainee **billing address** (state / province).  
+- Cross-border (US coach, CA trainee): use conversion or dual list pricing — **dual list pricing recommended** (in roadmap).
+
+---
+
+## Revenue model summary
+
+| Revenue to NetQwix | Typical source |
+|--------------------|----------------|
+| **Commission %** | Trainer session subtotal |
+| **Trainee platform fee** | Flat per session (checkout) |
+| **Trainer platform fee** | Flat per session (payout deduction) |
+| **Storage plans** | Coach subscriptions ($3 / $5 / $10 USD tiers; CAD equivalents in admin) |
+| **Processing** | Passed through to trainee on sessions (not NetQwix revenue) |
+
+### Minimum margin (operations)
+
+Internal **COGS** estimates (video, API, storage) support a **minimum commission floor** so list prices are not set below cost. Admin simulator can preview platform net before changing rates.
+
+---
+
+## Delivery status
+
+| Capability | Status | Notes for leadership |
+|------------|--------|----------------------|
+| Pricing config & admin hub | **Live** | US/CA fees, payment grids, simulator, version history |
+| Quote before checkout | **Live** | Web + mobile sessions |
+| Commission (global + per-trainer) | **Live** | Backend resolution |
+| Processing fee to trainee | **Live** | Default on |
+| Escrow fee snapshot | **Live** | Auditable per booking |
+| Trainee line-item receipt | **Mostly live** | Some flows still catching up |
+| Stripe Tax (authoritative) | **Configurable** | Requires registrations + env flag |
+| Trainer sees exact commission % | **In progress** | API + UI |
+| Trainer withdrawal fee quote | **Not started** | Needs finance + CPA |
+| Canada wallet | **Not started** | Config ready |
+| Dual USD/CAD coach rates | **Not started** | Recommended for CA launch |
+
+### Phased roadmap
+
+| Phase | Focus | Business outcome |
+|-------|--------|------------------|
+| **Done** | Quote engine, admin pricing, escrow breakdown | Correct charges & admin control |
+| **Now (P0)** | Trainer commission display, checkout parity, intl card re-quote | Trust & fewer support tickets |
+| **Next (P1)** | Payout quote with fees | Sustainable trainer cash-out |
+| **Then (P2)** | CAD wallet, dual list prices | Canada launch readiness |
+| **Ongoing** | Stripe Tax registrations, CPA sign-off | Compliance |
+
+---
+
+## Open decisions for leadership
+
+| # | Decision | Options | Owner |
+|---|----------|---------|-------|
+| 1 | **Default commission %** at launch | e.g. 15% vs 20% | Leadership / Finance |
+| 2 | **Wallet top-up Stripe cost** | A) Trainee pays $100, gets $100 (platform absorbs Stripe) · B) Net credit after Stripe | Finance |
+| 3 | **Trainer payout fees** | Which Connect/ACH fees to pass to trainer vs absorb | Finance + CPA |
+| 4 | **Canada go-live** | Dual list price vs FX conversion | Product |
+| 5 | **Stripe Tax scope** | Which US states + CA registrations first | Tax advisor |
+| 6 | **Group classes** | Commission on total vs per-seat | Product |
+
+---
+
+## Compliance & sign-off checklist
+
+| Item | Status |
 |------|--------|
-| Session | $100.00 |
-| Processing (domestic) | $3.20 |
-| Tax | **$0.00** |
-| **Trainee pays** | **$103.20** |
+| Stripe US & CA pricing verified on dashboard | ☐ |
+| Stripe Tax registrations (US nexus + CA GST/HST/QST) | ☐ |
+| CPA / tax advisor — marketplace facilitator (US) + B2C services (CA) | ☐ |
+| Terms of Service — fees, tax, processing by region | ☐ |
+| Global commission % set in admin before launch | ☐ |
+| End-to-end test: US booking, CA booking, refund | ☐ |
+| Trainer payout fee policy documented | ☐ |
 
 ---
 
-### 12.4 Canada — Ontario HST (13%) — $135 CAD/hr
+## Glossary
 
-| Line | Calculation | Amount |
-|------|-------------|--------|
-| Session (trainer list) | — | **C$135.00** |
-| Processing (CA domestic card) | 2.9% × $135 + C$0.30 | **C$4.22** |
-| Taxable amount | $135 + $4.22 | C$139.22 |
-| HST (13%) | | **C$18.10** |
-| **Trainee pays** | | **C$157.32** |
-| Trainer receives | 85% | **C$114.75** |
-| Platform net | C$20.25 − C$4.22 − C$0.53 | **C$15.50** |
-
-**CA international card:** processing **C$5.30** (3.7% + C$0.30) → total **C$158.52** → platform net **C$14.42**.
-
-**CA Apple Pay / Google Pay / Link (domestic):** same as domestic **C$157.32**.
-
----
-
-### 12.5 Canada — Alberta GST only (5%) — $135 CAD/hr
-
-| Line | Amount |
-|------|--------|
-| Session | C$135.00 |
-| Processing (domestic) | C$4.22 |
-| GST (5% on C$139.22) | **C$6.96** |
-| **Trainee pays** | **C$146.18** |
-
----
-
-### 12.6 Canada — British Columbia GST + PST (12%) — $135 CAD/hr
-
-| Line | Amount |
-|------|--------|
-| Session | C$135.00 |
-| Processing (domestic) | C$4.22 |
-| Tax (12% on C$139.22) | **C$16.71** |
-| **Trainee pays** | **C$155.93** |
-
----
-
-### 12.7 Canada — Quebec GST + QST (14.975%) — $135 CAD/hr
-
-| Line | Amount |
-|------|--------|
-| Session | C$135.00 |
-| Processing (domestic) | C$4.22 |
-| Tax (14.975% on C$139.22) | **C$20.85** |
-| **Trainee pays** | **C$160.07** |
-
----
-
-## 13. Storage checkout examples
-
-### 13.1 USA — Plus plan ($3/mo), Texas 8.25%
-
-| Line | Amount |
-|------|--------|
-| Plus 5 GB | $3.00 |
-| Processing | $0.39 |
-| Tax | $0.28 |
-| **Total** | **$3.67/mo** |
-
-### 13.2 Canada — Plus plan (C$4/mo), Ontario 13% HST
-
-| Line | Amount |
-|------|--------|
-| Plus 5 GB | C$4.00 |
-| Processing | C$0.42 |
-| HST | C$0.57 |
-| **Total** | **C$4.99/mo** |
-
----
-
-## 14. Admin-editable fields (`pricing_config`)
-
-| Admin UI field | Config key | Default (US) |
-|----------------|------------|--------------|
-| Trainee platform fee | `regions.US.traineePlatformFeeMinor` | 50 ($0.50) |
-| Trainer platform fee | `regions.US.trainerPlatformFeeMinor` | 50 ($0.50) |
-| Default commission % | `regions.US.defaultCommissionRate` | 0.15 |
-| Min commission floor | `regions.US.minCommissionRateFloor` | 0.05 |
-| Pass processing to trainee | `regions.US.passProcessingFeeToTrainee` | true |
-| Payment method bps + fixed | `regions.US.paymentMethodFees.*` | Stripe US standard |
-| Session booking fees | `productFees.session_booking.*` | 50 / 50 |
-| Instant lesson fees | `productFees.instant_lesson.*` | 50 / 50 |
-| Extension fees | `productFees.session_extension.*` | 50 / 50 |
-| Storage fees | `productFees.storage_subscription.*` | 0 / 0 |
-| Stripe Tax toggle | `regions.*.stripeTaxEnabled` | env-driven |
-| Quote tolerance | `quoteToleranceMinor` | 5 |
-
-Canada mirrors the same keys under `regions.CA` with CAD defaults.
-
----
-
-## 15. API & UI
-
-```typescript
-type RegionalPricingConfig = {
-  region: "US" | "CA";
-  currency: "USD" | "CAD";
-  defaultCommissionRate: number;           // e.g. 0.15
-  minCommissionRateFloor: number;
-  platformServiceFeeRate: number;
-  passProcessingFeeToTrainee: boolean;
-  paymentMethodFees: Record<string, { bps: number; fixedMinor: number }>;
-  cogsMinor: {
-    liveSessionPerHour: number;
-    groupClassPerSeatHour: number;
-    pdfUpload: number;
-    clipPerGbMonth: number;
-  };
-  storagePlans: Record<StoragePlanId, { monthlyMinor: number; yearlyMinor: number }>;
-  stripeTaxEnabled: boolean;
-  stripeTaxRegistrationIds: string[];      // per state / province
-  fxUsdCad?: number;                       // if auto-convert list prices
-  quoteToleranceMinor: number;
-};
-```
-
-Store as `pricing_config_us` and `pricing_config_ca`, or single doc with `regions.US` / `regions.CA`.
-
-**Wallet flags** (`src/config/wallet.ts`):
-
-```typescript
-regionCurrency: {
-  US: { currency: "USD", topUpEnabled: true,  walletPayEnabled: true  },
-  CA: { currency: "CAD", topUpEnabled: true,  walletPayEnabled: true  }, // enable at CA launch
-  DEFAULT: { currency: "USD", ... },
-}
-```
-
----
-
-## 15. API & UI
-
-### 15.1 Quote endpoint
-
-`POST /payments/quote`
-
-**USA request**
-
-```json
-{
-  "region": "US",
-  "currency": "USD",
-  "productType": "session_booking",
-  "trainerId": "...",
-  "sessionSubtotalCents": 10000,
-  "paymentMethodHint": "card_domestic_us",
-  "billingAddress": {
-    "country": "US",
-    "state": "TX",
-    "postal_code": "78701",
-    "city": "Austin",
-    "line1": "..."
-  }
-}
-```
-
-**Canada request**
-
-```json
-{
-  "region": "CA",
-  "currency": "CAD",
-  "productType": "session_booking",
-  "trainerId": "...",
-  "sessionSubtotalCents": 13500,
-  "paymentMethodHint": "card_domestic_ca",
-  "billingAddress": {
-    "country": "CA",
-    "state": "ON",
-    "postal_code": "M5V 2T6",
-    "city": "Toronto",
-    "line1": "..."
-  }
-}
-```
-
-**Response fields:** `sessionSubtotalCents`, `platformFeeCents`, `processingFeeCents`, `taxCents`, `totalCents`, `trainerNetCents`, `platformNetMarginCents`, `region`, `currency`, `taxBreakdown[]`.
-
-### 15.2 PaymentIntent metadata
-
-```json
-{
-  "region": "CA",
-  "currency": "CAD",
-  "sessionSubtotalCents": "13500",
-  "platformFeeCents": "2025",
-  "processingFeeCents": "422",
-  "taxCents": "1810",
-  "trainer_id": "...",
-  "sessionId": "...",
-  "kind": "session_booking"
-}
-```
-
-Escrow release uses **`sessionSubtotalCents`** + **`platformFeeCents`** only (excludes tax & processing).
-
-### 15.3 Checkout UI (web + mobile)
-
-1. Detect region from profile or billing address  
-2. Show prices in **USD** or **CAD** with correct tax label:
-   - US: **“Sales tax”** (+ state name when known)
-   - CA: **“GST”**, **“HST”**, **“PST”**, or **“QST”** per Stripe Tax breakdown  
-3. Show processing fee line  
-4. Hide US-only methods (`cashapp`, `amazon_pay`) for Canadian trainees  
-5. Require postal code before final tax quote  
-
----
-
-## 16. Quick reference — session totals by region
-
-### USA — $100 session (15% commission, $0.40 COGS)
-
-| Payment method | Tax locale | Processing | Tax | **Total** | Platform net |
-|----------------|------------|------------|-----|-----------|--------------|
-| US domestic card | TX 8.25% | $3.20 | $8.51 | **$111.71** | $11.40 |
-| US domestic card | CA 9.50% | $3.20 | $9.80 | **$113.00** | $11.40 |
-| US domestic card | OR 0% | $3.20 | $0.00 | **$103.20** | $11.40 |
-| International card | TX 8.25% | $4.70 | $8.64 | **$113.34** | $9.90 |
-| Wallet | TX 8.25% | $0.00 | $8.25 | **$108.25** | $14.60 |
-
-### Canada — C$135 session (15% commission, C$0.53 COGS)
-
-| Payment method | Province | Processing | Tax | **Total** | Platform net |
-|----------------|----------|------------|-----|-----------|--------------|
-| CA domestic card | ON (13% HST) | C$4.22 | C$18.10 | **C$157.32** | C$15.50 |
-| CA domestic card | AB (5% GST) | C$4.22 | C$6.96 | **C$146.18** | C$15.50 |
-| CA domestic card | BC (12%) | C$4.22 | C$16.71 | **C$155.93** | C$15.50 |
-| CA domestic card | QC (14.975%) | C$4.22 | C$20.85 | **C$160.07** | C$15.50 |
-| International card | ON | C$5.30 | C$18.24 | **C$158.54** | C$14.42 |
-
----
-
-## 17. Implementation phases
-
-| Phase | Scope |
-|-------|-------|
-| **0** | Add `cad` to `supportedCurrencies`; unify commission defaults |
-| **1** | `pricing_config` for `US` + `CA`; `POST /payments/quote` |
-| **2** | Region-aware PI creation; pass processing fee to trainee |
-| **3** | Stripe Tax — US state + CA GST/HST/PST/QST registrations |
-| **4** | CAD storage plans + dual-currency trainer rates |
-| **5** | Enable CA wallet (`regionCurrency.CA`); margin dashboard by region |
-
-**Backend touchpoints:** `stripe.ts`, `escrowService.ts`, `topUpService.ts`, `storageService.ts`, new `pricingService.ts`, `config/pricing.ts`.
-
----
-
-## 18. Edge cases (US + CA)
-
-| Case | Rule |
-|------|------|
-| US trainee books US trainer | USD end-to-end |
-| CA trainee books US trainer | CAD checkout; convert list or use trainer `hourly_rate_cad` |
-| US trainee books CA trainer | USD checkout; convert or dual list |
-| Refund | Refund **total paid** in original currency; Stripe fee mostly non-refundable |
-| Promo code | Apply to `sessionSubtotal` only |
-| Free session | Skip PI if total ≤ 0 |
-| Cross-border tax | Tax = **trainee province/state** (place of consumption) |
-| Quebec French UI | Show **TPS/TVQ** labels on receipts |
-
----
-
-## 19. Sign-off checklist
-
-- [ ] Stripe **US** and **CA** pricing verified on dashboard  
-- [ ] Stripe Tax registrations: US nexus states + CA GST/HST (+ QST if QC)  
-- [ ] CPA / tax advisor sign-off (marketplace facilitator US + Canadian B2C services)  
-- [ ] CAD storage + session list prices in admin  
-- [ ] `supportedCurrencies` includes `cad`; checkout restricted to US/CA  
-- [ ] US-only payment methods hidden for CA users  
-- [ ] Terms of Service updated (processing + tax by region)  
-- [ ] Quote → PI → escrow tested in USD and CAD  
-
----
-
-## 20. Glossary
-
-| Term | Definition |
-|------|------------|
-| **Region** | `US` or `CA` — drives currency, fees, tax |
-| **List price** | Trainer-published hourly rate in USD or CAD |
-| **HST** | Harmonized Sales Tax (Canada — ON, Atlantic) |
-| **GST / PST / QST** | Canadian federal / provincial / Quebec sales taxes |
+| Term | Meaning |
+|------|---------|
+| **List price** | Coach-published session price (e.g. $100/hr) |
+| **Commission** | NetQwix % taken from coach earnings on that list price |
+| **Platform fee** | Flat per-session fee (trainee side and/or coach side) |
+| **Processing fee** | Stripe cost for card/wallet rails |
+| **Escrow** | Funds held until session completes |
+| **Quote** | Itemized price computed before payment; locked at booking |
+| **HST / GST / PST / QST** | Canadian sales taxes |
 | **Sales tax** | US state + local transaction tax |
-| **Processing fee** | Stripe cost passed to trainee or absorbed by platform |
-| **Gross-up** | Back-solve total so trainer net is fixed |
 
 ---
 
-*This document is the source of truth for **USA and Canada** payment pricing. Implementation PRs should link here and update §3 when behavior ships.*
+# Appendices
+
+*The following sections support Finance, Legal, and Engineering. They are not required for executive review.*
+
+---
+
+## Appendix A: Payment processing rates
+
+### United States (representative)
+
+| Method | Variable | Fixed (USD) |
+|--------|----------|-------------|
+| US card | 2.90% | $0.30 |
+| Non-US card on US charge | 4.40% | $0.30 |
+| Apple Pay / Google Pay / Link / Amazon Pay / Cash App | Same as underlying card | |
+| NetQwix Wallet (at session) | 0% | $0.00 |
+
+### Canada (representative)
+
+| Method | Variable | Fixed (CAD) |
+|--------|----------|-------------|
+| Canadian card | 2.90% | C$0.30 |
+| Non-CA card on CAD charge | 3.70% | C$0.30 |
+| Apple Pay / Google Pay / Link / Interac | Same as underlying card | |
+| NetQwix Wallet | 0% | C$0.00 |
+
+**Not in Canada:** Amazon Pay, Cash App.
+
+Confirm all rates on the [Stripe dashboard](https://dashboard.stripe.com) contract.
+
+---
+
+## Appendix B: Tax quick reference
+
+### United States
+
+- **Engine:** Stripe Tax (recommended) with billing address.  
+- **Rates:** 0%–~10.25%+ by state/locality (e.g. TX **8.25%**, OR **0%**).  
+- **Wallet top-up:** Not taxable (stored value).  
+- **Action:** CPA review for marketplace facilitator nexus by state.
+
+### Canada
+
+- **Engine:** Stripe Tax with GST/HST (+ QST in Quebec).  
+- **Examples:** ON HST **13%** · AB GST **5%** · BC **12%** · QC **~14.975%**.  
+- **Small supplier:** GST/HST registration often required above **C$30,000** revenue.  
+- **Action:** Register GST/HST; separate QST in Quebec if applicable.
+
+---
+
+## Appendix C: Session totals quick reference
+
+*Based on $100 USD session, 15% commission in table below; use [Reference transaction](#reference-transaction-100-session) for **20%** example.*
+
+### USA — $100 session
+
+| Payment | Tax (example) | Processing | Tax $ | **Trainee total** |
+|---------|---------------|------------|-------|-------------------|
+| US card | Texas 8.25% | $3.21 | $8.56 | **$112.27** |
+| US card | California 9.5% | $3.20 | $9.80 | **$113.00** |
+| US card | Oregon 0% | $3.20 | $0.00 | **$103.20** |
+| International card | Texas 8.25% | $4.70 | $8.64 | **$113.34** |
+| Wallet only | Texas 8.25% | $0.00 | $8.25 | **$108.25** |
+
+### Canada — C$135 session (15% commission)
+
+| Province | Processing | Tax | **Trainee total** |
+|----------|------------|-----|-------------------|
+| ON (13% HST) | C$4.22 | C$18.10 | **C$157.32** |
+| AB (5% GST) | C$4.22 | C$6.96 | **C$146.18** |
+| BC (12%) | C$4.22 | C$16.71 | **C$155.93** |
+| QC (14.975%) | C$4.22 | C$20.85 | **C$160.07** |
+
+### Storage (example — Plus plan)
+
+| Market | List | Approx. total/mo |
+|--------|------|------------------|
+| US (TX tax) | $3.00 | ~$3.67 |
+| CA (ON HST) | C$4.00 | ~C$4.99 |
+
+---
+
+## Appendix D: Admin configuration map
+
+| Business setting | Admin location |
+|------------------|----------------|
+| Global commission % | Admin home |
+| Per-trainer commission % | Manage trainers |
+| US/CA platform fees, default commission, processing toggle | Pricing & fees |
+| Payment method rates | Pricing & fees → US/CA grids |
+| Preview impact | Pricing & fees → Quote simulator |
+| Booking fee audit | Finance → booking detail / escrow columns |
+
+Default technical values (e.g. 15% in seed config) are overridden by admin publishes — **set production % before launch**.
+
+---
+
+## Appendix E: Edge cases (operations)
+
+| Category | Scenario | Rule |
+|----------|----------|------|
+| **Commission** | Trainer override vs global | Trainer wins |
+| **Commission** | Rate changed after booking | Quote **snapshot** at booking time |
+| **Commission** | 0% override | Allowed if explicitly set |
+| **Checkout** | International card | Higher processing; re-quote when card known |
+| **Checkout** | Wallet pays full session | No processing at session |
+| **Checkout** | Wallet + card split | Prorate processing on card portion — *to build* |
+| **Tax** | No address yet | Estimated tax; final at Stripe Tax |
+| **Tax** | Refund after payment | Refund total paid; tax reversal via Stripe |
+| **Escrow** | Session cancelled | Refund per policy; claw back coach portion |
+| **Escrow** | Dispute / chargeback | Freeze; manual admin |
+| **Wallet** | Top-up fails | No balance credit |
+| **Payout** | No Stripe Connect | Block bank payout; onboarding CTA |
+| **Cross-border** | US coach, CA trainee | CAD checkout; dual list price recommended |
+
+Full engineering checklist available in repo implementation tracking.
+
+---
+
+## Appendix F: Technical reference (engineering)
+
+| Item | Detail |
+|------|--------|
+| Quote API | `POST /payments/quote` |
+| Admin config API | `GET/PUT /admin/pricing-config` |
+| Commission resolution | `trainer.commission` → `admin_setting.commission` → `pricing_config` regional default |
+| Key modules | `pricingService.ts`, `stripe.ts`, `escrowService.ts`, `topUpService.ts`, `payoutService.ts` |
+| Feature flags | `PRICING_QUOTE_ENABLED`, `STRIPE_TAX_ENABLED`, `WALLET_ENABLED` |
+| Escrow metadata | Snapshots subtotal, commission, fees, tax, trainer net at charge time |
+
+---
+
+*Document owner: Product / Engineering · Questions: link PRs to this file and update [Delivery status](#delivery-status) when capabilities ship.*
