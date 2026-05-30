@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import { BOOKED_SESSIONS_STATUS, CONSTANCE, EVENTS } from "../../config/constance";
 import { SESSION_EXTENSION } from "../../config/sessionExtension";
+import { PRICING_QUOTE_ENABLED } from "../../config/pricing";
+import { buildQuote } from "../payments/pricingService";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { StripeHelper } from "../../helpers/stripe";
 import { checkBothPartiesBookingConflict } from "../../Utils/bookingConflict";
@@ -237,6 +239,16 @@ export class SessionExtensionService {
       const hourlyRate = Number(trainer?.extraInfo?.hourly_rate ?? 0);
       const amount = Number(((hourlyRate / 60) * minutes).toFixed(2));
 
+      let pricingQuote = null;
+      if (PRICING_QUOTE_ENABLED) {
+        pricingQuote = await buildQuote({
+          productType: "session_extension",
+          sessionSubtotalCents: Math.round(amount * 100),
+          trainerId: String(booking.trainer_id),
+          paymentMethodHint: "card_domestic_us",
+        });
+      }
+
       const effectiveEnd = getEffectiveEnd(booking);
       const newEndTimeUtc = new Date(
         effectiveEnd.getTime() + minutes * 60 * 1000
@@ -300,6 +312,7 @@ export class SessionExtensionService {
           trainerStripeId: trainer?.stripe_account_id ?? null,
           commission: trainer?.commission ?? "0",
           remainingSeconds: timerState?.remainingSeconds ?? null,
+          pricingQuote,
         },
         "EXTENSION_QUOTE"
       );
@@ -407,6 +420,9 @@ export class SessionExtensionService {
         commission: trainer?.commission ?? "0",
         customer: body.customer,
         couponCode: body.couponCode,
+        quoteId: (body as any).quoteId,
+        billingAddress: (body as any).billingAddress,
+        paymentMethodHint: (body as any).paymentMethodHint,
         _userId: body._userId,
         _userType: body._userType || "Trainee",
         _bookingType: "session_extension",

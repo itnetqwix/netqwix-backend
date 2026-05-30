@@ -6,6 +6,12 @@ import { walletAccountService } from "./walletAccountService";
 import { ledgerService } from "./ledgerService";
 import { escrowService } from "./escrowService";
 import { pinService } from "./pinService";
+import {
+  buildQuote,
+  getCachedQuote,
+  validateQuoteForPayment,
+} from "../payments/pricingService";
+import { PRICING_QUOTE_ENABLED } from "../../config/pricing";
 import wallet_accounts from "../../model/wallet_accounts.schema";
 import wallet_ledger_entries from "../../model/wallet_ledger_entries.schema";
 import booked_session from "../../model/booked_sessions.schema";
@@ -30,12 +36,38 @@ export class WalletPaymentService {
     pinSessionToken?: string;
     kind: "extension" | "booking";
     idempotencyKey?: string;
+    quoteId?: string;
+    paymentMethodHint?: string;
+    billingAddress?: { country?: string; state?: string; postal_code?: string };
   }) {
     if (!WALLET_CONFIG.walletPayEnabled || !isRegionWalletEnabled(undefined, "walletPay")) {
       throw new Error("Wallet payments are not enabled.");
     }
 
-    const amountMinor = this.dollarsToMinor(params.amountDollars);
+    let amountMinor = this.dollarsToMinor(params.amountDollars);
+    let feeBreakdown = undefined;
+
+    if (PRICING_QUOTE_ENABLED && params.quoteId) {
+      const quote = await validateQuoteForPayment({
+        quoteId: params.quoteId,
+        sessionSubtotalCents: this.dollarsToMinor(params.amountDollars),
+      });
+      if (quote) {
+        amountMinor = quote.chargeTotalCents;
+        feeBreakdown = escrowService.feeBreakdownFromQuote(quote);
+      }
+    } else if (PRICING_QUOTE_ENABLED) {
+      const quote = await buildQuote({
+        productType: params.kind === "extension" ? "session_extension" : "session_booking",
+        sessionSubtotalCents: amountMinor,
+        trainerId: params.trainerId,
+        paymentMethodHint: params.paymentMethodHint || "wallet_us",
+        billingAddress: params.billingAddress,
+      });
+      amountMinor = quote.chargeTotalCents;
+      feeBreakdown = escrowService.feeBreakdownFromQuote(quote);
+    }
+
     if (amountMinor <= 0) {
       return { paid: true, amountMinor: 0, fundingSource: "wallet" as const };
     }
@@ -74,10 +106,12 @@ export class WalletPaymentService {
         traineeId: params.traineeId,
         trainerId: params.trainerId,
         grossMinor: amountMinor,
-        platformFeeMinor: 0,
+        platformFeeMinor: feeBreakdown?.platformFeePercentMinor ?? 0,
         fundingSource: "wallet",
         kind: params.kind,
         idempotencyKey,
+        feeBreakdown,
+        trainerNetMinor: feeBreakdown?.trainerNetMinor,
       });
     } else {
       await ledgerService.post({

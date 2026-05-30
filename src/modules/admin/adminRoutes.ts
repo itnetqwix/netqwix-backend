@@ -37,8 +37,15 @@ route.use([
   authorizeMiddleware.authorizeUser,
 ]);
 
+import { pricingAdminController } from "./pricingAdminController";
+
 route.post("/update-global-commission", adminController.updateGlobalCommission);
 route.get("/get-global-commission", adminController.getGlobalCommission);
+route.get("/pricing-config", pricingAdminController.getConfig);
+route.put("/pricing-config", pricingAdminController.updateConfig);
+route.get("/pricing-config/history", pricingAdminController.getHistory);
+route.get("/pricing-config/defaults", pricingAdminController.getDefaults);
+route.post("/pricing-config/preview-quote", pricingAdminController.previewQuote);
 route.get("/call-diagnostics", adminController.getCallDiagnostics);
 route.get("/call-quality-summary/:sessionId", adminController.getCallQualitySummary);
 route.get("/user-360/:id", adminController.getUser360);

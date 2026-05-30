@@ -16,7 +16,7 @@ export class CONSTANCE {
       notFound: 404,
     },
   };
-  public static supportedCurrencies = ["usd", "eur", "gbp"]; // Add more supported currencies as needed
+  public static supportedCurrencies = ["usd", "cad"]; // US + Canada only
 
   public static readonly SCHEDULING_SLOTS = {
     trainer_id: "",

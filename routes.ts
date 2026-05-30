@@ -20,6 +20,7 @@ import { storageRoute } from "./src/modules/storage/storageRoutes";
 import { clipsRoute } from "./src/modules/clips/clipsRoutes";
 import { tipsRoute } from "./src/modules/tips/tipsRoutes";
 import { bannersRoute } from "./src/modules/banners/bannersRoutes";
+import { paymentsRoute } from "./src/modules/payments/pricingRoutes";
 export class Routes {
   protected app: express.Application;
   constructor() {}
@@ -47,6 +48,7 @@ export class Routes {
     router.use("/clips", clipsRoute);
     router.use("/tips", tipsRoute);
     router.use("/banners", bannersRoute);
+    router.use("/payments", paymentsRoute);
     router.get("/", (req, res) => {
       res.send("Welcome to NetQwix :) ");
     });

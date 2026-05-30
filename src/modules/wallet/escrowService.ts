@@ -5,6 +5,29 @@ import { WALLET_CONFIG } from "../../config/wallet";
 import { walletAccountService } from "./walletAccountService";
 import { ledgerService } from "./ledgerService";
 import { financialAuditService } from "./financialAuditService";
+import {
+  buildQuote,
+  parseQuoteFromMetadata,
+  QuoteParams,
+  QuoteResult,
+  resolveCommissionRate,
+} from "../payments/pricingService";
+import { PricingRegion } from "../../config/pricing";
+
+export type EscrowFeeBreakdown = {
+  sessionSubtotalMinor: number;
+  traineePlatformFeeMinor: number;
+  trainerPlatformFeeMinor: number;
+  processingFeeMinor: number;
+  taxMinor: number;
+  platformFeePercentMinor: number;
+  commissionRate: number;
+  trainerNetMinor: number;
+  chargeTotalMinor: number;
+  pricingConfigVersion?: number;
+  region?: PricingRegion;
+  currency?: string;
+};
 
 export type EscrowCreateParams = {
   sessionId: string;
@@ -17,33 +40,84 @@ export type EscrowCreateParams = {
   kind?: "booking" | "extension";
   parentHoldId?: string;
   idempotencyKey: string;
+  feeBreakdown?: EscrowFeeBreakdown;
+  trainerNetMinor?: number;
 };
 
 export class EscrowService {
+  computeFeesFromSubtotal(sessionSubtotalMinor: number, commissionRate: number, trainerPlatformFeeMinor = 0) {
+    const platformFeePercentMinor = Math.round(sessionSubtotalMinor * commissionRate);
+    const trainerNetMinor = Math.max(
+      0,
+      sessionSubtotalMinor - platformFeePercentMinor - trainerPlatformFeeMinor
+    );
+    return {
+      platformFeePercentMinor,
+      platformFeeMinor: platformFeePercentMinor,
+      trainerNetMinor,
+    };
+  }
+
+  /** Legacy: gross = session subtotal only */
   computeFees(grossMinor: number, commissionRate: number) {
-    const platformFeeMinor = Math.round(grossMinor * commissionRate);
-    const trainerNetMinor = grossMinor - platformFeeMinor;
-    return { platformFeeMinor, trainerNetMinor };
+    return this.computeFeesFromSubtotal(grossMinor, commissionRate, 0);
+  }
+
+  async resolveFeeBreakdown(params: {
+    trainerId: string;
+    grossMinor: number;
+    feeBreakdown?: EscrowFeeBreakdown;
+    productType?: QuoteParams["productType"];
+    region?: PricingRegion;
+  }): Promise<EscrowFeeBreakdown> {
+    if (params.feeBreakdown) return params.feeBreakdown;
+
+    const commissionRate = await resolveCommissionRate(params.trainerId, params.region || "US");
+    const { platformFeePercentMinor, trainerNetMinor } = this.computeFeesFromSubtotal(
+      params.grossMinor,
+      commissionRate,
+      0
+    );
+    return {
+      sessionSubtotalMinor: params.grossMinor,
+      traineePlatformFeeMinor: 0,
+      trainerPlatformFeeMinor: 0,
+      processingFeeMinor: 0,
+      taxMinor: 0,
+      platformFeePercentMinor,
+      commissionRate,
+      trainerNetMinor,
+      chargeTotalMinor: params.grossMinor,
+    };
+  }
+
+  async buildEscrowFromQuote(quoteParams: QuoteParams): Promise<QuoteResult> {
+    return buildQuote(quoteParams);
   }
 
   async createHold(params: EscrowCreateParams) {
+    const fees = await this.resolveFeeBreakdown({
+      trainerId: params.trainerId,
+      grossMinor: params.feeBreakdown?.sessionSubtotalMinor ?? params.grossMinor,
+      feeBreakdown: params.feeBreakdown,
+    });
+
+    const chargeTotalMinor = fees.chargeTotalMinor || params.grossMinor;
+    const debitMinor = chargeTotalMinor;
+
     const existing = await escrow_holds.findOne({
       session_id: params.sessionId,
       kind: params.kind ?? "booking",
       status: "held",
-      gross_minor: params.grossMinor,
+      charge_total_minor: chargeTotalMinor,
     });
     if (existing) return existing;
 
-    const trainer = await user.findById(params.trainerId).select("commission").lean();
-    const commissionRate = Number(trainer?.commission ?? 0.15);
-    const { platformFeeMinor, trainerNetMinor } =
-      params.platformFeeMinor != null
-        ? {
-            platformFeeMinor: params.platformFeeMinor,
-            trainerNetMinor: params.grossMinor - params.platformFeeMinor,
-          }
-        : this.computeFees(params.grossMinor, commissionRate);
+    const platformFeeMinor =
+      params.platformFeeMinor != null && params.platformFeeMinor > 0
+        ? params.platformFeeMinor
+        : fees.platformFeePercentMinor;
+    const trainerNetMinor = params.trainerNetMinor ?? fees.trainerNetMinor;
 
     const traineeWallet = await walletAccountService.getOrCreateUserWallet({
       userId: params.traineeId,
@@ -63,13 +137,13 @@ export class EscrowService {
           walletAccountId: new mongoose.Types.ObjectId(String(traineeWallet._id)),
           bucket: "available",
           entryType: "debit",
-          amountMinor: params.grossMinor,
+          amountMinor: debitMinor,
         },
         {
           walletAccountId: new mongoose.Types.ObjectId(String(platform._id)),
           bucket: "escrow_held",
           entryType: "credit",
-          amountMinor: params.grossMinor,
+          amountMinor: debitMinor,
         },
       ],
     });
@@ -80,9 +154,19 @@ export class EscrowService {
       trainee_id: params.traineeId,
       trainer_id: params.trainerId,
       trainee_wallet_id: traineeWallet._id,
-      gross_minor: params.grossMinor,
+      currency: fees.currency || "USD",
+      gross_minor: debitMinor,
+      charge_total_minor: chargeTotalMinor,
+      session_subtotal_minor: fees.sessionSubtotalMinor,
+      trainee_platform_fee_minor: fees.traineePlatformFeeMinor,
+      trainer_platform_fee_minor: fees.trainerPlatformFeeMinor,
+      processing_fee_minor: fees.processingFeeMinor,
+      tax_minor: fees.taxMinor,
       platform_fee_minor: platformFeeMinor,
       trainer_net_minor: trainerNetMinor,
+      commission_rate: fees.commissionRate,
+      pricing_config_version: fees.pricingConfigVersion || 1,
+      fee_breakdown: fees,
       funding_source: params.fundingSource,
       stripe_payment_intent_id: params.stripePaymentIntentId,
       ledger_hold_entry_ids: ledgerResult.entryIds,
@@ -97,8 +181,15 @@ export class EscrowService {
       entity_type: "escrow_hold",
       entity_id: String(hold._id),
       user_id: params.traineeId as any,
-      amount_minor: params.grossMinor,
-      meta: { sessionId: params.sessionId, fundingSource: params.fundingSource },
+      amount_minor: debitMinor,
+      meta: {
+        sessionId: params.sessionId,
+        fundingSource: params.fundingSource,
+        traineePlatformFeeMinor: fees.traineePlatformFeeMinor,
+        trainerPlatformFeeMinor: fees.trainerPlatformFeeMinor,
+        processingFeeMinor: fees.processingFeeMinor,
+        taxMinor: fees.taxMinor,
+      },
     });
 
     return hold;
@@ -120,13 +211,31 @@ export class EscrowService {
       if (bySession) return bySession;
     }
 
-    /** Card-funded escrow: funds on platform via Stripe PI; ledger records liability in escrow_held */
-    const trainer = await user.findById(params.trainerId).select("commission").lean();
-    const commissionRate = Number(trainer?.commission ?? 0.15);
-    const { platformFeeMinor, trainerNetMinor } = this.computeFees(
-      params.grossMinor,
-      commissionRate
-    );
+    let fees = params.feeBreakdown;
+    if (!fees && params.grossMinor) {
+      fees = {
+        sessionSubtotalMinor: params.grossMinor,
+        traineePlatformFeeMinor: 0,
+        trainerPlatformFeeMinor: 0,
+        processingFeeMinor: 0,
+        taxMinor: 0,
+        platformFeePercentMinor: params.platformFeeMinor || 0,
+        commissionRate: 0.15,
+        trainerNetMinor: params.grossMinor - (params.platformFeeMinor || 0),
+        chargeTotalMinor: params.grossMinor,
+      };
+    }
+    if (!fees) {
+      fees = await this.resolveFeeBreakdown({
+        trainerId: params.trainerId,
+        grossMinor: params.grossMinor,
+      });
+    }
+
+    const chargeTotalMinor = fees.chargeTotalMinor || params.grossMinor;
+    const platformFeeMinor = fees.platformFeePercentMinor;
+    const trainerNetMinor = fees.trainerNetMinor;
+
     const platform = await walletAccountService.getOrCreatePlatformAccount();
     const traineeWallet = await walletAccountService.getOrCreateUserWallet({
       userId: params.traineeId,
@@ -145,13 +254,13 @@ export class EscrowService {
             walletAccountId: new mongoose.Types.ObjectId(String(platform._id)),
             bucket: "escrow_held",
             entryType: "credit",
-            amountMinor: params.grossMinor,
+            amountMinor: chargeTotalMinor,
           },
           {
             walletAccountId: new mongoose.Types.ObjectId(String(platform._id)),
             bucket: "available",
             entryType: "debit",
-            amountMinor: params.grossMinor,
+            amountMinor: chargeTotalMinor,
           },
         ],
       });
@@ -163,15 +272,60 @@ export class EscrowService {
       trainee_id: params.traineeId,
       trainer_id: params.trainerId,
       trainee_wallet_id: traineeWallet._id,
-      gross_minor: params.grossMinor,
+      currency: fees.currency || "USD",
+      gross_minor: chargeTotalMinor,
+      charge_total_minor: chargeTotalMinor,
+      session_subtotal_minor: fees.sessionSubtotalMinor,
+      trainee_platform_fee_minor: fees.traineePlatformFeeMinor,
+      trainer_platform_fee_minor: fees.trainerPlatformFeeMinor,
+      processing_fee_minor: fees.processingFeeMinor,
+      tax_minor: fees.taxMinor,
       platform_fee_minor: platformFeeMinor,
       trainer_net_minor: trainerNetMinor,
+      commission_rate: fees.commissionRate,
+      pricing_config_version: fees.pricingConfigVersion || 1,
+      fee_breakdown: fees,
       funding_source: params.fundingSource,
       stripe_payment_intent_id: params.stripePaymentIntentId,
       status: "held",
       release_eligible_at: new Date(Date.now() + clearanceMs),
       kind: params.kind ?? "booking",
     });
+  }
+
+  feeBreakdownFromQuote(quote: QuoteResult): EscrowFeeBreakdown {
+    return {
+      sessionSubtotalMinor: quote.discountedSubtotalCents,
+      traineePlatformFeeMinor: quote.traineePlatformFeeCents,
+      trainerPlatformFeeMinor: quote.trainerPlatformFeeCents,
+      processingFeeMinor: quote.processingFeeCents,
+      taxMinor: quote.taxCents,
+      platformFeePercentMinor: quote.platformFeePercentCents,
+      commissionRate: quote.commissionRate,
+      trainerNetMinor: quote.trainerNetCents,
+      chargeTotalMinor: quote.chargeTotalCents,
+      pricingConfigVersion: quote.pricingConfigVersion,
+      region: quote.region,
+      currency: quote.currency,
+    };
+  }
+
+  feeBreakdownFromPiMetadata(meta: Record<string, string | undefined>): EscrowFeeBreakdown | null {
+    const parsed = parseQuoteFromMetadata(meta);
+    if (!parsed) return null;
+    return {
+      sessionSubtotalMinor: parsed.sessionSubtotalCents,
+      traineePlatformFeeMinor: parsed.traineePlatformFeeCents,
+      trainerPlatformFeeMinor: parsed.trainerPlatformFeeCents,
+      processingFeeMinor: parsed.processingFeeCents,
+      taxMinor: parsed.taxCents,
+      platformFeePercentMinor: parsed.platformFeePercentCents,
+      commissionRate: parsed.commissionRate,
+      trainerNetMinor: parsed.trainerNetCents,
+      chargeTotalMinor: parsed.chargeTotalCents,
+      region: parsed.region,
+      currency: parsed.currency,
+    };
   }
 
   async listHolds(filter: Record<string, unknown> = {}, page = 1, limit = 25) {

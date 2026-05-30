@@ -56,16 +56,19 @@ export class StripeWebhookService {
           const traineeId = pi.metadata?.trainee_id;
           const trainerId = pi.metadata?.trainer_id;
           if (sessionId && traineeId && trainerId) {
+            const feeBreakdown = escrowService.feeBreakdownFromPiMetadata(pi.metadata || {});
             await escrowService.createCardEscrowRecord({
               sessionId,
               traineeId,
               trainerId,
               grossMinor: pi.amount,
-              platformFeeMinor: 0,
+              platformFeeMinor: feeBreakdown?.platformFeePercentMinor ?? 0,
               fundingSource: "card",
               stripePaymentIntentId: pi.id,
               kind: pi.metadata?.kind === "session_extension" ? "extension" : "booking",
               idempotencyKey: `webhook:escrow:${pi.id}`,
+              feeBreakdown: feeBreakdown || undefined,
+              trainerNetMinor: feeBreakdown?.trainerNetMinor,
             });
           }
         }

@@ -613,6 +613,8 @@ export class TraineeService {
             pinSessionToken: payload.pin_session_token,
             kind: "booking",
             idempotencyKey: `book:wallet:${bookingId}`,
+            quoteId: (payload as any).quote_id,
+            billingAddress: (payload as any).billing_address,
           });
         } catch (walletErr: any) {
           return ResponseBuilder.badRequest(walletErr?.message || "Wallet payment failed.");
@@ -981,6 +983,8 @@ export class TraineeService {
             pinSessionToken: payload.pin_session_token,
             kind: "booking",
             idempotencyKey: `instant:wallet:${bookingId}`,
+            quoteId: (payload as any).quote_id,
+            billingAddress: (payload as any).billing_address,
           });
         } catch (walletErr: any) {
           return ResponseBuilder.badRequest(walletErr?.message || "Wallet payment failed.");
