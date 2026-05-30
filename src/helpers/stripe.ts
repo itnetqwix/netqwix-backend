@@ -4,7 +4,7 @@ import { ResponseBuilder } from "./responseBuilder";
 import * as l10n from "jm-ez-l10n";
 import { PromoCodeService } from "../modules/promo-code/promoCodeService";
 import { WALLET_CONFIG } from "../config/wallet";
-import { PRICING_QUOTE_ENABLED, resolveRegionFromCountry } from "../../config/pricing";
+import { PRICING_QUOTE_ENABLED, resolveRegionFromCountry } from "../config/pricing";
 import {
   getActivePricingConfig,
   buildQuote,
