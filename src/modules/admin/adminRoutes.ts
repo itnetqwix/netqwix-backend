@@ -104,6 +104,7 @@ route.get("/messaging-health", async (_req, res) => {
 route.get("/dashboard-metrics", adminController.getDashboardMetrics);
 route.get("/online-users", adminController.getOnlineUsers);
 route.get("/booking/:bookingId", adminController.getBookingSessionDetail);
+route.get("/booking/:bookingId/timeline", adminController.getBookingSessionTimeline);
 
 route.get("/finance/ledger", adminFinanceController.getLedger);
 route.get("/finance/escrow", adminFinanceController.getEscrowHolds);

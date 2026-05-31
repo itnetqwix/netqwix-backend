@@ -897,6 +897,30 @@ export class userController {
     }
   };
 
+  public getSessionTimeline = async (req: any, res: Response) => {
+    try {
+      if (!req["authUser"]) return;
+      const userId = String(req["authUser"]?._id);
+      const bookingId = String(req.params.bookingId);
+      const { getSessionTimeline } = require("../session/sessionTimelineService");
+      const result = await getSessionTimeline(bookingId, userId);
+      if (!result.ok) {
+        return res.status(result.code).json({
+          success: 0,
+          message: result.error,
+        });
+      }
+      return res
+        .status(CONSTANCE.RES_CODE.success)
+        .json({ status: CONSTANCE.SUCCESS, data: result.timeline });
+    } catch (error) {
+      res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
+        success: 0,
+        message: Message.internal,
+      });
+    }
+  };
+
   public getSessionHandoffSummary = async (req: any, res: Response) => {
     try {
       if (!req["authUser"]) return;

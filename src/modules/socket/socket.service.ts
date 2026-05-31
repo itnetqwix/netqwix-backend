@@ -2094,140 +2094,31 @@ const listenInstantLessonEvents = (socket) => {
     socket.on(EVENTS.INSTANT_LESSON.ACCEPT, async (payload: any, callback?: (res: unknown) => void) => {
       try {
         const { lessonId, coachId, traineeId } = payload;
-        
         if (!lessonId || !coachId || !traineeId) {
           callback?.({ ok: false, error: "missing_fields" });
           return;
         }
-
-        const booking = await booked_session.findById(lessonId).lean();
-        if (
-          !booking?.is_instant ||
-          String(booking.trainer_id) !== String(coachId) ||
-          String(booking.trainee_id) !== String(traineeId) ||
-          booking.status !== BOOKED_SESSIONS_STATUS.BOOKED
-        ) {
-          callback?.({ ok: false, error: "invalid_booking" });
-          return;
-        }
-
-        const requestedAt = booking.createdAt
-          ? new Date(booking.createdAt)
-          : new Date(booking.booked_date);
-        if (Date.now() - requestedAt.getTime() > INSTANT_ACCEPT_WINDOW_MS) {
-          await runInstantLessonExpire(lessonId, coachId, traineeId, socket);
-          callback?.({ ok: false, error: "expired" });
-          return;
-        }
-
-        const start = booking.start_time ? new Date(booking.start_time) : null;
-        const end = booking.end_time ? new Date(booking.end_time) : null;
-        if (start && end) {
-          const conflictMsg = await checkTrainerBookingConflict(
-            coachId,
-            start,
-            end,
-            String(lessonId)
-          );
-          if (conflictMsg) {
-            callback?.({ ok: false, error: "conflict", message: conflictMsg });
-            return;
-          }
-        }
-
-        const acceptedAt = new Date();
-        const joinDeadlineAt = new Date(
-          acceptedAt.getTime() + INSTANT_JOIN_AFTER_ACCEPT_MS
-        );
-        const updatedBooking = await booked_session.findOneAndUpdate(
-          {
-            _id: lessonId,
-            is_instant: true,
-            trainer_id: coachId,
-            trainee_id: traineeId,
-            status: BOOKED_SESSIONS_STATUS.BOOKED,
-          },
-          {
-            $set: {
-              status: BOOKED_SESSIONS_STATUS.confirm,
-              accepted_at: acceptedAt,
-              instant_phase: INSTANT_PHASE.PENDING_JOIN,
-              join_deadline_at: joinDeadlineAt,
-            },
-          },
-          { new: true }
-        );
-
-        if (!updatedBooking) {
-          callback?.({ ok: false, error: "not_updated" });
-          return;
-        }
-
-        clearInstantLessonTimers(lessonId);
-        scheduleInstantLessonJoinExpiry(lessonId, coachId, traineeId, acceptedAt);
-
-        /** Instant lessons use INSTANT_LESSON_PHASE + notifySessionUser — avoid stacked "Session confirmed" pushes. */
-        if (emitBookingStatusUpdatedDelegate && !updatedBooking.is_instant) {
-          void emitBookingStatusUpdatedDelegate(updatedBooking);
-        }
-
-        const acceptPayload = {
+        const { acceptInstantLessonAction } = require("../instant-lesson/instantLessonActions");
+        const result = await acceptInstantLessonAction({
           lessonId,
           coachId,
           traineeId,
-          acceptedAt: acceptedAt.toISOString(),
-          joinDeadlineAt: joinDeadlineAt.toISOString(),
-          phase: INSTANT_PHASE.PENDING_JOIN,
-        };
-
-        emitInstantLessonPhase(
-          lessonId,
-          coachId,
-          traineeId,
-          INSTANT_PHASE.PENDING_JOIN,
-          {
-            acceptedAt: acceptedAt.toISOString(),
-            joinDeadlineAt: joinDeadlineAt.toISOString(),
-          },
-          socket
-        );
-
-        const coachSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, coachId);
-        const traineeSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId);
-
-        if (coachSocketId) {
-          socket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.ACCEPT, acceptPayload);
-        }
-        if (traineeSocketId) {
-          socket.to(traineeSocketId).emit(EVENTS.INSTANT_LESSON.ACCEPT, acceptPayload);
-        }
-        const coachUser = await user.findById(coachId).select("fullname").lean();
-        const acceptedN = INSTANT_NOTIFICATION.accepted((coachUser as any)?.fullname);
-        void notifySessionUser(
-          {
-            receiverId: traineeId,
-            senderId: coachId,
-            title: acceptedN.title,
-            description: acceptedN.description,
-            bookingId: lessonId,
-            kind: acceptedN.kind,
-            extra: { joinDeadlineAt: joinDeadlineAt.toISOString() },
-          },
-          ioInstance
-        );
-
-        logInstantLessonOps("INSTANT_LESSON_ACCEPT", {
-          lessonId,
-          coachId,
-          traineeId,
-          title: "Instant lesson accepted",
-          payload: { acceptedAt: acceptedAt.toISOString() },
         });
-
+        if (!result.ok) {
+          if (result.error === "expired") {
+            await runInstantLessonExpire(lessonId, coachId, traineeId, socket);
+          }
+          callback?.({
+            ok: false,
+            error: result.error,
+            message: result.message,
+          });
+          return;
+        }
         callback?.({
           ok: true,
-          acceptedAt: acceptedAt.toISOString(),
-          joinDeadlineAt: joinDeadlineAt.toISOString(),
+          acceptedAt: result.acceptedAt,
+          joinDeadlineAt: result.joinDeadlineAt,
         });
       } catch (_err) {
         callback?.({ ok: false, error: "server_error" });
@@ -2238,60 +2129,11 @@ const listenInstantLessonEvents = (socket) => {
     socket.on(EVENTS.INSTANT_LESSON.DECLINE, async (payload: any) => {
       try {
         const { lessonId, coachId, traineeId } = payload;
-        
         if (!lessonId || !coachId || !traineeId) {
           return;
         }
-
-        await booked_session.findOneAndUpdate(
-          { _id: lessonId, is_instant: true, status: BOOKED_SESSIONS_STATUS.BOOKED },
-          {
-            $set: {
-              status: BOOKED_SESSIONS_STATUS.cancel,
-              instant_phase: INSTANT_PHASE.CANCELLED,
-              refund_reason: INSTANT_REFUND_REASON.DECLINED,
-            },
-          }
-        );
-        clearInstantLessonTimers(lessonId);
-        void refundSessionEscrow(lessonId, INSTANT_REFUND_REASON.DECLINED);
-        emitInstantLessonPhase(
-          lessonId,
-          coachId,
-          traineeId,
-          INSTANT_PHASE.CANCELLED,
-          { refundReason: INSTANT_REFUND_REASON.DECLINED },
-          socket
-        );
-
-        const traineeSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, traineeId);
-        if (traineeSocketId) {
-          socket.to(traineeSocketId).emit(EVENTS.INSTANT_LESSON.DECLINE, {
-            lessonId,
-            coachId,
-            traineeId,
-          });
-        }
-        const coachUser = await user.findById(coachId).select("fullname").lean();
-        const declinedN = INSTANT_NOTIFICATION.declined((coachUser as any)?.fullname);
-        void notifySessionUser(
-          {
-            receiverId: traineeId,
-            senderId: coachId,
-            title: declinedN.title,
-            description: declinedN.description,
-            bookingId: lessonId,
-            kind: declinedN.kind,
-          },
-          ioInstance
-        );
-        logInstantLessonOps("INSTANT_LESSON_DECLINE", {
-          lessonId,
-          coachId,
-          traineeId,
-          severity: "warning",
-          title: "Instant lesson declined",
-        });
+        const { declineInstantLessonAction } = require("../instant-lesson/instantLessonActions");
+        await declineInstantLessonAction({ lessonId, coachId, traineeId });
       } catch (_err) {
         /* intentionally quiet */
       }

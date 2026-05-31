@@ -147,6 +147,7 @@ route.get("/booking-list-by-id",userC.getAllBookingById);
 route.get("/booking/:bookingId",userC.getBookingById);
 route.get("/session-detail/:bookingId", userC.getSessionDetail);
 route.get("/session-join-readiness/:bookingId", userC.getSessionJoinReadiness);
+route.get("/session-timeline/:bookingId", userC.getSessionTimeline);
 route.get("/session-handoff/:bookingId", userC.getSessionHandoffSummary);
 route.put("/stripe-account-verification",userC.createStripeAccountVarificationUrl);
 route.get("/check-stripe-verification",userC.checkIsKycCompleted);

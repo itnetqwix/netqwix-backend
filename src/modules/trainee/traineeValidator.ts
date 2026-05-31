@@ -178,11 +178,16 @@ export class checkSlotExistModal extends model {
   @IsDateString()
   public booked_date: Date;
 
+  @IsNotEmpty()
+  @IsString()
+  public traineeTimeZone: string;
+
   constructor(body) {
     super();
-    const { trainer_id, slotTime, booked_date } = body;
+    const { trainer_id, slotTime, booked_date, traineeTimeZone } = body;
     this.slotTime = slotTime;
     this.trainer_id = trainer_id;
     this.booked_date = booked_date;
+    this.traineeTimeZone = String(traineeTimeZone ?? "");
   }
 }

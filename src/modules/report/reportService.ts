@@ -131,8 +131,13 @@ export class ReportService {
     }
     const format = String(data?.format ?? "webm").toLowerCase();
     const useM4a = format === "m4a";
-    const ext = useM4a ? ".m4a" : ".webm";
-    const contentType = useM4a ? "audio/mp4" : "video/webm";
+    const useMp4 = format === "mp4";
+    const ext = useM4a ? ".m4a" : useMp4 ? ".mp4" : ".webm";
+    const contentType = useM4a
+      ? "audio/mp4"
+      : useMp4
+        ? "video/mp4"
+        : "video/webm";
     const filename = "session-rec-" + new Date().getTime().toString() + ext;
     const isReportExist = await Report.findOne({
       sessions: data?.sessions,
@@ -225,6 +230,14 @@ export class ReportService {
   }
 
   public async cropImage(data: any): Promise<ResponseBuilder> {
+    const access = await assertTrainerOwnsSession(
+      String(data?.trainer),
+      String(data?.sessions),
+      data?.trainee ? String(data.trainee) : undefined
+    );
+    if (!access.ok) {
+      return ResponseBuilder.badRequest(access.error, access.code);
+    }
     var filename = "file-" + new Date().getTime().toString() + ".png";
     const isReportExist = await Report.findOne({
       sessions: data?.sessions,
@@ -257,9 +270,18 @@ export class ReportService {
         return ResponseBuilder.errorMessage(l10n.t("ERR_INTERNAL_SERVER"));
       }
     }
+    return ResponseBuilder.badRequest("Report not found.", 404);
   }
 
   public async removeImage(data: any): Promise<ResponseBuilder> {
+    const access = await assertTrainerOwnsSession(
+      String(data?.trainer),
+      String(data?.sessions),
+      data?.trainee ? String(data.trainee) : undefined
+    );
+    if (!access.ok) {
+      return ResponseBuilder.badRequest(access.error, access.code);
+    }
     const isReportExist = await Report.findOne({
       sessions: data?.sessions,
       trainee: data?.trainee,
@@ -278,6 +300,7 @@ export class ReportService {
       );
       return ResponseBuilder.successMessage("Success");
     }
+    return ResponseBuilder.badRequest("Report not found.", 404);
   }
 
   public async getReport(data: any): Promise<ResponseBuilder> {
@@ -558,14 +581,25 @@ export class ReportService {
     }
   }
 
-  public async deleteReport(id: string): Promise<ResponseBuilder> {
+  public async deleteReport(
+    id: string,
+    trainerId: string
+  ): Promise<ResponseBuilder> {
     try {
       if (!mongoose.isValidObjectId(id)) {
         return ResponseBuilder.badRequest(l10n.t("Invalid ID"));
       }
-      var report = await Report.findByIdAndUpdate(id, {
-        $set: { status: false },
-      });
+      const existing = await Report.findById(id).select("trainer status").lean();
+      if (!existing) {
+        return ResponseBuilder.badRequest(l10n.t(Message.notFoundData));
+      }
+      if (String(existing.trainer) !== String(trainerId)) {
+        return ResponseBuilder.badRequest("Not allowed to delete this report.", 403);
+      }
+      var report = await Report.findOneAndUpdate(
+        { _id: id, trainer: trainerId },
+        { $set: { status: false } }
+      );
       if (!report) {
         return ResponseBuilder.badRequest(l10n.t(Message.notFoundData));
       }

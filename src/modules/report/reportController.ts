@@ -113,10 +113,14 @@ export class reportController {
   };
   
   public deleteReport = async (req: any, res: Response) => {
-    const { id } = req.params ;
+    const { id } = req.params;
+    const trainerId = String(req.authUser?._id ?? "");
     try {
-      const result: ResponseBuilder = await this.reportService.deleteReport(id);
-      return res.status(result.code).json({result});
+      const result: ResponseBuilder = await this.reportService.deleteReport(
+        id,
+        trainerId
+      );
+      return res.status(result.code).json({ result });
     } catch (err) {
       this.logger.error(err);
       return res

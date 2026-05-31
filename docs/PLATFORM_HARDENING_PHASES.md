@@ -27,6 +27,17 @@
 | `book-session` role | `traineeMiddleware.isTrainee` |
 | Dead booking modal | Removed from mobile (unused) |
 
+## Phase 4 — Small backend hardening ✅
+
+| Item | Implementation |
+|------|----------------|
+| `DELETE /report/delete-report/:id` | Trainer ownership in `reportService.deleteReport` |
+| `cropImage` / `removeImage` | `assertTrainerOwnsSession` at service entry |
+| Report routes | Body validators in `reportValidator.ts` on POST routes |
+| `check-slot` | `traineeTimeZone` required in `checkSlotExistModal` |
+| Socket instant accept/decline | Delegates to `instantLessonActions.ts` |
+| Ops session timeline | `GET /user/session-timeline/:bookingId`, `GET /admin/booking/:bookingId/timeline` |
+
 ## Web repo (not in this pass)
 
 - Migrate `updateExtendedSessionTime` to paid extension APIs

@@ -317,6 +317,25 @@ export class AdminController {
     }
   };
 
+  public getBookingSessionTimeline = async (req: Request, res: Response) => {
+    try {
+      const at = String(req["authUser"]?.account_type ?? "").trim().toLowerCase();
+      if (at !== String(AccountType.ADMIN).toLowerCase()) {
+        return res.status(403).json({ status: CONSTANCE.FAIL, error: "Only admin can access session timeline" });
+      }
+      const bookingId = String(req.params.bookingId);
+      const { getSessionTimelineForAdmin } = require("../session/sessionTimelineService");
+      const result = await getSessionTimelineForAdmin(bookingId);
+      if (!result.ok) {
+        return res.status(result.code).json({ status: CONSTANCE.FAIL, error: result.error });
+      }
+      return res.status(200).json({ status: CONSTANCE.SUCCESS, data: result.timeline });
+    } catch (err) {
+      this.logger.error(err);
+      return res.status(500).json({ status: CONSTANCE.FAIL, error: "Internal Server Error" });
+    }
+  };
+
   /** Trainers & trainees with an active Socket.IO connection (same source as ADMIN_ONLINE_USERS). */
   public getOnlineUsers = async (req: Request, res: Response) => {
     try {
