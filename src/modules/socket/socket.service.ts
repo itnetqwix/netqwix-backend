@@ -38,6 +38,13 @@ import { s3, S3_BUCKET } from "../../Utils/s3Client";
 import { touchUserPresence } from "../../helpers/userActivity";
 import { logInstantLessonOps } from "../ops/opsInstantLogger";
 import { logPrecallCheckOps, logCallQualityOps } from "../ops/opsCallLogger";
+import {
+  addLiveNote,
+  getLessonLiveStateSnapshot,
+  setFocusedClip,
+  updateQualitySnapshot,
+} from "../session/lessonLiveStateStore";
+import { persistLessonLiveStateOnEnd } from "../session/sessionSummaryService";
 import { NotificationsService } from "../notifications/notificationsService";
 import {
   notifySessionUser,
@@ -421,6 +428,7 @@ function finalizeLessonParticipantDisconnect(
 }
 
 const emitLessonStateSync = (socket: any, roomName: string, session: LessonSessionState) => {
+  const liveState = getLessonLiveStateSnapshot(session.sessionId, "trainer");
   const statePayload = {
     sessionId: session.sessionId,
     status: session.status,
@@ -431,10 +439,19 @@ const emitLessonStateSync = (socket: any, roomName: string, session: LessonSessi
     traineeConnected: session.userJoined,
     pauseReason: session.pauseReason ?? null,
     pendingExtensionRequest: session.pendingExtensionRequest ?? null,
+    liveState,
   };
 
   lessonRoomEmit(roomName, "LESSON_STATE_SYNC", statePayload);
 };
+
+async function finalizeLessonEnd(sessionId: string): Promise<void> {
+  try {
+    await persistLessonLiveStateOnEnd(sessionId);
+  } catch (err) {
+    console.warn("[LessonLiveState] persist on end failed", err);
+  }
+}
 
 const clearLessonTimeouts = (session: LessonSessionState) => {
   if (session.warningTimeoutId) clearTimeout(session.warningTimeoutId);
@@ -645,6 +662,7 @@ export function resumeLessonTimer(sessionId: string, reason: string) {
     lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.ENDED, endedPayload);
     const stubSocket = { nsp: ioInstance?.to(roomName) };
     emitLessonStateSync(stubSocket, roomName, session);
+    void finalizeLessonEnd(sid);
     lessonSessionsDelete(sid);
     return true;
   }
@@ -704,6 +722,7 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
     };
     lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.ENDED, endedPayload);
     emitLessonStateSync(socket, roomName, session);
+    void finalizeLessonEnd(session.sessionId);
     void releaseAllLessonCallSlotsForSession(session.sessionId);
     lessonSessionsDelete(session.sessionId);
     return;
@@ -721,6 +740,7 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
     };
     lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.ENDED, endedPayload);
     emitLessonStateSync(socket, roomName, session);
+    void finalizeLessonEnd(session.sessionId);
     void releaseAllLessonCallSlotsForSession(session.sessionId);
     lessonSessionsDelete(session.sessionId);
   }, remainingMs);
@@ -1036,6 +1056,20 @@ export const handleSocketEvents = (socket, connections = {}) => {
             userId: String(userId),
             stats,
             role,
+          });
+
+          const qualityRole =
+            role === "trainer" || accountType === "Trainer"
+              ? "trainer"
+              : "trainee";
+          const snap = updateQualitySnapshot(String(sessionId), qualityRole, {
+            overallScore: stats?.quality?.overallScore,
+            rtt: stats?.quality?.rtt,
+          });
+          lessonRoomEmit(`session:${sessionId}`, "LESSON_QUALITY_UPDATE", {
+            sessionId: String(sessionId),
+            role: qualityRole,
+            quality: snap,
           });
         }
       }
@@ -1448,6 +1482,75 @@ export const handleSocketEvents = (socket, connections = {}) => {
       socket.emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
     }
   });
+
+  socket.on(
+    "LESSON_SET_FOCUSED_CLIP",
+    async (payload: { sessionId?: string; clipId?: string; clipTitle?: string }) => {
+      const sessionId = String(payload?.sessionId ?? "");
+      if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
+      const accountType =
+        socket?.user?._doc?.account_type || socket?.user?.account_type;
+      if (accountType !== "Trainer") return;
+
+      setFocusedClip(
+        sessionId,
+        payload?.clipId ? String(payload.clipId) : null,
+        payload?.clipTitle ?? null
+      );
+
+      if (payload?.clipId && mongoose.isValidObjectId(payload.clipId)) {
+        await booked_session.updateOne(
+          { _id: sessionId },
+          { $set: { focused_clip_id: payload.clipId } }
+        );
+      }
+
+      const session = lessonSessionsGet(sessionId);
+      if (session) {
+        emitLessonStateSync(socket, `session:${sessionId}`, session);
+      } else {
+        lessonRoomEmit(`session:${sessionId}`, "LESSON_STATE_SYNC", {
+          sessionId,
+          liveState: getLessonLiveStateSnapshot(sessionId, "trainer"),
+        });
+      }
+    }
+  );
+
+  socket.on(
+    "LESSON_LIVE_NOTE_ADD",
+    (payload: {
+      sessionId?: string;
+      text?: string;
+      elapsedSeconds?: number;
+      sharedWithTrainee?: boolean;
+    }) => {
+      const sessionId = String(payload?.sessionId ?? "");
+      if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
+      const accountType =
+        socket?.user?._doc?.account_type || socket?.user?.account_type;
+      if (accountType !== "Trainer") return;
+      const authorId = socketAttachedUserId(socket);
+      if (!authorId) return;
+
+      addLiveNote(sessionId, {
+        text: String(payload?.text ?? ""),
+        authorId,
+        elapsedSeconds: Number(payload?.elapsedSeconds ?? 0),
+        sharedWithTrainee: !!payload?.sharedWithTrainee,
+      });
+
+      const session = lessonSessionsGet(sessionId);
+      if (session) {
+        emitLessonStateSync(socket, `session:${sessionId}`, session);
+      } else {
+        lessonRoomEmit(`session:${sessionId}`, "LESSON_STATE_SYNC", {
+          sessionId,
+          liveState: getLessonLiveStateSnapshot(sessionId, "trainer"),
+        });
+      }
+    }
+  );
 
   /** Trainee (or reconnecting party) asks the trainer client to re-emit clip/layout state. */
   socket.on("LESSON_MEDIA_REPLAY_REQUEST", ({ sessionId }) => {

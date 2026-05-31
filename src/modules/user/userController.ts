@@ -866,6 +866,53 @@ export class userController {
     }
   };
 
+  public getSessionJoinReadiness = async (req: any, res: Response) => {
+    try {
+      if (!req["authUser"]) return;
+      const userId = String(req["authUser"]?._id);
+      const accountType = req["authUser"]?.account_type;
+      const bookingId = String(req.params.bookingId);
+      const { getSessionJoinReadiness } = require("../session/sessionJoinReadinessService");
+      const readiness = await getSessionJoinReadiness(bookingId, userId, accountType, {
+        authSessionId: req.headers?.["x-auth-session-id"] as string | undefined,
+        deviceId: req.headers?.["x-device-id"] as string | undefined,
+      });
+      if (!readiness) {
+        return res.status(404).json({ success: 0, message: "Session not found." });
+      }
+      return res
+        .status(CONSTANCE.RES_CODE.success)
+        .json({ status: CONSTANCE.SUCCESS, data: readiness });
+    } catch (error) {
+      res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
+        success: 0,
+        message: Message.internal,
+      });
+    }
+  };
+
+  public getSessionHandoffSummary = async (req: any, res: Response) => {
+    try {
+      if (!req["authUser"]) return;
+      const userId = String(req["authUser"]?._id);
+      const accountType = req["authUser"]?.account_type;
+      const bookingId = String(req.params.bookingId);
+      const { getSessionHandoffSummary } = require("../session/sessionSummaryService");
+      const summary = await getSessionHandoffSummary(bookingId, userId, accountType);
+      if (!summary) {
+        return res.status(404).json({ success: 0, message: "Session not found." });
+      }
+      return res
+        .status(CONSTANCE.RES_CODE.success)
+        .json({ status: CONSTANCE.SUCCESS, data: summary });
+    } catch (error) {
+      res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
+        success: 0,
+        message: Message.internal,
+      });
+    }
+  };
+
   public getAllBookingById = async (req: any, res: Response) => {
     try {
       if (req["authUser"]) {

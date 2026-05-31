@@ -1,0 +1,165 @@
+import mongoose from "mongoose";
+import booked_session from "../../model/booked_sessions.schema";
+import clip from "../../model/clip.schema";
+import { SESSION_EXTENSION } from "../../config/sessionExtension";
+import { SessionExtensionService } from "../trainee/sessionExtensionService";
+import { getLessonCallSlotStatus } from "../socket/lessonCallSlotStore";
+import { getLessonTimerSnapshot } from "../socket/socket.service";
+
+const extensionService = new SessionExtensionService();
+
+function formatClipRow(c: any) {
+  const thumb = c?.thumbnail ?? c?.thumbnail_url ?? null;
+  return {
+    _id: String(c._id),
+    title: String(c.title ?? c.name ?? "Clip"),
+    thumbnail: thumb != null ? String(thumb) : null,
+    category: c.category ?? null,
+  };
+}
+
+export async function getSessionJoinReadiness(
+  bookingId: string,
+  userId: string,
+  accountType: string,
+  opts?: { authSessionId?: string; deviceId?: string }
+) {
+  if (!mongoose.isValidObjectId(bookingId)) return null;
+
+  const rows = await booked_session.aggregate([
+    { $match: { _id: new mongoose.Types.ObjectId(bookingId) } },
+    {
+      $lookup: {
+        from: clip.collection.name,
+        localField: "trainee_clip",
+        foreignField: "_id",
+        as: "trainee_clips",
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "trainer_id",
+        foreignField: "_id",
+        as: "trainer_info",
+        pipeline: [{ $project: { _id: 1, fullname: 1, profile_picture: 1 } }],
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "trainee_id",
+        foreignField: "_id",
+        as: "trainee_info",
+        pipeline: [{ $project: { _id: 1, fullname: 1, profile_picture: 1 } }],
+      },
+    },
+    {
+      $addFields: {
+        trainer_info: { $arrayElemAt: ["$trainer_info", 0] },
+        trainee_info: { $arrayElemAt: ["$trainee_info", 0] },
+      },
+    },
+  ]);
+
+  const row = rows[0];
+  if (!row) return null;
+
+  const isTrainer = accountType === "Trainer";
+  const ownerId = isTrainer ? String(row.trainer_id) : String(row.trainee_id);
+  if (ownerId !== String(userId)) return null;
+
+  const peer = isTrainer ? row.trainee_info : row.trainer_info;
+  const clips = (Array.isArray(row.trainee_clips) ? row.trainee_clips : []).map(
+    formatClipRow
+  );
+
+  const slot = await getLessonCallSlotStatus({
+    sessionId: bookingId,
+    userId: String(userId),
+    authSessionId: opts?.authSessionId,
+    deviceId: opts?.deviceId,
+  });
+
+  const timer = getLessonTimerSnapshot(bookingId);
+  const durationMinutes =
+    row.duration_minutes ??
+    (row.start_time && row.end_time
+      ? Math.round(
+          (new Date(row.end_time).getTime() - new Date(row.start_time).getTime()) /
+            60_000
+        )
+      : null);
+
+  let extensionPreview: {
+    minutes: number;
+    amount: number;
+    allowed: boolean;
+    reason?: string;
+  } | null = null;
+
+  if (!isTrainer) {
+    const quoteRes = await extensionService.getQuote(
+      bookingId,
+      10,
+      String(userId)
+    );
+    const quote = (quoteRes as any)?.result ?? {};
+    extensionPreview = {
+      minutes: 10,
+      amount: Number(quote?.amount ?? 0),
+      allowed: quote?.allowed !== false && Number(quote?.amount ?? 0) >= 0,
+      reason: quote?.reason ?? undefined,
+    };
+  } else {
+    extensionPreview = {
+      minutes: SESSION_EXTENSION.BLOCK_MINUTES[1],
+      amount: 0,
+      allowed: false,
+    };
+  }
+
+  return {
+    sessionId: String(row._id),
+    status: row.status,
+    is_instant: !!row.is_instant,
+    instant_phase: row.instant_phase ?? null,
+    duration_minutes: durationMinutes,
+    booked_date: row.booked_date,
+    session_start_time: row.session_start_time,
+    session_end_time: row.session_end_time,
+    time_zone: row.time_zone ?? null,
+    join_deadline_at: row.join_deadline_at ?? null,
+    accept_deadline_at: row.accept_deadline_at ?? null,
+    peer: peer
+      ? {
+          _id: String(peer._id),
+          fullname: peer.fullname ?? null,
+          profile_picture: peer.profile_picture ?? null,
+          role: isTrainer ? "trainee" : "trainer",
+        }
+      : null,
+    clips,
+    clip_count: clips.length,
+    call_slot: slot,
+    timer: timer
+      ? {
+          remainingSeconds: timer.remainingSeconds,
+          status: timer.status,
+        }
+      : null,
+    extension_preview: extensionPreview,
+    iceServers: Array.isArray(row.iceServers) ? row.iceServers : [],
+  };
+}
+
+export async function assertSessionParticipant(bookingId: string, userId: string) {
+  if (!mongoose.isValidObjectId(bookingId)) return false;
+  const row = await booked_session
+    .findById(bookingId)
+    .select("trainer_id trainee_id")
+    .lean();
+  if (!row) return false;
+  const uid = String(userId);
+  return uid === String(row.trainer_id) || uid === String(row.trainee_id);
+}

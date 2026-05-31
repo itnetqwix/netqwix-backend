@@ -235,6 +235,22 @@ const bookedSessionsSchema: Schema = new Schema(
             type: refundTransferSchema,
             required: false,
         },
+        /** Timestamped trainer notes captured during a live lesson. */
+        session_live_notes: [
+            {
+                text: { type: String, required: true },
+                author_id: { type: Schema.Types.ObjectId, ref: "user" },
+                elapsed_seconds: { type: Number, default: 0 },
+                shared_with_trainee: { type: Boolean, default: false },
+                created_at: { type: Date, default: Date.now },
+            },
+        ],
+        /** Last clip the trainer focused for the trainee during the session. */
+        focused_clip_id: {
+            type: Schema.Types.ObjectId,
+            ref: "clip",
+            default: null,
+        },
     },
     { timestamps: true }
 );
