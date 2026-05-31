@@ -14,45 +14,72 @@ import { commonService } from "../common/commonService";
 import * as AWS from "aws-sdk";
 import mongoose from "mongoose";
 import { s3, S3_BUCKET } from "../../Utils/s3Client";
+import { publishSocketEventToSession } from "../../services/eventPubSub";
+import { EVENTS } from "../../config/constance";
+import booked_session from "../../model/booked_sessions.schema";
 
 export class ReportService {
   public log = log.getLogger();
   public commonService = new commonService();
 
   public async createReport(data: any): Promise<ResponseBuilder> {
-    const report = await Report.updateOne(
-      {
-        sessions: data?.sessions,
-        trainee: data?.trainee,
-        trainer: data?.trainer,
-      },
-      {
-        title: data?.title,
-        description: data?.topic,
-        reportData: data?.reportData,
-      }
-    );
+    const filter = {
+      sessions: data?.sessions,
+      trainee: data?.trainee,
+      trainer: data?.trainer,
+    };
+    const hadReport = await Report.findOne(filter).select("_id updatedAt").lean();
+    const report = await Report.updateOne(filter, {
+      title: data?.title,
+      description: data?.topic,
+      reportData: data?.reportData,
+    });
 
     if (report) {
       const traineeId = data?.trainee ? String(data.trainee) : "";
       const trainerId = data?.trainer ? String(data.trainer) : "";
       const sessionId = data?.sessions ? String(data.sessions) : "";
       const title = data?.title ? String(data.title).trim() : "Session game plan";
+      const kind = hadReport ? "game_plan_updated" : "game_plan_saved";
+      let reportPdfKey: string | null = null;
+      if (sessionId && mongoose.isValidObjectId(sessionId)) {
+        try {
+          const booking = await booked_session
+            .findById(sessionId)
+            .select("report")
+            .lean();
+          reportPdfKey = (booking as any)?.report
+            ? String((booking as any).report)
+            : null;
+        } catch {
+          /* ignore */
+        }
+        void publishSocketEventToSession(sessionId, EVENTS.GAME_PLAN_SHARED, {
+          sessionId,
+          title,
+          trainerId,
+          traineeId,
+          reportPdfKey,
+          kind,
+          updatedAt: new Date().toISOString(),
+        });
+      }
       if (traineeId && mongoose.isValidObjectId(traineeId)) {
         try {
           const { NotificationsService } = require("../notifications/notificationsService");
           const push = new NotificationsService();
-          void push.sendPushNotification(
-            traineeId,
-            "New session plan",
-            `${title} is ready in your locker.`,
-            {
-              category: "game_plan",
-              sessionId,
-              trainerId,
-              kind: "game_plan_saved",
-            }
-          );
+          const pushTitle =
+            kind === "game_plan_updated" ? "Game plan updated" : "New session plan";
+          const pushBody =
+            kind === "game_plan_updated"
+              ? `${title} was updated by your coach.`
+              : `${title} is ready in your locker.`;
+          void push.sendPushNotification(traineeId, pushTitle, pushBody, {
+            category: "game_plan",
+            sessionId,
+            trainerId,
+            kind,
+          });
         } catch (notifyErr) {
           console.warn("[createReport] trainee push skipped", notifyErr);
         }

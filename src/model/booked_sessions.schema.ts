@@ -86,6 +86,11 @@ const bookedSessionsSchema: Schema = new Schema(
             type: String,
             default: null,
         },
+        /** Trainee messaging: coach may publish game plan by this time after lesson end. */
+        game_plan_expected_at: {
+            type: Date,
+            default: null,
+        },
         report_file_size_bytes: {
             type: Number,
             default: 0,

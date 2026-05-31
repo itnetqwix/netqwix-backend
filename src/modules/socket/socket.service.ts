@@ -110,6 +110,20 @@ function relayPeerByUserId(
   return true;
 }
 
+/** Prefer session room broadcast; fall back to peer user relay (reconnect-safe). */
+function relayInCallBySessionOrPeer(
+  socket: { to: (room: string) => { emit: (event: string, payload: unknown) => void } },
+  payload: { sessionId?: string; userInfo?: { to_user?: string } },
+  event: string
+): void {
+  const sessionId = payload?.sessionId;
+  if (sessionId && mongoose.isValidObjectId(sessionId)) {
+    socket.to(`session:${sessionId}`).emit(event, payload);
+    return;
+  }
+  relayPeerByUserId(payload?.userInfo?.to_user, event, payload);
+}
+
 function broadcastUserStatus(userId: string, status: "online" | "offline") {
   const payload = {
     user: activeUsers,
@@ -448,6 +462,13 @@ const emitLessonStateSync = (socket: any, roomName: string, session: LessonSessi
 async function finalizeLessonEnd(sessionId: string): Promise<void> {
   try {
     await persistLessonLiveStateOnEnd(sessionId);
+    const expectedBy = new Date(Date.now() + 30 * 60 * 1000);
+    await booked_session
+      .updateOne(
+        { _id: sessionId },
+        { $set: { game_plan_expected_at: expectedBy } }
+      )
+      .catch(() => undefined);
   } catch (err) {
     console.warn("[LessonLiveState] persist on end failed", err);
   }
@@ -1680,8 +1701,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
   });
 
   socket.on(EVENTS.EMIT_CLEAR_CANVAS, (payload) => {
-    const { userInfo } = payload;
-    relayPeerByUserId(userInfo?.to_user, EVENTS.ON_CLEAR_CANVAS, payload);
+    relayInCallBySessionOrPeer(socket, payload, EVENTS.ON_CLEAR_CANVAS);
   });
 
   socket.on(EVENTS.EMIT_UNDO, (payload) => {
@@ -2678,16 +2698,12 @@ emitBookingStatusUpdatedDelegate = emitBookingStatusUpdated;
 
 const listenDrawEvent = (socket) => {
   try {
-    socket.on(EVENTS.DRAW, async (socketReq, request) => {
-      const { userInfo } = socketReq;
-      const toUserSocketId = MemCache.getDetail(
-        process.env.SOCKET_CONFIG,
-        userInfo?.to_user
-      );
-      // Broadcast the offer to the other connected peers
-      // console.log(`toUserSocketId --- `, toUserSocketId);
-      // console.log(`socket req ==== `, socketReq, socket.id)
-      relayPeerByUserId(userInfo?.to_user,EVENTS.EMIT_DRAWING_CORDS, socketReq);
+    socket.on(EVENTS.DRAW, async (socketReq) => {
+      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.EMIT_DRAWING_CORDS);
+    });
+    // Defensive: older mobile clients emitted server-side event names directly
+    socket.on(EVENTS.EMIT_DRAWING_CORDS, async (socketReq) => {
+      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.EMIT_DRAWING_CORDS);
     });
   } catch (err) {
     console.error(`Error while listening to draw event:`, err);
@@ -2714,13 +2730,11 @@ const stopDrawEvent = (socket) => {
 
 const listenVideoShowEvent = (socket) => {
   try {
-    socket.on(EVENTS.ON_VIDEO_SHOW, async (socketReq, request) => {
-      const { userInfo } = socketReq;
-      const toUserSocketId = MemCache.getDetail(
-        process.env.SOCKET_CONFIG,
-        userInfo?.to_user
-      );
-      relayPeerByUserId(userInfo?.to_user,EVENTS.ON_VIDEO_SHOW, socketReq);
+    socket.on(EVENTS.ON_VIDEO_SHOW, async (socketReq) => {
+      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.ON_VIDEO_SHOW);
+    });
+    socket.on(EVENTS.ON_VIDEO_HIDE, async (socketReq) => {
+      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.ON_VIDEO_HIDE);
     });
   } catch (err) {
     console.error(`Error while listening to video show event:`, err);
@@ -2730,13 +2744,8 @@ const listenVideoShowEvent = (socket) => {
 
 const listenDrawingModeToggle = (socket) => {
   try {
-    socket.on(EVENTS.TOGGLE_DRAWING_MODE, async (socketReq, request) => {
-      const { userInfo } = socketReq;
-      const toUserSocketId = MemCache.getDetail(
-        process.env.SOCKET_CONFIG,
-        userInfo?.to_user
-      );
-      relayPeerByUserId(userInfo?.to_user,EVENTS.TOGGLE_DRAWING_MODE, socketReq);
+    socket.on(EVENTS.TOGGLE_DRAWING_MODE, async (socketReq) => {
+      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.TOGGLE_DRAWING_MODE);
     });
   } catch (err) {
     console.error(`Error while listening to drawing mode toggle:`, err);
@@ -2746,13 +2755,8 @@ const listenDrawingModeToggle = (socket) => {
 
 const listenFullscreenToggle = (socket) => {
   try {
-    socket.on(EVENTS.TOGGLE_FULL_SCREEN, async (socketReq, request) => {
-      const { userInfo } = socketReq;
-      const toUserSocketId = MemCache.getDetail(
-        process.env.SOCKET_CONFIG,
-        userInfo?.to_user
-      );
-      relayPeerByUserId(userInfo?.to_user,EVENTS.TOGGLE_FULL_SCREEN, socketReq);
+    socket.on(EVENTS.TOGGLE_FULL_SCREEN, async (socketReq) => {
+      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.TOGGLE_FULL_SCREEN);
     });
   } catch (err) {
     console.error(`Error while listening to fullscreen toggle:`, err);
@@ -2762,13 +2766,8 @@ const listenFullscreenToggle = (socket) => {
 
 const listenLockModeToggle = (socket) => {
   try {
-    socket.on(EVENTS.TOGGLE_LOCK_MODE, async (socketReq, request) => {
-      const { userInfo } = socketReq;
-      const toUserSocketId = MemCache.getDetail(
-        process.env.SOCKET_CONFIG,
-        userInfo?.to_user
-      );
-      relayPeerByUserId(userInfo?.to_user,EVENTS.TOGGLE_LOCK_MODE, socketReq);
+    socket.on(EVENTS.TOGGLE_LOCK_MODE, async (socketReq) => {
+      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.TOGGLE_LOCK_MODE);
     });
   } catch (err) {
     console.error(`Error while listening to lock mode toggle:`, err);

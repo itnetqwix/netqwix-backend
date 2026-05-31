@@ -784,11 +784,13 @@ export class UserService {
           ? { ...bookingInfo.ratings, trainee: payload }
           : { ...bookingInfo.ratings, trainer: payload };
       if (
-        updatePayload &&
-        updatePayload.trainer &&
-        updatePayload.trainee &&
-        updatePayload.trainer.sessionRating &&
-        updatePayload.trainee.sessionRating
+        updatePayload?.trainee?.sessionRating &&
+        userInfo.account_type === AccountType.TRAINEE
+      ) {
+        bookingInfo.status = BOOKED_SESSIONS_STATUS.completed;
+      } else if (
+        updatePayload?.trainer?.sessionRating &&
+        updatePayload?.trainee?.sessionRating
       ) {
         bookingInfo.status = BOOKED_SESSIONS_STATUS.completed;
       }

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import booked_session from "../../model/booked_sessions.schema";
+import Report from "../../model/report.schema";
 import {
   clearLessonLiveState,
   drainLiveNotesForPersist,
@@ -19,6 +20,10 @@ export type SessionHandoffSummary = {
   }>;
   can_rate: boolean;
   can_rebook: boolean;
+  game_plan_status: "none" | "pending" | "available";
+  game_plan_title: string | null;
+  game_plan_expected_by: string | null;
+  game_plan_updated_at: string | null;
   peer: {
     _id: string;
     fullname: string | null;
@@ -112,9 +117,32 @@ export async function getSessionHandoffSummary(
 
   const clipIds = Array.isArray(row.trainee_clip) ? row.trainee_clip : [];
   const ratings = row.ratings ?? {};
+  const trainerBlock = ratings.trainer ?? ratings.trainer_rating;
+  const traineeBlock = ratings.trainee ?? ratings.trainee_rating;
   const viewerRated = isTrainer
-    ? !!ratings.trainer_rating || !!ratings.trainerRating
-    : !!ratings.trainee_rating || !!ratings.traineeRating;
+    ? !!(trainerBlock && (trainerBlock.sessionRating || trainerBlock.audioVideoRating))
+    : !!(traineeBlock && (traineeBlock.sessionRating || traineeBlock.audioVideoRating));
+
+  const reportDoc = await Report.findOne({
+    sessions: row._id,
+    trainer: row.trainer_id,
+    trainee: row.trainee_id,
+  })
+    .select("title reportData updatedAt")
+    .lean();
+  const reportItems = Array.isArray((reportDoc as any)?.reportData)
+    ? (reportDoc as any).reportData
+    : [];
+  const hasGamePlanContent =
+    reportItems.length > 0 || !!(row.report && String(row.report).trim());
+  const expectedAt = row.game_plan_expected_at
+    ? new Date(row.game_plan_expected_at)
+    : null;
+  const gamePlanStatus: SessionHandoffSummary["game_plan_status"] = hasGamePlanContent
+    ? "available"
+    : expectedAt && expectedAt.getTime() > Date.now()
+      ? "pending"
+      : "none";
 
   return {
     sessionId: String(row._id),
@@ -126,6 +154,14 @@ export async function getSessionHandoffSummary(
     shared_notes: sharedNotes,
     can_rate: !viewerRated && ["completed", "confirm", "confirmed"].includes(String(row.status ?? "").toLowerCase()),
     can_rebook: !isTrainer,
+    game_plan_status: gamePlanStatus,
+    game_plan_title: (reportDoc as any)?.title
+      ? String((reportDoc as any).title)
+      : null,
+    game_plan_expected_by: expectedAt ? expectedAt.toISOString() : null,
+    game_plan_updated_at: (reportDoc as any)?.updatedAt
+      ? new Date((reportDoc as any).updatedAt).toISOString()
+      : null,
     peer: peer
       ? {
           _id: String(peer._id),
