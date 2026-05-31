@@ -618,10 +618,21 @@ export class commonService {
         }
       }
 
+      const sessionId = String(req.body?.session_id ?? "");
+      const trainerId = String(req?.authUser?._id ?? "");
+      const { assertTrainerOwnsSession } = require("../../helpers/sessionAccess");
+      const access = await assertTrainerOwnsSession(trainerId, sessionId);
+      if (!access.ok) {
+        return res.status(access.code).json({
+          success: 0,
+          message: access.error,
+        });
+      }
+
       var filename = "file-" + new Date().getTime().toString() + ".pdf";
-      req.body.user_id = req?.authUser?._id;
+      req.body.user_id = trainerId;
       await booked_session.findOneAndUpdate(
-        { _id: req.body.session_id },
+        { _id: sessionId, trainer_id: trainerId },
         {
           report: filename,
           ...(sizeBytes > 0 ? { report_file_size_bytes: sizeBytes } : {}),

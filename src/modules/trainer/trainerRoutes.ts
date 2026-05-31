@@ -8,6 +8,10 @@ import {
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
 import { TrainerMiddleware } from "./trainerMiddleware";
 import { sessionExtensionRespondModal } from "../trainee/sessionExtensionValidator";
+import {
+  idempotentHandler,
+  requireIdempotencyKey,
+} from "../../middleware/idempotency.middleware";
 
 const route: Router = Router();
 const trainerC = new trainerController();
@@ -74,12 +78,26 @@ route.put("/profile", trainerC.updateProfile);
 route.post("/create-money-request", trainerC.createMoneyRequest);
 route.get("/get-money-request", trainerC.getAllMoneyRequest);
 
+route.post(
+  "/instant-lesson/accept",
+  trainerMiddleware.isTrainer,
+  requireIdempotencyKey,
+  trainerC.acceptInstantLesson
+);
+route.post(
+  "/instant-lesson/decline",
+  trainerMiddleware.isTrainer,
+  requireIdempotencyKey,
+  trainerC.declineInstantLesson
+);
+
 /** Two-party paid extension: trainer accepts/rejects a pending request. */
 route.post(
   "/session-extension/respond",
   trainerMiddleware.isTrainer,
+  requireIdempotencyKey,
   V.validate(sessionExtensionRespondModal),
-  trainerC.respondToSessionExtensionRequest
+  idempotentHandler(trainerC.respondToSessionExtensionRequest)
 );
 
 route.get(

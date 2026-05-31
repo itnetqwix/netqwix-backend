@@ -124,8 +124,19 @@ export class TrainerService {
   }
 
 
-  public async updateStot(data: any): Promise<ResponseBuilder> {
-    const updatedSlot = await availability.updateOne({ _id: data?._id }, data);
+  public async updateStot(
+    data: any,
+    trainerId: string
+  ): Promise<ResponseBuilder> {
+    const slot = await availability.findById(data?._id).lean();
+    if (!slot || String(slot.trainer_id) !== String(trainerId)) {
+      return ResponseBuilder.badRequest("Slot not found.", 404);
+    }
+    const { _id, trainer_id: _tid, ...rest } = data ?? {};
+    const updatedSlot = await availability.updateOne(
+      { _id: data._id, trainer_id: trainerId },
+      { $set: rest }
+    );
     return ResponseBuilder.data(
       updatedSlot,
       "Slot Updated Successfully."
@@ -142,8 +153,18 @@ export class TrainerService {
   }
 
 
-  public async deleteStot(data: any): Promise<ResponseBuilder> {
-    const updatedSlot = await availability.deleteOne({ _id: data?._id });
+  public async deleteStot(
+    data: any,
+    trainerId: string
+  ): Promise<ResponseBuilder> {
+    const slot = await availability.findById(data?._id).lean();
+    if (!slot || String(slot.trainer_id) !== String(trainerId)) {
+      return ResponseBuilder.badRequest("Slot not found.", 404);
+    }
+    const updatedSlot = await availability.deleteOne({
+      _id: data._id,
+      trainer_id: trainerId,
+    });
     return ResponseBuilder.data(
       updatedSlot,
       "Slot Deleted Successfully."

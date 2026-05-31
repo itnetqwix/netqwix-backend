@@ -230,41 +230,30 @@ export class commonController {
 
   public addExtendedSessionEndTime = async (req: Request, res: Response) => {
     try {
-        const { sessionId, extendedEndTime,extended_session_end_time } = req.body;
+        const { sessionId } = req.body;
+        const userId = String((req as any).authUser?._id ?? "");
 
-        if (!sessionId || !extendedEndTime || !extended_session_end_time) {
+        if (!sessionId) {
             return res.status(400).json({
                 success: false,
-                message: "Session ID and extended end time are required"
+                message: "Session ID is required",
             });
         }
 
-        const existing = await booked_session.findById(sessionId).select("is_instant").lean();
-        if (existing?.is_instant) {
-            return res.status(403).json({
+        const { assertSessionParticipant } = require("../../helpers/sessionAccess");
+        const access = await assertSessionParticipant(userId, sessionId);
+        if (!access.ok) {
+            return res.status(access.code).json({
                 success: false,
-                message:
-                    "Instant lessons must use paid in-session extension. Call POST /trainee/session-extension/confirm instead.",
+                message: access.error,
             });
         }
 
-        const updatedSession = await booked_session.findByIdAndUpdate(
-            sessionId,
-            { extended_session_end_time,extended_end_time:extendedEndTime },
-            { new: true }
-        );
-
-        if (!updatedSession) {
-            return res.status(404).json({
-                success: false,
-                message: "Session not found"
-            });
-        }
-
-        return res.status(200).json({
-            success: true,
-            data: updatedSession,
-            message: "Session end time extended successfully"
+        return res.status(403).json({
+            success: false,
+            code: "USE_PAID_EXTENSION",
+            message:
+                "Free session extension is no longer available. Use POST /trainee/session-extension/request and the paid extension flow.",
         });
 
     } catch (error) {

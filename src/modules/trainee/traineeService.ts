@@ -580,9 +580,32 @@ export class TraineeService {
         if (conflictMsg) return ResponseBuilder.badRequest(conflictMsg);
       }
 
+      const {
+        computeScheduledDurationMinutes,
+      } = require("../../helpers/sessionAccess");
+      const trainerRateDoc = await user
+        .findById(payload.trainer_id)
+        .select("extraInfo.hourly_rate")
+        .lean();
+      const hourlyRate = Number(trainerRateDoc?.extraInfo?.hourly_rate ?? 0);
+      const durationMins = computeScheduledDurationMinutes(
+        String(payload.session_start_time),
+        String(payload.session_end_time)
+      );
+      const expectedPrice = Number(((hourlyRate / 60) * durationMins).toFixed(2));
+      const originalPrice = Number(payload.charging_price);
+      if (hourlyRate > 0 && durationMins > 0) {
+        const priceDelta = Math.abs(originalPrice - expectedPrice);
+        if (priceDelta > 0.02) {
+          return ResponseBuilder.badRequest(
+            "Session price does not match the trainer rate for the selected duration.",
+            400
+          );
+        }
+      }
+
       let promoDiscountAmount = 0;
       let appliedPromoCode: string | null = null;
-      const originalPrice = Number(payload.charging_price);
 
       if (payload.coupon_code && typeof payload.coupon_code === "string" && payload.coupon_code.trim()) {
         const promoService = new PromoCodeService();

@@ -189,7 +189,10 @@ export class trainerController {
 
   public updateStot = async (req: any, res: Response) => {
     try {
-      const result: ResponseBuilder = await this.trainerService.updateStot(req.body);
+      const result: ResponseBuilder = await this.trainerService.updateStot(
+        req.body,
+        String(req.authUser?._id)
+      );
       return res
         .status(result.code)
         .send({ status: CONSTANCE.SUCCESS, data: result.result });
@@ -203,7 +206,10 @@ export class trainerController {
 
   public deleteStot = async (req: any, res: Response) => {
     try {
-      const result: ResponseBuilder = await this.trainerService.deleteStot(req.body);
+      const result: ResponseBuilder = await this.trainerService.deleteStot(
+        req.body,
+        String(req.authUser?._id)
+      );
       return res
         .status(result.code)
         .send({ status: CONSTANCE.SUCCESS, data: result.result });
@@ -389,5 +395,59 @@ export class trainerController {
         message: Message.internal,
       });
     }
-  }
+  };
+
+  /** REST fallback when trainer socket is backgrounded (push action / retry). */
+  public acceptInstantLesson = async (req: Request, res: Response) => {
+    try {
+      const coachId = String(req["authUser"]?._id ?? "");
+      const { lessonId, traineeId } = req.body ?? {};
+      const {
+        acceptInstantLessonAction,
+      } = require("../instant-lesson/instantLessonActions");
+      const result = await acceptInstantLessonAction({
+        lessonId: String(lessonId),
+        coachId,
+        traineeId: String(traineeId),
+      });
+      if (!result.ok) {
+        return res.status(result.error === "expired" ? 410 : 400).json({
+          status: CONSTANCE.FAIL,
+          error: result.error,
+          message: result.message,
+        });
+      }
+      return res.status(200).json({ status: CONSTANCE.SUCCESS, data: result });
+    } catch (err: any) {
+      return res
+        .status(500)
+        .send({ status: CONSTANCE.FAIL, error: err?.message ?? "Internal error" });
+    }
+  };
+
+  public declineInstantLesson = async (req: Request, res: Response) => {
+    try {
+      const coachId = String(req["authUser"]?._id ?? "");
+      const { lessonId, traineeId } = req.body ?? {};
+      const {
+        declineInstantLessonAction,
+      } = require("../instant-lesson/instantLessonActions");
+      const result = await declineInstantLessonAction({
+        lessonId: String(lessonId),
+        coachId,
+        traineeId: String(traineeId),
+      });
+      if (!result.ok) {
+        return res.status(400).json({
+          status: CONSTANCE.FAIL,
+          error: result.error,
+        });
+      }
+      return res.status(200).json({ status: CONSTANCE.SUCCESS, data: { ok: true } });
+    } catch (err: any) {
+      return res
+        .status(500)
+        .send({ status: CONSTANCE.FAIL, error: err?.message ?? "Internal error" });
+    }
+  };
 }

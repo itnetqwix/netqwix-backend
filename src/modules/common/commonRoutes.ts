@@ -6,6 +6,7 @@ import * as crypto from "crypto";
 import multer = require("multer");
 import fs = require("fs");
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
+import { chatSendLimiter } from "../../middleware/rateLimit.middleware";
 
 const uploadDirectory = "./uploads";
 const authorizeMiddleware = new AuthorizeMiddleware();
@@ -64,7 +65,7 @@ route.post("/lesson-call-slot/:sessionId/takeover", commonC.takeoverLessonCallSl
 const chatC = new ChatController();
 route.get("/chat-conversations", chatC.getConversations);
 route.get("/chat-messages/:conversationId", chatC.getMessages);
-route.post("/chat-send", chatC.sendMessage);
+route.post("/chat-send", chatSendLimiter, chatC.sendMessage);
 route.post("/chat-conversation", chatC.getOrCreateConversation);
 route.post("/chat-create-group", chatC.createGroup);
 route.post("/chat-create-group-invite", chatC.createGroupWithInvites);

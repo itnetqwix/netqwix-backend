@@ -150,6 +150,11 @@ export async function getSessionJoinReadiness(
       : null,
     extension_preview: extensionPreview,
     iceServers: Array.isArray(row.iceServers) ? row.iceServers : [],
+    /** Mobile production uses native WebRTC app-to-app; web peers need the web client. */
+    lesson_client_requirement: "native_app",
+    mixed_client_warning:
+      "Lessons between the native app and web browser may not connect reliably. Both participants should use the NetQwix mobile app.",
+    recommended_clients: ["native_app"],
   };
 }
 

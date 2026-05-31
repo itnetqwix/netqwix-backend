@@ -873,9 +873,15 @@ export class userController {
       const accountType = req["authUser"]?.account_type;
       const bookingId = String(req.params.bookingId);
       const { getSessionJoinReadiness } = require("../session/sessionJoinReadinessService");
+      const h = req.headers ?? {};
       const readiness = await getSessionJoinReadiness(bookingId, userId, accountType, {
-        authSessionId: req.headers?.["x-auth-session-id"] as string | undefined,
-        deviceId: req.headers?.["x-device-id"] as string | undefined,
+        authSessionId:
+          (h["x-nq-auth-session-id"] as string | undefined) ??
+          (h["x-nq-session-id"] as string | undefined) ??
+          (h["x-auth-session-id"] as string | undefined),
+        deviceId:
+          (h["x-nq-device-id"] as string | undefined) ??
+          (h["x-device-id"] as string | undefined),
       });
       if (!readiness) {
         return res.status(404).json({ success: 0, message: "Session not found." });

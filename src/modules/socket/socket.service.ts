@@ -1608,7 +1608,7 @@ export const handleSocketEvents = (socket, connections = {}) => {
     startLessonTimerInRoom(socket, roomName, session, reason);
   });
 
-  socket.on("LESSON_TIMER_PAUSE_REQUEST", ({ sessionId }) => {
+  socket.on("LESSON_TIMER_PAUSE_REQUEST", ({ sessionId, reason }) => {
     if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
     const session = lessonSessionsGet(sessionId);
     if (!session || session.status !== "running" || session.startedAt == null) return;
@@ -1624,13 +1624,16 @@ export const handleSocketEvents = (socket, connections = {}) => {
     session.remainingSeconds = Math.max(0, session.remainingSeconds - elapsedSeconds);
     session.startedAt = null;
     session.status = "paused";
-    session.trainerLeftPaused = false; // explicit manual pause — not a disconnect-pause
+    const pauseReason =
+      typeof reason === "string" && reason.trim() ? reason.trim() : "trainer_manual";
+    session.trainerLeftPaused = pauseReason === "trainer_left";
     clearLessonTimeouts(session);
 
     const pausedPayload = {
       sessionId: session.sessionId,
       remainingSeconds: session.remainingSeconds,
       duration: session.duration,
+      reason: pauseReason,
     };
     lessonRoomEmit(roomName, "LESSON_TIME_PAUSED", pausedPayload);
     emitLessonStateSync(socket, roomName, session);

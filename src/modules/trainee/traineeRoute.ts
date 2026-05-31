@@ -35,6 +35,7 @@ const V: validator = new validator();
 route.get("/get-trainers-with-slots", traineeC.getSlotsOfAllTrainers);
 route.post(
   "/book-session",
+  traineeMiddleware.isTrainee,
   requireIdempotencyKey,
   V.validate(bookSessionModal),
   idempotentHandler(traineeC.bookSession)
@@ -106,14 +107,16 @@ route.post(
 route.post(
   "/session-extension/cancel-request",
   traineeMiddleware.isTrainee,
+  requireIdempotencyKey,
   V.validate(sessionExtensionCancelModal),
-  traineeC.cancelSessionExtensionRequest
+  idempotentHandler(traineeC.cancelSessionExtensionRequest)
 );
 route.post(
   "/session-extension/create-payment-intent",
   traineeMiddleware.isTrainee,
+  requireIdempotencyKey,
   V.validate(sessionExtensionPaymentIntentModal),
-  traineeC.createSessionExtensionPaymentIntent
+  idempotentHandler(traineeC.createSessionExtensionPaymentIntent)
 );
 route.post(
   "/session-extension/confirm",

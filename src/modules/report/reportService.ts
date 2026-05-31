@@ -17,12 +17,21 @@ import { s3, S3_BUCKET } from "../../Utils/s3Client";
 import { publishSocketEventToSession } from "../../services/eventPubSub";
 import { EVENTS } from "../../config/constance";
 import booked_session from "../../model/booked_sessions.schema";
+import { assertTrainerOwnsSession } from "../../helpers/sessionAccess";
 
 export class ReportService {
   public log = log.getLogger();
   public commonService = new commonService();
 
   public async createReport(data: any): Promise<ResponseBuilder> {
+    const access = await assertTrainerOwnsSession(
+      String(data?.trainer),
+      String(data?.sessions),
+      data?.trainee ? String(data.trainee) : undefined
+    );
+    if (!access.ok) {
+      return ResponseBuilder.badRequest(access.error, access.code);
+    }
     const filter = {
       sessions: data?.sessions,
       trainee: data?.trainee,
@@ -112,7 +121,19 @@ export class ReportService {
   };
 
   public async addSessionRecording(data: any): Promise<ResponseBuilder> {
-    const filename = "session-rec-" + new Date().getTime().toString() + ".webm";
+    const access = await assertTrainerOwnsSession(
+      String(data?.trainer),
+      String(data?.sessions),
+      data?.trainee ? String(data.trainee) : undefined
+    );
+    if (!access.ok) {
+      return ResponseBuilder.badRequest(access.error, access.code);
+    }
+    const format = String(data?.format ?? "webm").toLowerCase();
+    const useM4a = format === "m4a";
+    const ext = useM4a ? ".m4a" : ".webm";
+    const contentType = useM4a ? "audio/mp4" : "video/webm";
+    const filename = "session-rec-" + new Date().getTime().toString() + ext;
     const isReportExist = await Report.findOne({
       sessions: data?.sessions,
       trainee: data?.trainee,
@@ -139,7 +160,7 @@ export class ReportService {
       };
       await new Report(obj).save();
     }
-    const fileUrl = await this.generatePreSignedPutUrl(filename, "video/webm");
+    const fileUrl = await this.generatePreSignedPutUrl(filename, contentType);
     if (fileUrl) {
       return ResponseBuilder.data({ url: fileUrl }, l10n.t("REPORT_GENERATED"));
     }
@@ -147,6 +168,14 @@ export class ReportService {
   }
 
   public async addImage(data: any): Promise<ResponseBuilder> {
+    const access = await assertTrainerOwnsSession(
+      String(data?.trainer),
+      String(data?.sessions),
+      data?.trainee ? String(data.trainee) : undefined
+    );
+    if (!access.ok) {
+      return ResponseBuilder.badRequest(access.error, access.code);
+    }
     var filename = "file-" + new Date().getTime().toString() + ".png";
     const isReportExist = await Report.findOne({
       sessions: data?.sessions,
