@@ -291,7 +291,8 @@ function lessonSessionsDelete(sessionId: string): void {
 }
 
 /** Brief disconnects (e.g. ERR_NETWORK_CHANGED → reconnect) must not pause the lesson or emit PARTICIPANT_LEFT. */
-const SESSION_LEAVE_GRACE_MS = 12000;
+/** Rural LTE / subway handoffs — longer grace before PARTICIPANT_LEFT + timer pause. */
+const SESSION_LEAVE_GRACE_MS = 45000;
 const pendingLessonDisconnectTimers = new Map<string, NodeJS.Timeout>();
 
 function cancelLessonDisconnectGrace(sessionId: string, userId: string) {
