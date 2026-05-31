@@ -23,6 +23,7 @@ import { stripeHelperController } from "../stripe/stripeHelperController";
 import raise_concern from "../../model/raise_concern.schema";
 import { Constant, timeZoneAbbreviations } from "../../Utils/constant";
 import onlineUser from "../../model/online_user.schema";
+import clip from "../../model/clip.schema";
 import { recordUserActivity, recordUserActivityMany, UserActivityEvent } from "../../helpers/userActivity";
 import SMSService from "../../services/sms-service";
 import user from "../../model/user.schema";
@@ -666,7 +667,7 @@ export class UserService {
           },
           {
             $lookup: {
-              from: "clips",
+              from: clip.collection.name,
               localField: "trainee_clip",
               foreignField: "_id",
               as: "trainee_clips",

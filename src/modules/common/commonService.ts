@@ -698,7 +698,7 @@ export class commonService {
         },
         {
           $lookup: {
-            from: "clips",
+            from: clip.collection.name,
             localField: "trainee_clip",
             foreignField: "_id",
             as: "clips",
