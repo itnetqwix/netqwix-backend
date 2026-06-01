@@ -56,7 +56,7 @@ export async function getSessionTimeline(bookingId: string, userId: string) {
     return { ok: false as const, code: 400, error: "Invalid session id." };
   }
   const access = await assertSessionParticipant(userId, bookingId);
-  if (!access.ok) {
+  if (access.ok === false) {
     return { ok: false as const, code: access.code, error: access.error };
   }
   return getSessionTimelineById(bookingId);

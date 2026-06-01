@@ -29,7 +29,7 @@ export class ReportService {
       String(data?.sessions),
       data?.trainee ? String(data.trainee) : undefined
     );
-    if (!access.ok) {
+    if (access.ok === false) {
       return ResponseBuilder.badRequest(access.error, access.code);
     }
     const filter = {
@@ -126,7 +126,7 @@ export class ReportService {
       String(data?.sessions),
       data?.trainee ? String(data.trainee) : undefined
     );
-    if (!access.ok) {
+    if (access.ok === false) {
       return ResponseBuilder.badRequest(access.error, access.code);
     }
     const format = String(data?.format ?? "webm").toLowerCase();
@@ -178,7 +178,7 @@ export class ReportService {
       String(data?.sessions),
       data?.trainee ? String(data.trainee) : undefined
     );
-    if (!access.ok) {
+    if (access.ok === false) {
       return ResponseBuilder.badRequest(access.error, access.code);
     }
     var filename = "file-" + new Date().getTime().toString() + ".png";
@@ -235,7 +235,7 @@ export class ReportService {
       String(data?.sessions),
       data?.trainee ? String(data.trainee) : undefined
     );
-    if (!access.ok) {
+    if (access.ok === false) {
       return ResponseBuilder.badRequest(access.error, access.code);
     }
     var filename = "file-" + new Date().getTime().toString() + ".png";
@@ -279,7 +279,7 @@ export class ReportService {
       String(data?.sessions),
       data?.trainee ? String(data.trainee) : undefined
     );
-    if (!access.ok) {
+    if (access.ok === false) {
       return ResponseBuilder.badRequest(access.error, access.code);
     }
     const isReportExist = await Report.findOne({

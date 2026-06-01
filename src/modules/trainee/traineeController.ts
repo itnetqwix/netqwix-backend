@@ -69,10 +69,13 @@ export class traineeController {
       }
 
       if (req?.body?.slot_id) {
-        await this.trainerService.updateStot({
-          _id: req?.body?.slot_id,
-          status: true,
-        });
+        await this.trainerService.updateStot(
+          {
+            _id: req?.body?.slot_id,
+            status: true,
+          },
+          String(req?.body?.trainer_id ?? "")
+        );
       } else {
         var date = new Date(body?.booked_date).toISOString().split("T")[0];
         var dateArr = date?.split("-");
