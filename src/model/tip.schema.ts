@@ -16,7 +16,7 @@ const tipSchema: Schema = new Schema(
     icon: { type: String, default: null }, // optional Ionicon name for icon-only tips
     audience: {
       type: String,
-      enum: ["all", "trainer", "trainee"],
+      enum: ["all", "trainer", "trainee", "guest"],
       default: "all",
       index: true,
     },

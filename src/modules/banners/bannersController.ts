@@ -14,6 +14,7 @@ import { Types } from "mongoose";
 import { CONSTANCE } from "../../config/constance";
 import HomeBanner from "../../model/home_banner.schema";
 import { assertAdminUser } from "../admin/adminPermission";
+import { notifyCmsUpdated } from "../cms/cmsNotify";
 
 function adminDenied(req: Request): string | null {
   return assertAdminUser((req as any)?.authUser);
@@ -28,7 +29,22 @@ function audiencesForCaller(req: Request): string[] {
   return ["all"];
 }
 
+function sanitizeCtas(input: any): Array<{ label: string; url: string; variant: string }> {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((row) => ({
+      label: String(row?.label ?? "").trim(),
+      url: String(row?.url ?? "").trim(),
+      variant: ["primary", "secondary", "ghost"].includes(String(row?.variant))
+        ? String(row.variant)
+        : "primary",
+    }))
+    .filter((row) => row.label && row.url)
+    .slice(0, 4);
+}
+
 function serialize(b: any) {
+  const ctas = sanitizeCtas(b.ctas);
   return {
     _id: String(b._id),
     title: b.title,
@@ -38,6 +54,7 @@ function serialize(b: any) {
     severity: b.severity ?? "info",
     cta_label: b.cta_label ?? null,
     cta_url: b.cta_url ?? null,
+    ctas,
     dismissible: b.dismissible !== false,
     is_active: !!b.is_active,
     sort_order: b.sort_order ?? 0,
@@ -159,6 +176,7 @@ export async function adminCreateBanner(req: Request, res: Response) {
       severity,
       cta_label: body.cta_label || null,
       cta_url: body.cta_url || null,
+      ctas: sanitizeCtas(body.ctas),
       dismissible: body.dismissible !== false,
       is_active: body.is_active !== false,
       sort_order: typeof body.sort_order === "number" ? body.sort_order : 0,
@@ -166,6 +184,7 @@ export async function adminCreateBanner(req: Request, res: Response) {
       end_date: body.end_date ? new Date(body.end_date) : null,
       created_by: (req as any)?.authUser?._id ?? null,
     });
+    void notifyCmsUpdated("banners").catch(() => {});
     return res
       .status(200)
       .send({ status: CONSTANCE.SUCCESS, data: serialize(created.toObject()) });
@@ -196,6 +215,7 @@ export async function adminUpdateBanner(req: Request, res: Response) {
     }
     if ("cta_label" in body) patch.cta_label = body.cta_label || null;
     if ("cta_url" in body) patch.cta_url = body.cta_url || null;
+    if ("ctas" in body) patch.ctas = sanitizeCtas(body.ctas);
     if (typeof body.dismissible === "boolean") patch.dismissible = body.dismissible;
     if (typeof body.is_active === "boolean") patch.is_active = body.is_active;
     if (typeof body.sort_order === "number") patch.sort_order = body.sort_order;
@@ -230,6 +250,7 @@ export async function adminDeleteBanner(req: Request, res: Response) {
       return res.status(400).send({ status: CONSTANCE.FAIL, error: "Invalid id." });
     }
     await HomeBanner.findByIdAndDelete(id);
+    void notifyCmsUpdated("banners").catch(() => {});
     return res.status(200).send({ status: CONSTANCE.SUCCESS, data: { ok: true } });
   } catch (err: any) {
     return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
@@ -255,6 +276,7 @@ export async function adminToggleBanner(req: Request, res: Response) {
       { $set: { is_active: !current.is_active } },
       { new: true }
     ).lean();
+    void notifyCmsUpdated("banners").catch(() => {});
     return res
       .status(200)
       .send({ status: CONSTANCE.SUCCESS, data: serialize(updated) });

@@ -20,6 +20,18 @@ import {
   adminToggleBanner,
 } from "../banners/bannersController";
 import {
+  adminCreatePage,
+  adminDeletePage,
+  adminGetFaq,
+  adminListLegal,
+  adminListPages,
+  adminSeedFaq,
+  adminTogglePage,
+  adminUpdatePage,
+  adminUpsertFaq,
+  adminUpsertLegal,
+} from "../cms/cmsController";
+import {
   adminListAccountDeletions,
   adminRestoreAccountDeletion,
   adminAddAccountDeletionNote,
@@ -85,6 +97,17 @@ route.post("/banners", adminCreateBanner);
 route.patch("/banners/:id", adminUpdateBanner);
 route.patch("/banners/:id/toggle", adminToggleBanner);
 route.delete("/banners/:id", adminDeleteBanner);
+
+route.get("/cms/legal", adminListLegal);
+route.put("/cms/legal/:slug", adminUpsertLegal);
+route.get("/cms/faq", adminGetFaq);
+route.put("/cms/faq", adminUpsertFaq);
+route.post("/cms/faq/seed", adminSeedFaq);
+route.get("/cms/pages", adminListPages);
+route.post("/cms/pages", adminCreatePage);
+route.patch("/cms/pages/:id", adminUpdatePage);
+route.patch("/cms/pages/:id/toggle", adminTogglePage);
+route.delete("/cms/pages/:id", adminDeletePage);
 
 route.get("/account-deletions", adminListAccountDeletions);
 route.post("/account-deletions/:id/restore", adminRestoreAccountDeletion);

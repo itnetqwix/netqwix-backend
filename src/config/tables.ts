@@ -48,5 +48,8 @@ export class Tables {
     public static readonly scheduled_chat_messages = "scheduled_chat_messages";
     public static readonly tip = "tip";
     public static readonly home_banner = "home_banner";
+    public static readonly cms_legal_document = "cms_legal_document";
+    public static readonly cms_page = "cms_page";
+    public static readonly cms_faq = "cms_faq";
     public static readonly account_deletion_request = "account_deletion_request";
 }

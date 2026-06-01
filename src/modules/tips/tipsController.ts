@@ -11,12 +11,17 @@ import { Types } from "mongoose";
 import { CONSTANCE } from "../../config/constance";
 import Tip from "../../model/tip.schema";
 import { assertAdminUser } from "../admin/adminPermission";
+import { notifyCmsUpdated } from "../cms/cmsNotify";
 
 function adminDenied(req: Request): string | null {
   return assertAdminUser((req as any)?.authUser);
 }
 
-function audienceForAccountType(accountType?: string | null): string[] {
+function audienceForAccountType(
+  accountType?: string | null,
+  authenticated?: boolean
+): string[] {
+  if (!authenticated) return ["all", "guest"];
   const at = String(accountType ?? "").toLowerCase();
   if (at === "trainer") return ["all", "trainer"];
   if (at === "trainee") return ["all", "trainee"];
@@ -46,8 +51,8 @@ function serialize(t: any) {
 
 export async function listActiveTips(req: Request, res: Response) {
   try {
-    const accountType = (req as any)?.authUser?.account_type;
-    const audiences = audienceForAccountType(accountType);
+    const authUser = (req as any)?.authUser;
+    const audiences = audienceForAccountType(authUser?.account_type, !!authUser);
     const now = new Date();
     const rows = await Tip.find({
       is_active: true,
@@ -143,6 +148,7 @@ export async function adminCreateTip(req: Request, res: Response) {
       end_date: body.end_date ? new Date(body.end_date) : null,
       created_by: (req as any)?.authUser?._id ?? null,
     });
+    void notifyCmsUpdated("tips").catch(() => {});
     return res
       .status(200)
       .send({ status: CONSTANCE.SUCCESS, data: serialize(created.toObject()) });
@@ -178,6 +184,7 @@ export async function adminUpdateTip(req: Request, res: Response) {
     if (!updated) {
       return res.status(404).send({ status: CONSTANCE.FAIL, error: "Tip not found." });
     }
+    void notifyCmsUpdated("tips").catch(() => {});
     return res.status(200).send({ status: CONSTANCE.SUCCESS, data: serialize(updated) });
   } catch (err: any) {
     return res.status(400).send({ status: CONSTANCE.FAIL, error: err.message });
@@ -193,6 +200,7 @@ export async function adminDeleteTip(req: Request, res: Response) {
       return res.status(400).send({ status: CONSTANCE.FAIL, error: "Invalid id." });
     }
     await Tip.findByIdAndDelete(id);
+    void notifyCmsUpdated("tips").catch(() => {});
     return res.status(200).send({ status: CONSTANCE.SUCCESS, data: { ok: true } });
   } catch (err: any) {
     return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
@@ -216,6 +224,7 @@ export async function adminToggleTip(req: Request, res: Response) {
       { $set: { is_active: !current.is_active } },
       { new: true }
     ).lean();
+    void notifyCmsUpdated("tips").catch(() => {});
     return res.status(200).send({ status: CONSTANCE.SUCCESS, data: serialize(updated) });
   } catch (err: any) {
     return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });

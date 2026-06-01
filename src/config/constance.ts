@@ -123,6 +123,10 @@ export class EVENTS {
     CREATED: 'BOOKING_CREATED',
     STATUS_UPDATED: 'BOOKING_STATUS_UPDATED'
   }
+  /** Mobile/web — admin CMS publish (banners, legal, blog, FAQ). */
+  public static readonly CMS = {
+    UPDATED: "CMS_UPDATED",
+  }
   public static readonly INSTANT_LESSON = {
     REQUEST: 'INSTANT_LESSON_REQUEST',
     ACCEPT: 'INSTANT_LESSON_ACCEPT',

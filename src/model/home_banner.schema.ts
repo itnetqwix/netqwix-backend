@@ -27,6 +27,21 @@ const homeBannerSchema: Schema = new Schema(
     },
     cta_label: { type: String, default: null },
     cta_url: { type: String, default: null },
+    /** Optional multi-button row (Blinkit-style hero). Falls back to single CTA when empty. */
+    ctas: {
+      type: [
+        {
+          label: { type: String, required: true, trim: true, maxlength: 40 },
+          url: { type: String, required: true, trim: true, maxlength: 500 },
+          variant: {
+            type: String,
+            enum: ["primary", "secondary", "ghost"],
+            default: "primary",
+          },
+        },
+      ],
+      default: [],
+    },
     dismissible: { type: Boolean, default: true },
     is_active: { type: Boolean, default: true, index: true },
     sort_order: { type: Number, default: 0, index: true },
