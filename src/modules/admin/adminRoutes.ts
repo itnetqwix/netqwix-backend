@@ -5,37 +5,6 @@ import { adminFinanceController } from "../wallet/adminFinanceController";
 import { opsAdminController } from "../ops/opsAdminController";
 import { trainerReviewAdminController } from "../verification/trainerReviewAdminController";
 import { mountAdminClipRoutes } from "../clips/clipsRoutes";
-import {
-  adminListTips,
-  adminCreateTip,
-  adminUpdateTip,
-  adminDeleteTip,
-  adminToggleTip,
-} from "../tips/tipsController";
-import {
-  adminListBanners,
-  adminCreateBanner,
-  adminUpdateBanner,
-  adminDeleteBanner,
-  adminToggleBanner,
-} from "../banners/bannersController";
-import {
-  adminCreatePage,
-  adminDeletePage,
-  adminGetFaq,
-  adminListLegal,
-  adminListPages,
-  adminSeedFaq,
-  adminTogglePage,
-  adminUpdatePage,
-  adminUpsertFaq,
-  adminUpsertLegal,
-} from "../cms/cmsController";
-import {
-  adminListAccountDeletions,
-  adminRestoreAccountDeletion,
-  adminAddAccountDeletionNote,
-} from "./accountDeletionAdminController";
 
 const route: Router = Router();
 const authorizeMiddleware = new AuthorizeMiddleware();
@@ -49,15 +18,8 @@ route.use([
   authorizeMiddleware.authorizeUser,
 ]);
 
-import { pricingAdminController } from "./pricingAdminController";
-
 route.post("/update-global-commission", adminController.updateGlobalCommission);
 route.get("/get-global-commission", adminController.getGlobalCommission);
-route.get("/pricing-config", pricingAdminController.getConfig);
-route.put("/pricing-config", pricingAdminController.updateConfig);
-route.get("/pricing-config/history", pricingAdminController.getHistory);
-route.get("/pricing-config/defaults", pricingAdminController.getDefaults);
-route.post("/pricing-config/preview-quote", pricingAdminController.previewQuote);
 route.get("/call-diagnostics", adminController.getCallDiagnostics);
 route.get("/call-quality-summary/:sessionId", adminController.getCallQualitySummary);
 route.get("/user-360/:id", adminController.getUser360);
@@ -86,33 +48,6 @@ route.post("/trainer-verifications/:userId/reject", trainerReviewAdminController
 
 mountAdminClipRoutes(route);
 
-route.get("/tips", adminListTips);
-route.post("/tips", adminCreateTip);
-route.patch("/tips/:id", adminUpdateTip);
-route.patch("/tips/:id/toggle", adminToggleTip);
-route.delete("/tips/:id", adminDeleteTip);
-
-route.get("/banners", adminListBanners);
-route.post("/banners", adminCreateBanner);
-route.patch("/banners/:id", adminUpdateBanner);
-route.patch("/banners/:id/toggle", adminToggleBanner);
-route.delete("/banners/:id", adminDeleteBanner);
-
-route.get("/cms/legal", adminListLegal);
-route.put("/cms/legal/:slug", adminUpsertLegal);
-route.get("/cms/faq", adminGetFaq);
-route.put("/cms/faq", adminUpsertFaq);
-route.post("/cms/faq/seed", adminSeedFaq);
-route.get("/cms/pages", adminListPages);
-route.post("/cms/pages", adminCreatePage);
-route.patch("/cms/pages/:id", adminUpdatePage);
-route.patch("/cms/pages/:id/toggle", adminTogglePage);
-route.delete("/cms/pages/:id", adminDeletePage);
-
-route.get("/account-deletions", adminListAccountDeletions);
-route.post("/account-deletions/:id/restore", adminRestoreAccountDeletion);
-route.post("/account-deletions/:id/notes", adminAddAccountDeletionNote);
-
 route.get("/messaging-health", async (_req, res) => {
   try {
     const { getMessagingHealth } = await import("../../services/messagingHealth");
@@ -127,7 +62,6 @@ route.get("/messaging-health", async (_req, res) => {
 route.get("/dashboard-metrics", adminController.getDashboardMetrics);
 route.get("/online-users", adminController.getOnlineUsers);
 route.get("/booking/:bookingId", adminController.getBookingSessionDetail);
-route.get("/booking/:bookingId/timeline", adminController.getBookingSessionTimeline);
 
 route.get("/finance/ledger", adminFinanceController.getLedger);
 route.get("/finance/escrow", adminFinanceController.getEscrowHolds);

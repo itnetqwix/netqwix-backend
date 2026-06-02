@@ -73,32 +73,6 @@ const userSchema: Schema = new Schema(
     chat_public_key: { type: String, default: null },
     /** When false, trainer stays hidden from online lists even if socket is connected. */
     showAsOnline: { type: Boolean, default: true },
-    /**
-     * When TRUE (default), instant booking requests that fall outside the
-     * trainer's weekly availability template are auto-declined before they
-     * ever ping the trainer's device. Trainers can flip this OFF if they
-     * want to be reachable for ad-hoc instant lessons 24/7.
-     */
-    auto_decline_outside_business_hours: { type: Boolean, default: true },
-    /**
-     * Privacy preferences. We currently only need read-receipt opt-out
-     * (mirrors WhatsApp's switch — when off the sender no longer sees
-     * blue ticks from this user).
-     */
-    privacy: {
-      read_receipts_enabled: { type: Boolean, default: true },
-    },
-    /**
-     * Profile-visibility settings surfaced in the privacy screen. Defaults
-     * preserve current behaviour: last-active and search visibility on,
-     * message requests from non-friends allowed.
-     */
-    privacy_visibility: {
-      show_last_active: { type: Boolean, default: true },
-      show_in_community_search: { type: Boolean, default: true },
-      allow_message_requests_from_non_friends: { type: Boolean, default: true },
-      show_online_status: { type: Boolean, default: true },
-    },
     friendRequests: [
       {
         senderId: { type: Schema.Types.ObjectId, ref: 'user' },
@@ -114,73 +88,6 @@ const userSchema: Schema = new Schema(
         email: { type: Boolean, default: true },
         sms: { type: Boolean, default: true },
       },
-      /**
-       * Cadence preset for upcoming-session push reminders.
-       *
-       *  - `standard`  → 24h + 1h + 10m before the session
-       *  - `minimal`   → 1h only
-       *  - `aggressive`→ 24h + 1h + 10m + 1m
-       *  - `off`       → no reminder pushes
-       */
-      bookingReminderCadence: {
-        type: String,
-        enum: ["standard", "minimal", "aggressive", "off"],
-        default: "standard",
-      },
-      /**
-       * Per-category × per-channel switches. Each category (messages /
-       * bookings / payments / marketing) can be independently enabled on
-       * push, email, and SMS. Read in `NotificationsService` *before*
-       * dispatching anything — when the user opts out, we skip silently.
-       *
-       * Booleans, no enums: lets us add new channels without a migration.
-       */
-      channels: {
-        messages: {
-          push: { type: Boolean, default: true },
-          email: { type: Boolean, default: false },
-          sms: { type: Boolean, default: false },
-        },
-        bookings: {
-          push: { type: Boolean, default: true },
-          email: { type: Boolean, default: true },
-          sms: { type: Boolean, default: true },
-        },
-        payments: {
-          push: { type: Boolean, default: true },
-          email: { type: Boolean, default: true },
-          sms: { type: Boolean, default: false },
-        },
-        marketing: {
-          push: { type: Boolean, default: true },
-          email: { type: Boolean, default: true },
-          sms: { type: Boolean, default: false },
-        },
-      },
-      /**
-       * "Mute notifications until …" — when set in the future every push
-       * delivery is suppressed regardless of channel switches. Cleared
-       * by the user or auto-cleared once we pass it.
-       */
-      mute_until: { type: Date, default: null },
-      /**
-       * Quiet hours window — both `start_minutes` and `end_minutes` are
-       * minutes-since-midnight in the user's `timezone`. When `enabled`
-       * we skip non-urgent pushes/SMS that arrive inside the window and
-       * defer them to the next morning (handled in the dispatcher).
-       *
-       * Categories listed in `urgent_categories` always punch through.
-       */
-      quiet_hours: {
-        enabled: { type: Boolean, default: false },
-        start_minutes: { type: Number, default: 22 * 60 },
-        end_minutes: { type: Number, default: 7 * 60 },
-        timezone: { type: String, default: "UTC" },
-        urgent_categories: {
-          type: [String],
-          default: ["instant_lesson", "session_starting"],
-        },
-      },
     },
     interests: {
       type: [String],
@@ -190,42 +97,6 @@ const userSchema: Schema = new Schema(
       type: String,
       default: null,
     },
-    /**
-     * Bumped when a freshly signed-up user's guest browsing activity has been
-     * ingested via `POST /trainee/guest-activity`. Lets the discovery feed
-     * cheaply detect whether seeded recommendations are available.
-     */
-    guest_seed_ingested_at: {
-      type: Date,
-      default: null,
-    },
-    /**
-     * Self-serve account deletion (App Store / Play Store compliance).
-     * When set, the user is treated as deleted everywhere: cannot log in,
-     * hidden from listings, frozen from receiving messages. A cleanup job
-     * can hard-delete after a 30-day grace period.
-     */
-    deleted_at: { type: Date, default: null, index: true },
-    deletion_reason: { type: String, default: null },
-    /**
-     * Self-serve, OTP-gated account deletion (Phase 2).
-     *
-     * `pending_deletion_at` is set the moment the user confirms the OTP and
-     * starts a 15-day soft-delete window during which support can restore.
-     * Login is allowed during the window (so users can cancel themselves).
-     * A nightly job hard-deletes everything whose `pending_deletion_at`
-     * is older than 15 days.
-     */
-    pending_deletion_at: { type: Date, default: null, index: true },
-    /**
-     * Account hibernation (Phase 2).
-     *
-     * When `hibernated_at` is set, the account is hidden from listings,
-     * cannot receive new bookings, and login requires a fresh email/SMS
-     * OTP wake-up. Cleared automatically once the user verifies the OTP.
-     */
-    hibernated_at: { type: Date, default: null, index: true },
-    hibernated_reason: { type: String, default: null },
     /** IANA zone (e.g. America/New_York) for availability display and scheduling context. */
     time_zone: {
       type: String,

@@ -317,29 +317,6 @@ export class AuthService {
       }
       const userDetails: any = await this.getUser(user);
       if (userDetails) {
-        if (userDetails.deleted_at) {
-          return ResponseBuilder.badRequest(
-            "This account has been deleted. Contact support if this was a mistake."
-          );
-        }
-        if (userDetails.pending_deletion_at) {
-          return ResponseBuilder.badRequest(
-            "This account is scheduled for deletion. Contact support@netqwix.com if this was a mistake."
-          );
-        }
-        if (userDetails.hibernated_at) {
-          // Surface a structured code so the mobile client can route into
-          // the wake-up OTP flow instead of just showing "invalid credentials".
-          const rb = ResponseBuilder.badRequest(
-            "Your account is paused. Verify a code to wake it up."
-          );
-          (rb as any).code = 403;
-          (rb as any).result = {
-            account_state: "hibernated",
-            wake_up_required: true,
-          };
-          return rb;
-        }
         const validPassword = await this.bcrypt.comparePassword(
           password,
           userDetails.password

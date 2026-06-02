@@ -195,65 +195,43 @@ export class commonController {
     }
   };
 
-  public abortChatMediaUpload = async (req: Request, res: Response) => {
-    try {
-      return await this.commonService.abortChatMediaUpload(req, res);
-    } catch (error) {
-      this.logger.error(error);
-      const statusCode = error.code ? error.code : CONSTANCE.RES_CODE.error.internalServerError;
-      const errorMessage = error.message || "Internal Server Error";
-      return res.status(statusCode).json({ status: "error", message: errorMessage });
-    }
-  };
-
-  public getLessonCallSlotStatus = async (req: Request, res: Response) => {
-    try {
-      return await this.commonService.getLessonCallSlotStatus(req, res);
-    } catch (error) {
-      this.logger.error(error);
-      const statusCode = error.code ? error.code : CONSTANCE.RES_CODE.error.internalServerError;
-      const errorMessage = error.message || "Internal Server Error";
-      return res.status(statusCode).json({ status: "error", message: errorMessage });
-    }
-  };
-
-  public takeoverLessonCallSlot = async (req: Request, res: Response) => {
-    try {
-      return await this.commonService.takeoverLessonCallSlot(req, res);
-    } catch (error) {
-      this.logger.error(error);
-      const statusCode = error.code ? error.code : CONSTANCE.RES_CODE.error.internalServerError;
-      const errorMessage = error.message || "Internal Server Error";
-      return res.status(statusCode).json({ status: "error", message: errorMessage });
-    }
-  };
-
   public addExtendedSessionEndTime = async (req: Request, res: Response) => {
     try {
-        const { sessionId } = req.body;
-        const userId = String((req as any).authUser?._id ?? "");
+        const { sessionId, extendedEndTime,extended_session_end_time } = req.body;
 
-        if (!sessionId) {
+        if (!sessionId || !extendedEndTime || !extended_session_end_time) {
             return res.status(400).json({
                 success: false,
-                message: "Session ID is required",
+                message: "Session ID and extended end time are required"
             });
         }
 
-        const { assertSessionParticipant } = require("../../helpers/sessionAccess");
-        const access = await assertSessionParticipant(userId, sessionId);
-        if (!access.ok) {
-            return res.status(access.code).json({
+        const existing = await booked_session.findById(sessionId).select("is_instant").lean();
+        if (existing?.is_instant) {
+            return res.status(403).json({
                 success: false,
-                message: access.error,
+                message:
+                    "Instant lessons must use paid in-session extension. Call POST /trainee/session-extension/confirm instead.",
             });
         }
 
-        return res.status(403).json({
-            success: false,
-            code: "USE_PAID_EXTENSION",
-            message:
-                "Free session extension is no longer available. Use POST /trainee/session-extension/request and the paid extension flow.",
+        const updatedSession = await booked_session.findByIdAndUpdate(
+            sessionId,
+            { extended_session_end_time,extended_end_time:extendedEndTime },
+            { new: true }
+        );
+
+        if (!updatedSession) {
+            return res.status(404).json({
+                success: false,
+                message: "Session not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: updatedSession,
+            message: "Session end time extended successfully"
         });
 
     } catch (error) {
