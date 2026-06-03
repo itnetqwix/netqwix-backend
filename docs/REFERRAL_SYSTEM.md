@@ -24,6 +24,18 @@ Configurable via env vars (`REFERRAL_SIGNUP_*_MINOR`, `REFERRAL_FIRST_BOOKING_*_
 
 **First booking** = referee’s first **completed** session (as trainee or trainer on that booking). Paid once to the referrer.
 
+### First lesson checkout discount (stacks with promo)
+
+Referred **trainees** who have not completed a lesson yet get an automatic checkout discount on their **first** scheduled or instant booking. This is separate from wallet signup credits and **stacks** with promo codes (promo applies first, then referral discount on the remainder).
+
+| Setting | Default | Env |
+|---------|---------|-----|
+| Enabled | yes | `REFERRAL_FIRST_LESSON_DISCOUNT_ENABLED` |
+| Type | `$15` fixed | `REFERRAL_FIRST_LESSON_DISCOUNT_DOLLARS` or `REFERRAL_FIRST_LESSON_DISCOUNT_PERCENT` |
+| Max cap | `$25` | `REFERRAL_FIRST_LESSON_MAX_DISCOUNT_DOLLARS` |
+
+Preview: `POST /referral/preview-checkout` with `{ amount, booking_type, coupon_code? }`.
+
 ## Architecture
 
 ```mermaid
@@ -66,6 +78,18 @@ flowchart LR
 | POST | `/invite` | Yes | `{ emails[], targetAccountType }` |
 | GET | `/invites` | Yes | Invite history (same data as `/user/my-referrals`) |
 | GET | `/rewards` | Yes | Credit history |
+| GET | `/benefits` | Yes | Referee eligibility (first-lesson discount) |
+| POST | `/preview-checkout` | Yes | Promo + referral stacked price preview |
+
+### Admin (`/admin/referrals`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/dashboard` | Totals, matrix, recent rewards & attributions |
+| GET | `/rewards` | Paginated reward ledger |
+| GET | `/attributions` | Paginated attributions |
+
+Admin UI: **Revenue & growth → Referrals** (`/apps/referrals`).
 
 Legacy routes kept:
 

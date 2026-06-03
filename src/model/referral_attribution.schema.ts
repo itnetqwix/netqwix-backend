@@ -11,6 +11,9 @@ export interface IReferralAttribution extends Document {
   referral_code?: string;
   signup_rewards_settled: boolean;
   first_booking_reward_settled: boolean;
+  first_lesson_discount_used?: boolean;
+  first_lesson_discount_amount?: number;
+  first_lesson_discount_booking_id?: Schema.Types.ObjectId;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -43,6 +46,12 @@ const referralAttributionSchema = new Schema(
     referral_code: { type: String },
     signup_rewards_settled: { type: Boolean, default: false },
     first_booking_reward_settled: { type: Boolean, default: false },
+    first_lesson_discount_used: { type: Boolean, default: false },
+    first_lesson_discount_amount: { type: Number, default: 0 },
+    first_lesson_discount_booking_id: {
+      type: Schema.Types.ObjectId,
+      ref: Tables.booked_sessions,
+    },
   },
   { timestamps: true }
 );

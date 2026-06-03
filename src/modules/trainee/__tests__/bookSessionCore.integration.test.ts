@@ -75,6 +75,34 @@ jest.mock("../../wallet/walletPaymentService", () => ({
   },
 }));
 
+jest.mock("../../referral/referralCheckoutDiscount", () => ({
+  computeBookingCheckoutDiscounts: jest.fn().mockImplementation(async (params: any) => {
+    if (params.couponCode === "BAD") {
+      return {
+        originalPrice: params.originalPrice,
+        promoDiscount: 0,
+        referralDiscount: 0,
+        totalDiscount: 0,
+        finalPrice: params.originalPrice,
+        appliedPromoCode: null,
+        promoError: "Expired code",
+        referralEligible: false,
+      };
+    }
+    const p = params.originalPrice;
+    return {
+      originalPrice: p,
+      promoDiscount: 0,
+      referralDiscount: 0,
+      totalDiscount: 0,
+      finalPrice: p,
+      appliedPromoCode: null,
+      referralEligible: false,
+    };
+  }),
+  markReferralFirstLessonDiscountUsed: jest.fn(),
+}));
+
 import user from "../../../model/user.schema";
 import { checkBothPartiesBookingConflict } from "../../../Utils/bookingConflict";
 import { TraineeService } from "../traineeService";

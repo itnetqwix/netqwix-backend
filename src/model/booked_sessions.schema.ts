@@ -179,6 +179,11 @@ const bookedSessionsSchema: Schema = new Schema(
             type: Number,
             default: 0,
         },
+        /** Referral first-lesson checkout discount (USD); stacks with coupon_code. */
+        referral_discount_applied: {
+            type: Number,
+            default: 0,
+        },
         original_amount: {
             type: String,
             default: null,

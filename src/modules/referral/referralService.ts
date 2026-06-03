@@ -297,6 +297,37 @@ export class ReferralService {
     return ResponseBuilder.data(rows, "Rewards");
   }
 
+  async getRefereeBenefits(userId: string) {
+    const { findEligibleReferralAttribution } = await import("./referralCheckoutDiscount");
+    const u = await user.findById(userId).select("account_type referred_by_user_id").lean();
+    if (!u || u.account_type !== AccountType.TRAINEE) {
+      return ResponseBuilder.data(
+        { firstLessonCheckout: { eligible: false } },
+        "Benefits"
+      );
+    }
+    const attr = await findEligibleReferralAttribution(userId);
+    const samplePrice = 50;
+    const { estimateFirstLessonCheckoutDiscount } = await import("../../config/referral");
+    const estimatedDiscount = attr
+      ? estimateFirstLessonCheckoutDiscount(samplePrice)
+      : 0;
+    return ResponseBuilder.data(
+      {
+        referred: Boolean(u.referred_by_user_id || attr),
+        firstLessonCheckout: {
+          eligible: !!attr,
+          estimatedDiscountDollars: estimatedDiscount,
+          stacksWithPromo: true,
+          config: REFERRAL_CONFIG.firstLessonDiscount,
+        },
+        walletSignupCreditsNote:
+          "Signup wallet credits are applied separately after registration.",
+      },
+      "Benefits"
+    );
+  }
+
   private async findReferrerFromInput(params: {
     referralCode?: string;
     referrerId?: string;

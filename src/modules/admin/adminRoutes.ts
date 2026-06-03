@@ -37,6 +37,7 @@ import {
   adminRestoreAccountDeletion,
   adminAddAccountDeletionNote,
 } from "./accountDeletionAdminController";
+import { referralAdminController } from "../referral/referralAdminController";
 
 const route: Router = Router();
 const authorizeMiddleware = new AuthorizeMiddleware();
@@ -127,6 +128,10 @@ route.get("/dashboard-metrics", adminController.getDashboardMetrics);
 route.get("/online-users", adminController.getOnlineUsers);
 route.get("/booking/:bookingId", adminController.getBookingSessionDetail);
 route.get("/booking/:bookingId/timeline", adminController.getBookingSessionTimeline);
+
+route.get("/referrals/dashboard", referralAdminController.getDashboard);
+route.get("/referrals/rewards", referralAdminController.listRewards);
+route.get("/referrals/attributions", referralAdminController.listAttributions);
 
 route.get("/finance/ledger", adminFinanceController.getLedger);
 route.get("/finance/escrow", adminFinanceController.getEscrowHolds);

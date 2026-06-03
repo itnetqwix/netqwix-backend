@@ -10,6 +10,8 @@ route.get("/resolve/:code", referralController.resolveCode);
 route.get("/resolve-referrer/:userId", referralController.resolveReferrer);
 
 route.get("/program", authorize.authorizeUser, referralController.getProgram);
+route.get("/benefits", authorize.authorizeUser, referralController.getBenefits);
+route.post("/preview-checkout", authorize.authorizeUser, referralController.previewCheckout);
 route.get("/invites", authorize.authorizeUser, referralController.listInvites);
 route.get("/rewards", authorize.authorizeUser, referralController.listRewards);
 route.post(

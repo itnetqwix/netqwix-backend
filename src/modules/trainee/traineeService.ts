@@ -628,29 +628,21 @@ export class TraineeService {
         }
       }
 
-      let promoDiscountAmount = 0;
-      let appliedPromoCode: string | null = null;
-
-      if (payload.coupon_code && typeof payload.coupon_code === "string" && payload.coupon_code.trim()) {
-        const promoService = new PromoCodeService();
-        const promoResult = await promoService.validatePromoCode(
-          payload.coupon_code,
-          _id,
-          "Trainee",
-          "scheduled",
-          originalPrice
-        );
-        if (promoResult.valid) {
-          promoDiscountAmount = promoResult.discount_amount!;
-          appliedPromoCode = payload.coupon_code.trim().toUpperCase();
-        } else {
-          return ResponseBuilder.badRequest(
-            promoResult.reason || "Invalid or expired promo code."
-          );
-        }
+      const { computeBookingCheckoutDiscounts, markReferralFirstLessonDiscountUsed } =
+        require("../referral/referralCheckoutDiscount");
+      const checkout = await computeBookingCheckoutDiscounts({
+        traineeId: String(_id),
+        originalPrice,
+        bookingType: "scheduled",
+        couponCode: payload.coupon_code,
+      });
+      if (checkout.promoError) {
+        return ResponseBuilder.badRequest(checkout.promoError);
       }
-
-      const finalPrice = Number(Math.max(originalPrice - promoDiscountAmount, 0).toFixed(2));
+      const promoDiscountAmount = checkout.promoDiscount;
+      const referralDiscountAmount = checkout.referralDiscount;
+      const appliedPromoCode = checkout.appliedPromoCode;
+      const finalPrice = checkout.finalPrice;
 
       const bookingId = new mongoose.Types.ObjectId();
       if (payload.payment_method === "wallet" && finalPrice > 0) {
@@ -680,10 +672,21 @@ export class TraineeService {
         charging_price: finalPrice,
         amount: String(finalPrice),
         original_amount: String(originalPrice),
-        ...(appliedPromoCode && { coupon_code: appliedPromoCode, discount_applied: promoDiscountAmount }),
+        ...(appliedPromoCode && { coupon_code: appliedPromoCode }),
+        discount_applied: checkout.totalDiscount,
+        ...(referralDiscountAmount > 0 && {
+          referral_discount_applied: referralDiscountAmount,
+        }),
         ...(start_time && { start_time }),
         ...(end_time && { end_time }),
       });
+      if (checkout.referralAttributionId && referralDiscountAmount > 0) {
+        void markReferralFirstLessonDiscountUsed(
+          checkout.referralAttributionId,
+          referralDiscountAmount,
+          String(bookingId)
+        );
+      }
       const trainerId = sessionObj["trainer_id"];
       const trainerDetails = await user.findById({ _id: trainerId });
       const traineeId = sessionObj["trainee_id"];
@@ -926,27 +929,20 @@ export class TraineeService {
 
       const expectedPrice = Number(((hourlyRate / 60) * duration).toFixed(2));
 
-      let promoDiscountAmount = 0;
-      let appliedPromoCode: string | null = null;
-
-      if (payload.coupon_code && typeof payload.coupon_code === "string" && payload.coupon_code.trim()) {
-        const promoService = new PromoCodeService();
-        const promoResult = await promoService.validatePromoCode(
-          payload.coupon_code,
-          _id,
-          "Trainee",
-          "instant",
-          expectedPrice
-        );
-        if (promoResult.valid) {
-          promoDiscountAmount = promoResult.discount_amount!;
-          appliedPromoCode = payload.coupon_code.trim().toUpperCase();
-        } else {
-          return ResponseBuilder.badRequest(
-            promoResult.reason || "Invalid or expired promo code."
-          );
-        }
+      const { computeBookingCheckoutDiscounts, markReferralFirstLessonDiscountUsed } =
+        require("../referral/referralCheckoutDiscount");
+      const checkout = await computeBookingCheckoutDiscounts({
+        traineeId: String(_id),
+        originalPrice: expectedPrice,
+        bookingType: "instant",
+        couponCode: payload.coupon_code,
+      });
+      if (checkout.promoError) {
+        return ResponseBuilder.badRequest(checkout.promoError);
       }
+      const promoDiscountAmount = checkout.promoDiscount;
+      const referralDiscountAmount = checkout.referralDiscount;
+      const appliedPromoCode = checkout.appliedPromoCode;
 
       const session_start_time = DateFormat.addMinutes(
         booked_date,
@@ -987,7 +983,7 @@ export class TraineeService {
 
       /** Pre-discount list price; never use a post-payment / post-promo client amount as the base. */
       const basePrice = expectedPrice;
-      const chargingPrice = Number(Math.max(basePrice - promoDiscountAmount, 0).toFixed(2));
+      const chargingPrice = checkout.finalPrice;
 
       if (chargingPrice > 0 && hourlyRate > 0) {
         const paidViaCard = Boolean(payload.payment_intent_id);
@@ -1017,9 +1013,12 @@ export class TraineeService {
       if (payload.payment_intent_id) bookingFields.payment_intent_id = payload.payment_intent_id;
       if (basePrice > 0) bookingFields.original_amount = String(basePrice);
       bookingFields.amount = String(chargingPrice);
-      if (appliedPromoCode) {
-        bookingFields.coupon_code = appliedPromoCode;
-        bookingFields.discount_applied = promoDiscountAmount;
+      if (checkout.totalDiscount > 0) {
+        bookingFields.discount_applied = checkout.totalDiscount;
+      }
+      if (appliedPromoCode) bookingFields.coupon_code = appliedPromoCode;
+      if (referralDiscountAmount > 0) {
+        bookingFields.referral_discount_applied = referralDiscountAmount;
       }
 
       const bookingId = new mongoose.Types.ObjectId();
@@ -1094,6 +1093,13 @@ export class TraineeService {
           _id,
           String(bookingData._id),
           promoDiscountAmount
+        );
+      }
+      if (checkout.referralAttributionId && referralDiscountAmount > 0) {
+        void markReferralFirstLessonDiscountUsed(
+          checkout.referralAttributionId,
+          referralDiscountAmount,
+          String(bookingData._id)
         );
       }
 
