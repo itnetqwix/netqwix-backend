@@ -10,11 +10,13 @@ const extensionService = new SessionExtensionService();
 
 function formatClipRow(c: any) {
   const thumb = c?.thumbnail ?? c?.thumbnail_url ?? null;
+  const fileName = c?.file_name ?? c?.filename ?? c?.file_id ?? null;
   return {
     _id: String(c._id),
     title: String(c.title ?? c.name ?? "Clip"),
     thumbnail: thumb != null ? String(thumb) : null,
     category: c.category ?? null,
+    file_name: fileName != null ? String(fileName) : null,
   };
 }
 
