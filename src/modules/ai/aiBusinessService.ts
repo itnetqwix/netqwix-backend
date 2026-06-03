@@ -301,35 +301,12 @@ export class AIBusinessService {
         return ResponseBuilder.badRequest("Only trainers can view review analysis.");
       }
 
-      const sessions = await booked_sessions
-        .find({ trainer_id: authUser._id, status: "completed" })
-        .select("ratings")
-        .lean();
-
-      const reviews = sessions
-        .map((s: any) => s.ratings?.trainee)
-        .filter((r: any) => r && (r.sessionRating || r.title || r.remarksInfo))
-        .map((r: any) => ({
-          sessionRating: Number(r.sessionRating) || 0,
-          recommendRating: Number(r.recommendRating) || 0,
-          title: r.title ? String(r.title) : undefined,
-          remarks: (r.remarks || r.remarksInfo || "").trim() || undefined,
-        }));
-
-      if (reviews.length < 2) {
-        const data: any = {
-          overallSentiment: "insufficient",
-          strengths: [],
-          improvements: [],
-          summary: "Not enough reviews yet. Complete more sessions to get AI-powered insights.",
-          reviewCount: reviews.length,
-        };
-        return ResponseBuilder.data(data, "Need more reviews for analysis.");
-      }
-
-      const analysis = await aiService.analyzeReviews(reviews);
-      const data: any = { ...analysis, reviewCount: reviews.length };
-      return ResponseBuilder.data(data, "Review analysis complete.");
+      const { getTrainerReviewInsight } = await import("./reviewInsightCacheService");
+      const data = await getTrainerReviewInsight(String(authUser._id));
+      const msg = data.cached
+        ? "Review analysis (cached)."
+        : "Review analysis complete.";
+      return ResponseBuilder.data(data, msg);
     } catch (err) {
       console.error("[AI] reviewAnalysis error:", err);
       const data: any = {

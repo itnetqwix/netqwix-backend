@@ -40,4 +40,6 @@ export class Tables {
     public static readonly trainer_verification_audit = "trainer_verification_audit";
     public static readonly auth_sessions = "auth_sessions";
     public static readonly trainee_favorite_trainers = "trainee_favorite_trainers";
+    public static readonly trainer_trainee_notes = "trainer_trainee_notes";
+    public static readonly trainer_review_insight = "trainer_review_insight";
 }

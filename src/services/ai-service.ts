@@ -465,13 +465,18 @@ Only return the JSON object, no other text.`;
   }
 
   async analyzeReviews(
-    reviews: { sessionRating: number; recommendRating?: number; title?: string; remarks?: string }[]
+    reviews: { sessionRating: number; recommendRating?: number; title?: string; remarks?: string }[],
+    activityContext?: string
   ): Promise<{ overallSentiment: string; strengths: string[]; improvements: string[]; summary: string }> {
     try {
+      const activityBlock = activityContext?.trim()
+        ? `\nTrainer activity on the platform since the last insight (prioritize recent changes):\n${activityContext.trim()}\n`
+        : "";
       const prompt = `You are a review analyst for a sports coaching platform. Analyze these session reviews and provide actionable insights for the trainer.
 
 Reviews:
 ${JSON.stringify(reviews.slice(0, 30), null, 2)}
+${activityBlock}
 
 Return a JSON object:
 {
@@ -589,3 +594,5 @@ Only return the JSON object, no other text.`;
     }
   }
 }
+
+export const aiService = new AIService();
