@@ -101,6 +101,7 @@ export class reportController {
   public getAllReport = async (req: any, res: Response) => {
     const { _id, account_type } = req.authUser;
     req.body._id = _id;
+    req.body.account_type = account_type;
     try {
       const result: ResponseBuilder = await this.reportService.getAllReport(req.body);
       return res.status(result.code).send(result);

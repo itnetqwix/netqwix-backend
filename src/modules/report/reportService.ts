@@ -418,16 +418,19 @@ export class ReportService {
     try {
       //NOTE -we will get data based on this user_id , when we call the api from admin for each trainer and trainee
       const id = data?.user_id || data?._id;
-      const traineeIsNotAvailableMatchQuery = {
-        $or: [
-          {
-            trainee: new mongoose.Types.ObjectId(id),
-          },
-          {
-            trainer: new mongoose.Types.ObjectId(id),
-          },
-        ],
-      };
+      const accountType = String(data?.account_type ?? "").toLowerCase();
+      const roleScopedMatch =
+        accountType === "trainee"
+          ? { trainee: new mongoose.Types.ObjectId(id) }
+          : accountType === "trainer"
+            ? { trainer: new mongoose.Types.ObjectId(id) }
+            : {
+                $or: [
+                  { trainee: new mongoose.Types.ObjectId(id) },
+                  { trainer: new mongoose.Types.ObjectId(id) },
+                ],
+              };
+      const traineeIsNotAvailableMatchQuery = roleScopedMatch;
 
       const traineeIsvailableMatchQuery = {
         trainer: new mongoose.Types.ObjectId(data._id),
