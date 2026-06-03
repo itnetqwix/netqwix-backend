@@ -44,7 +44,8 @@ export type LedgerReferenceType =
   | "refund"
   | "payout"
   | "adjustment"
-  | "migration_opening";
+  | "migration_opening"
+  | "referral";
 
 export function resolveCurrencyForRegion(region?: string): string {
   const key = (region || "DEFAULT").toUpperCase();

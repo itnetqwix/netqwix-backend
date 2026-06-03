@@ -66,6 +66,10 @@ const userSchema: Schema = new Schema(
       type: Date,
       default: null,
     },
+    /** Shareable referral code (e.g. NQABC123). */
+    referral_code: { type: String, unique: true, sparse: true, index: true },
+    /** Set once when this user signed up via another member's invite/link. */
+    referred_by_user_id: { type: ObjectId, ref: "user", default: null },
     friends: [{ type: ObjectId, ref: 'user' }],
     blockedUsers: [{ type: ObjectId, ref: 'user' }],
     lastSeen: { type: Date, default: null },

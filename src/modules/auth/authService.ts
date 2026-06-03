@@ -182,25 +182,25 @@ export class AuthService {
       (updateduserObj as any).status = "approved";
     }
 
-    // Create the user object, but replace its _id if referredUser exists
-    const userObj = referredUser
-      ? new userModel({ ...updateduserObj, _id: referredUser._id,friends:[referredUser.referrerId] }) // Use referred user's _id
-      : new userModel(updateduserObj); // Create a new user normally
-
-
+    const userObj = new userModel(updateduserObj);
     await userObj.save();
 
     if (createUser.account_type === AccountType.TRAINER) {
       await syncSignupOtpContactVerification(String(userObj._id));
     }
 
-    // Remove the referred user from the ReferredUser collection if it was created from there
-    if (referredUser) {
-      const rUser = await userModel.findById(referredUser.referrerId);
-      rUser.friends = [referredUser._id];
-      await rUser.save();
-      await ReferredUser.deleteOne({ _id: referredUser._id });
-    }
+    const { referralService } = await import("../referral/referralService");
+    void referralService.onUserRegistered(
+      {
+        _id: String(userObj._id),
+        email: createUser.email,
+        account_type: createUser.account_type,
+      },
+      {
+        referralCode: (createUser as any).referral_code,
+        referrerId: (createUser as any).referrer_id ?? (referredUser ? String(referredUser.referrerId) : undefined),
+      }
+    );
 
     // SendEmail.sendRawEmail(
     //   null,

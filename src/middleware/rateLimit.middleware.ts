@@ -75,6 +75,13 @@ export const authSignupOtpLimiter = createRateLimiter({
   message: "Too many verification code requests. Try again later.",
 });
 
+export const authReferralInviteLimiter = createRateLimiter({
+  name: "referral-invite",
+  windowMs: 60 * 60 * 1000,
+  max: 40,
+  message: "Too many referral invites. Try again later.",
+});
+
 export const walletPinLimiter = createRateLimiter({
   name: "wallet-pin",
   windowMs: 15 * 60 * 1000,

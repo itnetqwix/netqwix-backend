@@ -1,6 +1,8 @@
 export class Tables {
   public static readonly user = "user";
-  public static readonly referredUser = "referred_user"
+  public static readonly referredUser = "referred_user";
+  public static readonly referral_attribution = "referral_attribution";
+  public static readonly referral_reward = "referral_reward";
   public static readonly master_data = "master_data";
   public static readonly schedule_inventory = "schedule_inventory";
   public static readonly booked_sessions = "booked_sessions";

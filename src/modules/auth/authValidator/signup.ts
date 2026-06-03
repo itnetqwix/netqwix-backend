@@ -49,6 +49,14 @@ export class signupModel extends model {
   @IsNotEmpty()
   public accepted_terms_and_privacy: boolean;
 
+  @IsOptional()
+  @IsString()
+  public referral_code?: string;
+
+  @IsOptional()
+  @IsString()
+  public referrer_id?: string;
+
   constructor(body: any) {
     super();
     const {
@@ -60,6 +68,8 @@ export class signupModel extends model {
       category,
       isGoogleRegister,
       accepted_terms_and_privacy,
+      referral_code,
+      referrer_id,
     } = body;
     this.fullname = fullname;
     this.email = email;
@@ -69,5 +79,8 @@ export class signupModel extends model {
     this.category = category;
     this.isGoogleRegister = isGoogleRegister;
     this.accepted_terms_and_privacy = accepted_terms_and_privacy === true;
+    this.referral_code =
+      typeof referral_code === "string" ? referral_code.trim().toUpperCase() : undefined;
+    this.referrer_id = typeof referrer_id === "string" ? referrer_id.trim() : undefined;
   }
 }

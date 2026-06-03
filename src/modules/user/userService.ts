@@ -371,63 +371,28 @@ export class UserService {
 
   public async inviteFriend(userInfo) {
     try {
-      if (!userInfo) {
-        return ResponseBuilder.data({ userInfo }, "User not found");
-      } else {
-        // const emailTemplate =
-        //   userInfo._doc.account_type === AccountType.TRAINER
-        //     ? "refer-expert"
-        //     : "refer-trainee";
-        const existingReferredUser = await ReferredUser.findOne<any>({ email: userInfo?.user_email });
-        if(!existingReferredUser){
-          const referredUser = new ReferredUser({
-            email: userInfo?.user_email,
-            referrerId: userInfo._doc._id,
-          });
-  
-  
-          await referredUser.save();
-        }
-
-        if (userInfo._doc.notifications.promotional.email) {
-          if (userInfo._doc.account_type === AccountType.TRAINER) {
-            SendEmail.sendRawEmail(
-              "refer-expert",
-              {
-                "{FULLNAME}": `${userInfo._doc.fullname}`,
-                "{FULLNAME1}": `${userInfo._doc.fullname}`,
-                "{FULLNAME2}": `${userInfo._doc.fullname}`,
-                "{FULLNAME3}": `${userInfo._doc.fullname}`,
-                "{FIRSTNAME}": `${userInfo._doc.fullname.split(" ")[0]}`,
-                "{FIRSTNAME1}": `${userInfo._doc.fullname.split(" ")[0]}`,
-                "{FIRSTNAME2}": `${userInfo._doc.fullname.split(" ")[0]}`,
-                "{FIRSTNAME3}": `${userInfo._doc.fullname.split(" ")[0]}`,
-                "{FIRSTNAME4}": `${userInfo._doc.fullname.split(" ")[0]}`,
-                "{PROFILE_PIC}": `https://data.netqwix.com/${userInfo._doc.profile_picture}`,
-              },
-              [userInfo?.user_email],
-              `Exclusive Invitation to Join NetQwix Platform!`,
-              null,
-            );
-
-          } else {
-            SendEmail.sendRawEmail(
-              "refer-friend",
-              {
-                "{FULLNAME}": `${userInfo._doc.fullname}`,
-                "{PROFILE_PIC}": `https://data.netqwix.com/${userInfo._doc.profile_picture}`,
-              },
-              [userInfo?.user_email],
-              `Exclusive Invitation to Join NetQwix Platform!`,
-              null,
-            );
-          }
-        }
-
-        return ResponseBuilder.data({}, "");
+      const auth = userInfo?._doc ?? userInfo;
+      const inviteEmail = userInfo?.user_email;
+      if (!auth?._id || !inviteEmail) {
+        return ResponseBuilder.badRequest("Invalid invite payload.");
       }
+      const { referralService } = await import("../referral/referralService");
+      const target =
+        userInfo?.targetAccountType === AccountType.TRAINER
+          ? AccountType.TRAINER
+          : AccountType.TRAINEE;
+      return referralService.sendInvites(
+        {
+          _id: auth._id,
+          account_type: auth.account_type,
+          fullname: auth.fullname,
+          notifications: auth.notifications,
+        },
+        [inviteEmail],
+        target
+      );
     } catch (err) {
-      console.log("error", err)
+      console.log("error", err);
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
     }
   }
@@ -802,6 +767,8 @@ export class UserService {
           UserActivityEvent.SESSION_COMPLETED,
           { sessionId: String(bookingInfo._id) }
         );
+        const { referralService } = await import("../referral/referralService");
+        void referralService.onSessionCompleted(bookingInfo);
       }
       return ResponseBuilder.data({ bookingInfo }, l10n.t("RATING_SUBMITTED"));
     } catch (err) {
@@ -1502,42 +1469,8 @@ export class UserService {
 
   public async getMyReferrals(userId: string) {
     try {
-      const mongoose = require("mongoose");
-      const list = await ReferredUser.find({ referrerId: new mongoose.Types.ObjectId(userId) })
-        .sort({ createdAt: -1 })
-        .lean();
-
-      // Enrich each row with `joined` + `joinedAt` so the mobile invite-tracker
-      // can bucket invitees into Pending vs Joined without a second round trip.
-      // We use a single bulk lookup on `users.email` instead of an N+1 query.
-      const emails = (list ?? [])
-        .map((r) => (typeof r?.email === "string" ? r.email.trim().toLowerCase() : ""))
-        .filter(Boolean);
-      let joinedByEmail = new Map<string, { _id: any; createdAt?: Date }>();
-      if (emails.length > 0) {
-        const usersWithEmail = await user
-          .find({ email: { $in: emails } }, { email: 1, createdAt: 1 })
-          .lean();
-        joinedByEmail = new Map(
-          usersWithEmail.map((u: any) => [
-            String(u.email).toLowerCase(),
-            { _id: u._id, createdAt: u.createdAt },
-          ])
-        );
-      }
-
-      const enriched = (list ?? []).map((r) => {
-        const email = typeof r?.email === "string" ? r.email.trim().toLowerCase() : "";
-        const match = email ? joinedByEmail.get(email) : null;
-        return {
-          ...r,
-          joined: !!match,
-          joinedAt: match?.createdAt ?? null,
-          joinedUserId: match?._id ?? null,
-        };
-      });
-
-      return ResponseBuilder.data(enriched, "Fetched successfully");
+      const { referralService } = await import("../referral/referralService");
+      return referralService.listInvites(userId);
     } catch (err) {
       return ResponseBuilder.error(err, l10n.t("ERR_INTERNAL_SERVER"));
     }
