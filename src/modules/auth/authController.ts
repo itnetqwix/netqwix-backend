@@ -11,6 +11,7 @@ import { parseClientSessionMeta } from "./clientSessionMeta";
 import userModel from "../../model/user.schema";
 import { signupOtpService } from "./signupOtpService";
 import { signupModel } from "./authValidator/signup";
+import { magicLinkService } from "./magicLinkService";
 
 const loginAttemptStore = new Map<string, { count: number; resetAt: number }>();
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -265,6 +266,53 @@ export class authController {
     }
   };
 
+  public requestMagicLink = async (req: Request, res: Response) => {
+    try {
+      const fwd = (req.headers["x-forwarded-for"] as string) || "";
+      const ip = (fwd || req.socket?.remoteAddress || "").split(",")[0].trim() || "";
+      const ua = String(req.headers["user-agent"] ?? "");
+      const result = await magicLinkService.request(String(req.body?.email ?? ""), {
+        ip,
+        userAgent: ua,
+      });
+      return res.status(result.code).json(result);
+    } catch (error) {
+      this.logger.error(error);
+      return res.status(500).json({
+        status: CONSTANCE.FAIL,
+        error: (error as Error)?.message || "Could not send magic link.",
+      });
+    }
+  };
+
+  public verifyMagicLink = async (req: Request, res: Response) => {
+    try {
+      const sessionMeta = parseClientSessionMeta(req, "magic-link");
+      const result = await magicLinkService.verify(
+        String(req.body?.email ?? ""),
+        {
+          token: req.body?.token,
+          code: req.body?.code,
+        },
+        sessionMeta
+      );
+      if (result.status === CONSTANCE.FAIL) {
+        return res.status(result.code).json({
+          status: CONSTANCE.FAIL,
+          error: result.error,
+          code: CONSTANCE.RES_CODE.error.badRequest,
+        });
+      }
+      return res.status(result.code).json(result);
+    } catch (error) {
+      this.logger.error(error);
+      return res.status(500).json({
+        status: CONSTANCE.FAIL,
+        error: (error as Error)?.message || "Could not verify the link.",
+      });
+    }
+  };
+
   public refreshToken = async (req: Request, res: Response) => {
     try {
       const refresh_token = String(req.body?.refresh_token ?? "").trim();
@@ -375,6 +423,26 @@ export class authController {
       const keepSessionId = String(req.headers["x-nq-session-id"] || "").trim() || undefined;
       const count = await authSessionService.revokeAllExcept(userId, keepSessionId);
       return res.status(200).json({ status: CONSTANCE.SUCCESS, data: { revokedCount: count } });
+    } catch (error) {
+      this.logger.error(error);
+      return res.status(500).json({
+        status: CONSTANCE.FAIL,
+        error: (error as Error)?.message || "Could not revoke sessions.",
+      });
+    }
+  };
+
+  public revokeAllSessions = async (req: Request, res: Response) => {
+    try {
+      const userId = String(req["authUser"]?._id ?? "");
+      if (!userId) {
+        return res.status(401).json({ status: CONSTANCE.FAIL, error: "Not authenticated." });
+      }
+      const count = await authSessionService.revokeAllForUser(userId);
+      return res.status(200).json({
+        status: CONSTANCE.SUCCESS,
+        data: { revokedCount: count, signedOutAll: true },
+      });
     } catch (error) {
       this.logger.error(error);
       return res.status(500).json({

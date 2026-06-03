@@ -11,8 +11,9 @@ export class Tables {
   public static readonly report = "report";
   public static readonly saved_session = "saved_session";
   public static readonly availability = "availability";
-  public static readonly admin_setting = "admin_setting";
-  public static readonly write_us = "write_us";
+    public static readonly admin_setting = "admin_setting";
+    public static readonly pricing_config = "pricing_config";
+    public static readonly write_us = "write_us";
   public static readonly raise_concern = "raise_concern";
     public static readonly online_user = "online_user";
     public static readonly notifications = "notifications";
@@ -40,6 +41,16 @@ export class Tables {
     public static readonly trainer_verification_audit = "trainer_verification_audit";
     public static readonly auth_sessions = "auth_sessions";
     public static readonly trainee_favorite_trainers = "trainee_favorite_trainers";
+    public static readonly trainee_guest_activity = "trainee_guest_activity";
+    public static readonly magic_link_tokens = "magic_link_tokens";
+    public static readonly booking_reminder_log = "booking_reminder_log";
     public static readonly trainer_trainee_notes = "trainer_trainee_notes";
     public static readonly trainer_review_insight = "trainer_review_insight";
+    public static readonly scheduled_chat_messages = "scheduled_chat_messages";
+    public static readonly tip = "tip";
+    public static readonly home_banner = "home_banner";
+    public static readonly cms_legal_document = "cms_legal_document";
+    public static readonly cms_page = "cms_page";
+    public static readonly cms_faq = "cms_faq";
+    public static readonly account_deletion_request = "account_deletion_request";
 }

@@ -1,4 +1,4 @@
-import crypto from "crypto";
+import * as crypto from "crypto";
 import mongoose from "mongoose";
 import booked_sessions from "../../model/booked_sessions.schema";
 import clip from "../../model/clip.schema";
