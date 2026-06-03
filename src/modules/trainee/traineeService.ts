@@ -46,7 +46,10 @@ import {
 import { REDIS_TTL } from "../../config/redis";
 import { withDistributedLock } from "../../services/distributedLock";
 import trainee_favorite_trainers from "../../model/trainee_favorite_trainers.schema";
-import { trainerHasOpenSlots } from "../../helpers/trainerSlots";
+import {
+  computeTodaySlotsPreviewFromAvailability,
+  type TrainerBookingWindow,
+} from "../../helpers/trainerTodaySlotsPreview";
 import { attachTrainerSocialSignals } from "./traineeSocialSignals";
 import {
   buildTrainerDirectoryMatchStage,
@@ -95,7 +98,14 @@ export class TraineeService {
         maxHourlyRate = "",
         page = "1",
         limit = "50",
+        traineeTimeZone: traineeTimeZoneRaw = "",
       } = query;
+
+      const traineeTimeZone =
+        typeof traineeTimeZoneRaw === "string" && traineeTimeZoneRaw.trim()
+          ? traineeTimeZoneRaw.trim()
+          : "UTC";
+      const todayIso = DateTime.now().setZone(traineeTimeZone).toISODate()!;
 
       const trimmedSearch = typeof search === "string" ? search.trim() : "";
 
@@ -281,7 +291,6 @@ export class TraineeService {
         {
           $project: {
             _id: 1,
-            available_slots: CONSTANCE.SCHEDULING_SLOTS.available_slots,
             trainer_id: "$_id",
             trainer_ratings: 1,
             avgRating: 1,
@@ -401,6 +410,13 @@ export class TraineeService {
 
       const { isUserOnline } = require("../socket/socket.service");
       const { isTrainerInWeeklyAvailabilityNow } = require("./instantEligibilityService");
+
+      const trainerIds = result.map((row: any) => row._id).filter(Boolean);
+      const bookingsByTrainer = await this.loadTrainerBookingsForDate(
+        trainerIds,
+        todayIso
+      );
+
       const enriched = await Promise.all(
         result.map(async (row: any) => {
           const trainerId = String(row._id || row.trainer_id);
@@ -409,14 +425,27 @@ export class TraineeService {
             row.extraInfo?.availabilityInfo?.timeZone ||
             (row as { time_zone?: string }).time_zone ||
             inAvail.timezone;
-          const slots = row.available_slots ?? row.slots;
+          const trainerBookings =
+            bookingsByTrainer.get(trainerId) ?? ([] as TrainerBookingWindow[]);
+          const todayPreview = computeTodaySlotsPreviewFromAvailability(
+            row.extraInfo as Record<string, unknown> | undefined,
+            todayIso,
+            traineeTimeZone,
+            trainerBookings,
+            3
+          );
           return {
             ...row,
-            slots,
+            today_slots_count: todayPreview.count,
+            today_slot_previews: todayPreview.previews,
+            slots: todayPreview.previews.map((time) => ({
+              start_time: time,
+              label: "Today",
+            })),
             is_online: isUserOnline(trainerId),
             in_availability_now: inAvail.ok,
             trainer_timezone: tz,
-            has_open_slots: trainerHasOpenSlots(slots),
+            has_open_slots: todayPreview.hasOpenSlots,
           };
         })
       );
@@ -435,6 +464,41 @@ export class TraineeService {
       }
 
       return out;
+  }
+
+  /** Active bookings on `bookedDateIso` (YYYY-MM-DD) for directory slot previews. */
+  private async loadTrainerBookingsForDate(
+    trainerIds: mongoose.Types.ObjectId[],
+    bookedDateIso: string
+  ): Promise<Map<string, TrainerBookingWindow[]>> {
+    const map = new Map<string, TrainerBookingWindow[]>();
+    if (!trainerIds.length) return map;
+
+    const dateOnly = bookedDateIso.split("T")[0];
+    const rows = await booked_session
+      .find({
+        trainer_id: { $in: trainerIds },
+        status: { $ne: BOOKED_SESSIONS_STATUS.cancel },
+        $expr: {
+          $eq: [
+            { $dateToString: { format: "%Y-%m-%d", date: "$booked_date" } },
+            dateOnly,
+          ],
+        },
+      })
+      .select("trainer_id start_time end_time time_zone")
+      .lean();
+
+    for (const row of rows) {
+      const tid = String(row.trainer_id);
+      if (!map.has(tid)) map.set(tid, []);
+      map.get(tid)!.push({
+        start: row.start_time,
+        end: row.end_time,
+        time_zone: row.time_zone,
+      });
+    }
+    return map;
   }
 
   public filterTrainersByDayAndTime = async (day, time) => {
