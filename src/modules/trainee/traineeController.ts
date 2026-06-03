@@ -342,6 +342,42 @@ export class traineeController {
     }
   };
 
+  /** REST fallback when trainee cancels before accept (refund + socket relay). */
+  public cancelInstantLesson = async (req: Request, res: Response) => {
+    try {
+      const traineeId = String(req["authUser"]?._id ?? "");
+      const lessonId = String(req.body?.lessonId ?? req.body?.lesson_id ?? "");
+      const {
+        cancelInstantLessonByTraineeAction,
+      } = require("../instant-lesson/instantLessonActions");
+      const result = await cancelInstantLessonByTraineeAction({
+        lessonId,
+        traineeId,
+      });
+      if (!result.ok) {
+        const code =
+          result.error === "forbidden"
+            ? 403
+            : result.error === "already_accepted"
+              ? 409
+              : 400;
+        return res.status(code).json({
+          status: CONSTANCE.FAIL,
+          error: result.error,
+        });
+      }
+      return res.status(200).json({
+        status: CONSTANCE.SUCCESS,
+        data: { ok: true, refund: result.refund },
+      });
+    } catch (err: any) {
+      this.logger.error(err);
+      return res
+        .status(500)
+        .json({ status: CONSTANCE.FAIL, error: err?.message ?? "Internal error" });
+    }
+  };
+
   public updateProfile = async (req: any, res: Response) => {
     try {
       const payload = _.pick(req.body, UPDATE_FIELDS.user);

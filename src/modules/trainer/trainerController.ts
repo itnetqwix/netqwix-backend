@@ -411,7 +411,13 @@ export class trainerController {
         traineeId: String(traineeId),
       });
       if (!result.ok) {
-        return res.status(result.error === "expired" ? 410 : 400).json({
+        const httpStatus =
+          result.error === "expired"
+            ? 410
+            : result.error === "conflict"
+              ? 409
+              : 400;
+        return res.status(httpStatus).json({
           status: CONSTANCE.FAIL,
           error: result.error,
           message: result.message,

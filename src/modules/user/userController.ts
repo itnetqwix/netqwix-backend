@@ -874,6 +874,7 @@ export class userController {
       const bookingId = String(req.params.bookingId);
       const { getSessionJoinReadiness } = require("../session/sessionJoinReadinessService");
       const h = req.headers ?? {};
+      const { parseLessonClientKindFromHeaders } = require("../../helpers/lesson/lessonClientTelemetry");
       const readiness = await getSessionJoinReadiness(bookingId, userId, accountType, {
         authSessionId:
           (h["x-nq-auth-session-id"] as string | undefined) ??
@@ -882,6 +883,7 @@ export class userController {
         deviceId:
           (h["x-nq-device-id"] as string | undefined) ??
           (h["x-device-id"] as string | undefined),
+        viewerClientKind: parseLessonClientKindFromHeaders(h),
       });
       if (!readiness) {
         return res.status(404).json({ success: 0, message: "Session not found." });

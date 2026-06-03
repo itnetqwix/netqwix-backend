@@ -209,7 +209,7 @@ export async function declineInstantLessonAction(body: {
     }
   );
   clearInstantLessonTimers(lessonId);
-  void refundSessionEscrow(lessonId, INSTANT_REFUND_REASON.DECLINED);
+  await refundSessionEscrow(lessonId, INSTANT_REFUND_REASON.DECLINED);
   emitInstantLessonPhase(lessonId, coachId, traineeId, INSTANT_PHASE.CANCELLED, {
     refundReason: INSTANT_REFUND_REASON.DECLINED,
   });
@@ -243,4 +243,83 @@ export async function declineInstantLessonAction(body: {
   });
 
   return { ok: true };
+}
+
+/** Trainee cancels before coach accepts — escrow/card refund via unified path. */
+export async function cancelInstantLessonByTraineeAction(body: {
+  lessonId: string;
+  traineeId: string;
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  refund?: { refunded: boolean; error?: string };
+}> {
+  const { lessonId, traineeId } = body;
+  if (!lessonId || !traineeId) {
+    return { ok: false, error: "missing_fields" };
+  }
+
+  const booking = await booked_session.findById(lessonId).lean();
+  if (!booking?.is_instant) {
+    return { ok: false, error: "not_instant" };
+  }
+  if (String(booking.trainee_id) !== String(traineeId)) {
+    return { ok: false, error: "forbidden" };
+  }
+  if (booking.status === BOOKED_SESSIONS_STATUS.cancel) {
+    return { ok: true };
+  }
+  if (booking.accepted_at) {
+    return { ok: false, error: "already_accepted" };
+  }
+
+  const coachId = String(booking.trainer_id);
+  const updated = await booked_session.findOneAndUpdate(
+    {
+      _id: lessonId,
+      is_instant: true,
+      trainee_id: traineeId,
+      status: BOOKED_SESSIONS_STATUS.BOOKED,
+      accepted_at: { $exists: false },
+    },
+    {
+      $set: {
+        status: BOOKED_SESSIONS_STATUS.cancel,
+        instant_phase: INSTANT_PHASE.CANCELLED,
+        refund_reason: INSTANT_REFUND_REASON.TRAINEE_CANCELLED,
+      },
+    },
+    { new: true }
+  );
+
+  if (!updated) {
+    return { ok: false, error: "not_updated" };
+  }
+
+  clearInstantLessonTimers(lessonId);
+  const refund = await refundSessionEscrow(
+    lessonId,
+    INSTANT_REFUND_REASON.TRAINEE_CANCELLED
+  );
+
+  emitInstantLessonPhase(lessonId, coachId, traineeId, INSTANT_PHASE.CANCELLED, {
+    refundReason: INSTANT_REFUND_REASON.TRAINEE_CANCELLED,
+  });
+  relayInstantEvent(EVENTS.INSTANT_LESSON.TRAINEE_CANCELLED, coachId, traineeId, {
+    lessonId,
+    coachId,
+    traineeId,
+    refundReason: INSTANT_REFUND_REASON.TRAINEE_CANCELLED,
+  });
+
+  logInstantLessonOps("INSTANT_LESSON_TRAINEE_CANCELLED", {
+    lessonId,
+    coachId,
+    traineeId,
+    severity: "info",
+    title: "Trainee cancelled instant lesson request",
+    payload: { refunded: refund.refunded, via: "action" },
+  });
+
+  return { ok: true, refund };
 }

@@ -17,6 +17,9 @@ export const REDIS_KEYS = {
   lessonTimer: (sessionId: string) => `${REDIS_PREFIX}:lesson:${sessionId}`,
   lessonCallSlot: (sessionId: string, userId: string) =>
     `${REDIS_PREFIX}:callslot:${sessionId}:${userId}`,
+  /** Per-session participant client kinds (native vs web) for join-readiness. */
+  lessonClientTelemetry: (sessionId: string) =>
+    `${REDIS_PREFIX}:lesson:client:${sessionId}`,
   cache: (segment: string) => `${REDIS_PREFIX}:cache:${segment}`,
   idempotency: (key: string) => `${REDIS_PREFIX}:idempotency:${key}`,
   lock: (resource: string) => `${REDIS_PREFIX}:lock:${resource}`,
@@ -34,6 +37,8 @@ export const REDIS_TTL = {
   LESSON_CALL_SLOT_SEC: 4 * 60 * 60,
   /** Shorter lease for instant lessons — faster recovery if disconnect is missed. */
   LESSON_CALL_SLOT_INSTANT_SEC: 90 * 60,
+  /** In-call client telemetry — same lifetime as call slot. */
+  LESSON_CLIENT_TELEMETRY_SEC: 4 * 60 * 60,
   /** Scheduled meetings list per user/tab. */
   SESSIONS_LIST_SEC: 60,
   /** Trainer discovery / slots. */

@@ -6,6 +6,7 @@ import { validator } from "../../validate";
 import {
   bookSessionModal,
   bookInstantMeetingModal,
+  cancelInstantLessonModal,
   checkSlotExistModal,
 } from "./traineeValidator";
 import {
@@ -51,6 +52,12 @@ route.get(
   "/instant-lesson/eligibility",
   traineeMiddleware.isTrainee,
   traineeC.getInstantLessonEligibility
+);
+route.post(
+  "/cancel-instant-lesson",
+  traineeMiddleware.isTrainee,
+  V.validate(cancelInstantLessonModal),
+  traineeC.cancelInstantLesson
 );
 
 // update profile

@@ -3,6 +3,15 @@ import booked_session from "../../model/booked_sessions.schema";
 import clip from "../../model/clip.schema";
 import { SESSION_EXTENSION } from "../../config/sessionExtension";
 import { SessionExtensionService } from "../trainee/sessionExtensionService";
+import {
+  computeJoinPolicy,
+  mergeJoinPolicyWithCallSlot,
+} from "../../helpers/liveLessonRules";
+import {
+  computeMixedClientWarning,
+  getPeerLessonClientKind,
+  type LessonClientKind,
+} from "../../helpers/lesson/lessonClientTelemetry";
 import { getLessonCallSlotStatus } from "../socket/lessonCallSlotStore";
 import { getLessonTimerSnapshot } from "../socket/socket.service";
 
@@ -24,7 +33,11 @@ export async function getSessionJoinReadiness(
   bookingId: string,
   userId: string,
   accountType: string,
-  opts?: { authSessionId?: string; deviceId?: string }
+  opts?: {
+    authSessionId?: string;
+    deviceId?: string;
+    viewerClientKind?: LessonClientKind;
+  }
 ) {
   if (!mongoose.isValidObjectId(bookingId)) return null;
 
@@ -82,6 +95,22 @@ export async function getSessionJoinReadiness(
     authSessionId: opts?.authSessionId,
     deviceId: opts?.deviceId,
   });
+
+  const joinPolicy = mergeJoinPolicyWithCallSlot(
+    computeJoinPolicy({
+      is_instant: !!row.is_instant,
+      status: row.status,
+      instant_phase: row.instant_phase,
+      accepted_at: row.accepted_at,
+      accept_deadline_at: row.accept_deadline_at,
+      join_deadline_at: row.join_deadline_at,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      both_joined_at: row.both_joined_at,
+      first_joined_at: row.first_joined_at,
+    }),
+    slot
+  );
 
   const timer = getLessonTimerSnapshot(bookingId);
   const durationMinutes =
@@ -144,6 +173,10 @@ export async function getSessionJoinReadiness(
     clips,
     clip_count: clips.length,
     call_slot: slot,
+    join_policy: joinPolicy,
+    can_join: joinPolicy.can_join,
+    join_block_reason: joinPolicy.block_reason,
+    join_code: joinPolicy.join_code,
     timer: timer
       ? {
           remainingSeconds: timer.remainingSeconds,
@@ -152,20 +185,27 @@ export async function getSessionJoinReadiness(
       : null,
     extension_preview: extensionPreview,
     iceServers: Array.isArray(row.iceServers) ? row.iceServers : [],
-    /** Prefer native app for live lessons; warn only when peer may be on web (set by client telemetry later). */
-    lesson_client_requirement: "native_app",
-    mixed_client_warning: null,
+    lesson_client_requirement: "native_app" as const,
+    mixed_client_warning: await (async () => {
+      const viewerClient = opts?.viewerClientKind ?? "unknown";
+      const peerClient = await getPeerLessonClientKind({
+        sessionId: bookingId,
+        viewerUserId: String(userId),
+        isTrainer,
+      });
+      return computeMixedClientWarning({
+        viewerClient,
+        peerClient,
+        peerRole: isTrainer ? "trainee" : "trainer",
+      });
+    })(),
+    peer_client_kind:
+      (await getPeerLessonClientKind({
+        sessionId: bookingId,
+        viewerUserId: String(userId),
+        isTrainer,
+      })) ?? null,
+    viewer_client_kind: opts?.viewerClientKind ?? null,
     recommended_clients: ["native_app"],
   };
-}
-
-export async function assertSessionParticipant(bookingId: string, userId: string) {
-  if (!mongoose.isValidObjectId(bookingId)) return false;
-  const row = await booked_session
-    .findById(bookingId)
-    .select("trainer_id trainee_id")
-    .lean();
-  if (!row) return false;
-  const uid = String(userId);
-  return uid === String(row.trainer_id) || uid === String(row.trainee_id);
 }

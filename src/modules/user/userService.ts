@@ -203,28 +203,24 @@ export class UserService {
           account_type === AccountType.TRAINER &&
           payload.booked_status === BOOKED_SESSIONS_STATUS.cancel
         ) {
-          const payment_intent_id = bookedSessionDetail.payment_intent_id;
           const traineeInfo = await user.findById(
             bookedSessionDetail["trainee_id"]
           );
           const trainerInfo = await user.findById(
             bookedSessionDetail["trainer_id"]
           );
-          const intent = await stripe.paymentIntents.retrieve(
-            payment_intent_id
-          );
-
-          const latest_charge = intent.latest_charge;
-
-          await stripe.refunds.create({
-            charge: latest_charge,
-            reverse_transfer: true,
-            refund_application_fee: true,
-          });
-
-          await booked_session.findByIdAndUpdate(bookedSessionId, {
-            refund_status: "refunded",
-          });
+          const refundReason = bookedSessionDetail.is_instant
+            ? "trainer_cancelled"
+            : "trainer_cancelled_scheduled";
+          try {
+            const { refundSessionEscrow } = require("../wallet/instantLessonRefundService");
+            await booked_session.findByIdAndUpdate(bookedSessionId, {
+              $set: { refund_reason: refundReason },
+            });
+            await refundSessionEscrow(String(bookedSessionId), refundReason);
+          } catch (refundErr) {
+            console.error("[BOOKING] trainer cancel refund failed", refundErr);
+          }
 
 
           const traineeName = traineeInfo.fullname;

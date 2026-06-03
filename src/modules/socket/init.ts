@@ -123,6 +123,12 @@ export class SocketInit {
           (socket as any).nqAuthSessionId =
             String(headers["x-nq-auth-session-id"] ?? auth.authSessionId ?? "").trim() ||
             undefined;
+          const {
+            parseLessonClientKindFromHeaders,
+          } = require("../../helpers/lesson/lessonClientTelemetry");
+          (socket as any).nqLessonClientKind = parseLessonClientKindFromHeaders(
+            headers as Record<string, unknown>
+          );
           return next();
         }
 

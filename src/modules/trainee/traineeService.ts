@@ -29,8 +29,11 @@ import { timeZoneAbbreviations } from "../../Utils/constant";
 import { PromoCodeService } from "../promo-code/promoCodeService";
 import {
   checkBothPartiesBookingConflict,
-  checkTrainerBookingConflict,
 } from "../../Utils/bookingConflict";
+import {
+  resolveScheduledUtcWindow,
+  validateScheduledBookWindow,
+} from "../../helpers/booking/scheduledBookingValidation";
 import { scheduleInstantLessonAcceptExpiry } from "../../helpers/instantLessonExpiry";
 import {
   computeInstantReservationWindowMs,
@@ -576,72 +579,29 @@ export class TraineeService {
     _id: string
   ): Promise<ResponseBuilder> {
     try {
-      if (
-        !payload ||
-        !payload.trainer_id ||
-        !payload.booked_date ||
-        !payload.session_start_time ||
-        !payload.session_end_time ||
-        (payload.charging_price == null) ||
-        !payload.time_zone
-      ) {
-        const validationError: Failure = {
-          type: "BAD_DATA",
-          name: "",
-          message: "",
-          description: "Invalid input data",
-          errorStack: "",
-          title: "Bad Request",
-          data: null,
-        };
-        return ResponseBuilder.error(validationError, "Invalid input data");
-      }
-      if (
-        !timeRegex.test(
-          typeof payload.session_start_time === "string" &&
-          payload.session_start_time
-        ) ||
-        !timeRegex.test(
-          typeof payload.session_end_time === "string" &&
-          payload.session_end_time
-        )
-      ) {
+      const validation = validateScheduledBookWindow(payload);
+      if (validation.ok === false) {
         return ResponseBuilder.badRequest(
-          "Invalid time format. Please use HH:mm format."
+          validation.message,
+          validation.httpCode ?? 400
         );
       }
-      // Compute start_time/end_time as proper UTC Date objects so the booking
-      // displays correctly in each viewer's local timezone (trainer and trainee).
-      let start_time: Date | undefined;
-      let end_time: Date | undefined;
-      try {
-        const rawDate = typeof payload.booked_date === "string"
-          ? payload.booked_date.split("T")[0]
-          : new Date(payload.booked_date as any).toISOString().split("T")[0];
-        const sessionStartTime = String(payload.session_start_time);
-        const sessionEndTime = String(payload.session_end_time);
-        const [startH, startM] = sessionStartTime.split(":").map(Number);
-        const [endH, endM] = sessionEndTime.split(":").map(Number);
-        const startDT = DateTime.fromObject(
-          { year: Number(rawDate.split("-")[0]), month: Number(rawDate.split("-")[1]), day: Number(rawDate.split("-")[2]), hour: startH, minute: startM, second: 0 },
-          { zone: payload.time_zone }
+      const window = resolveScheduledUtcWindow(payload);
+      if (!window) {
+        return ResponseBuilder.badRequest(
+          "Could not resolve session start and end times. Check date, times, and timezone.",
+          400
         );
-        let endDT = DateTime.fromObject(
-          { year: Number(rawDate.split("-")[0]), month: Number(rawDate.split("-")[1]), day: Number(rawDate.split("-")[2]), hour: endH, minute: endM, second: 0 },
-          { zone: payload.time_zone }
-        );
-        if (endDT <= startDT) endDT = endDT.plus({ days: 1 });
-        if (startDT.isValid && endDT.isValid) {
-          start_time = startDT.toJSDate();
-          end_time = endDT.toJSDate();
-        }
-      } catch (_e) {
-        // Non-fatal: fall back to null so existing behaviour is preserved
       }
-
-      if (start_time && end_time) {
-        const conflictMsg = await checkTrainerBookingConflict(payload.trainer_id, start_time, end_time);
-        if (conflictMsg) return ResponseBuilder.badRequest(conflictMsg);
+      const { start_time, end_time } = window;
+      const conflictMsg = await checkBothPartiesBookingConflict(
+        payload.trainer_id,
+        _id,
+        start_time,
+        end_time
+      );
+      if (conflictMsg) {
+        return ResponseBuilder.badRequest(conflictMsg, 409);
       }
 
       const {
@@ -683,6 +643,10 @@ export class TraineeService {
         if (promoResult.valid) {
           promoDiscountAmount = promoResult.discount_amount!;
           appliedPromoCode = payload.coupon_code.trim().toUpperCase();
+        } else {
+          return ResponseBuilder.badRequest(
+            promoResult.reason || "Invalid or expired promo code."
+          );
         }
       }
 
@@ -1018,7 +982,7 @@ export class TraineeService {
           payload: { reason: "trainer_conflict", trainer_id },
           source: "server",
         });
-        return ResponseBuilder.badRequest(conflictMsg);
+        return ResponseBuilder.badRequest(conflictMsg, 409);
       }
 
       /** Pre-discount list price; never use a post-payment / post-promo client amount as the base. */

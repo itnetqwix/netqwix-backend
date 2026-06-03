@@ -11,8 +11,12 @@ import {
   IsObject,
   IsOptional,
   IsNumber,
-  isDate,
+  Min,
+  Matches,
+  IsIn,
 } from "class-validator";
+import { timeRegex } from "../../config/constance";
+import { INSTANT_ALLOWED_DURATIONS } from "../../config/instantLesson";
 import { IsUserTrainer } from "../user/userValidatorConstraints";
 export class bookSessionModal extends model {
   // checking validation
@@ -31,11 +35,13 @@ export class bookSessionModal extends model {
 
   @IsNotEmpty()
   @IsString()
-  public session_start_time: number;
+  @Matches(timeRegex, { message: "session_start_time must be HH:mm" })
+  public session_start_time: string;
 
   @IsNotEmpty()
   @IsString()
-  public session_end_time: number;
+  @Matches(timeRegex, { message: "session_end_time must be HH:mm" })
+  public session_end_time: string;
 
   // initially it's going to be null
   @IsNotEmpty()
@@ -45,6 +51,7 @@ export class bookSessionModal extends model {
 
   @IsNotEmpty()
   @IsNumber()
+  @Min(0)
   public charging_price: number;
 
   @IsNotEmpty()
@@ -60,12 +67,16 @@ export class bookSessionModal extends model {
   public payment_intent_id?: string;
 
   @IsOptional()
-  @IsString()
+  @IsIn(["wallet", "card"])
   public payment_method?: string;
 
   @IsOptional()
   @IsString()
   public pin_session_token?: string;
+
+  @IsOptional()
+  @IsString()
+  public quote_id?: string;
 
   public iceServers: any[]; 
   
@@ -84,12 +95,13 @@ export class bookSessionModal extends model {
       payment_intent_id,
       payment_method,
       pin_session_token,
+      quote_id,
     } = body;
     this.trainer_id = trainer_id;
     this.status = status;
     this.booked_date = booked_date;
-    this.session_start_time = session_start_time;
-    this.session_end_time = session_end_time;
+    this.session_start_time = String(session_start_time ?? "");
+    this.session_end_time = String(session_end_time ?? "");
     this.session_link = null;
     this.charging_price = charging_price;
     this.iceServers = iceServers || []; 
@@ -98,6 +110,7 @@ export class bookSessionModal extends model {
     this.payment_intent_id = payment_intent_id;
     this.payment_method = payment_method;
     this.pin_session_token = pin_session_token;
+    this.quote_id = quote_id;
   }
 }
 
@@ -112,9 +125,10 @@ export class bookInstantMeetingModal extends model {
   @IsDateString()
   public booked_date?: Date;
 
-  /** Lesson duration in minutes (e.g. 15, 30, 60, 120). Default 30. */
+  /** Lesson duration in minutes — instant allows 15 or 30 only. */
   @IsOptional()
   @IsNumber()
+  @IsIn([...INSTANT_ALLOWED_DURATIONS])
   public duration?: number;
 
   /** Optional promo/coupon code. */
@@ -127,7 +141,7 @@ export class bookInstantMeetingModal extends model {
   public payment_intent_id?: string;
 
   @IsOptional()
-  @IsString()
+  @IsIn(["wallet", "card"])
   public payment_method?: string;
 
   @IsOptional()
@@ -135,6 +149,12 @@ export class bookInstantMeetingModal extends model {
   public pin_session_token?: string;
 
   @IsOptional()
+  @IsString()
+  public quote_id?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
   public charging_price?: number;
 
   constructor(body) {
@@ -148,6 +168,7 @@ export class bookInstantMeetingModal extends model {
       payment_method,
       pin_session_token,
       charging_price,
+      quote_id,
     } = body;
     this.trainer_id = trainer_id;
     this.booked_date = booked_date;
@@ -161,6 +182,18 @@ export class bookInstantMeetingModal extends model {
     this.payment_intent_id = payment_intent_id;
     this.payment_method = payment_method;
     this.pin_session_token = pin_session_token;
+    this.quote_id = quote_id;
+  }
+}
+
+export class cancelInstantLessonModal extends model {
+  @IsNotEmpty()
+  @IsString()
+  public lessonId: string;
+
+  constructor(body: Record<string, unknown>) {
+    super();
+    this.lessonId = String(body.lessonId ?? body.lesson_id ?? "");
   }
 }
 

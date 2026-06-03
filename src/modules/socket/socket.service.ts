@@ -38,6 +38,7 @@ import { s3, S3_BUCKET } from "../../Utils/s3Client";
 import { touchUserPresence } from "../../helpers/userActivity";
 import { logInstantLessonOps } from "../ops/opsInstantLogger";
 import { logPrecallCheckOps, logCallQualityOps } from "../ops/opsCallLogger";
+import { normalizeCallQualityStatsPayload } from "../../helpers/robustness/callQualityPayload";
 import {
   addLiveNote,
   getLessonLiveStateSnapshot,
@@ -1040,7 +1041,14 @@ export const handleSocketEvents = (socket, connections = {}) => {
       const accountType =
         socket?.user?._doc?.account_type || socket?.user?.account_type;
 
-      const { sessionId, role, stats } = payload || {};
+      const normalized = normalizeCallQualityStatsPayload(payload);
+      const { role, stats } = payload || {};
+      const sessionId = String(
+        (payload as { sessionId?: string })?.sessionId ??
+          normalized?.sessionId ??
+          ""
+      ).trim();
+      if (!sessionId) return;
 
       // Log quality metrics for monitoring
       if (stats?.quality) {
@@ -1184,6 +1192,20 @@ export const handleSocketEvents = (socket, connections = {}) => {
           .select("is_instant")
           .lean();
         isInstantLesson = !!slotMeta?.is_instant;
+      } catch {
+        /* non-fatal */
+      }
+
+      try {
+        const {
+          recordLessonParticipantClient,
+        } = require("../../helpers/lesson/lessonClientTelemetry");
+        await recordLessonParticipantClient({
+          sessionId: String(sessionId),
+          userId: String(userId),
+          accountType: String(accountType ?? ""),
+          clientKind: (socket as any).nqLessonClientKind ?? "unknown",
+        });
       } catch {
         /* non-fatal */
       }
@@ -2180,18 +2202,30 @@ const listenInstantLessonEvents = (socket) => {
     socket.on(EVENTS.INSTANT_LESSON.TRAINEE_CANCELLED, async (payload: any) => {
       try {
         const { lessonId, coachId, traineeId } = payload;
-        if (!lessonId || !coachId) return;
-        const coachSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, coachId);
-        if (coachSocketId) {
-          socket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.TRAINEE_CANCELLED, { lessonId, coachId, traineeId });
-        }
-        logInstantLessonOps("INSTANT_LESSON_TRAINEE_CANCELLED", {
-          lessonId,
-          coachId,
-          traineeId,
-          severity: "info",
-          title: "Trainee cancelled instant lesson request",
+        const socketTraineeId = String(
+          socket?.user?._doc?._id ?? socket?.user?._id ?? traineeId ?? ""
+        );
+        if (!lessonId || !socketTraineeId) return;
+
+        const {
+          cancelInstantLessonByTraineeAction,
+        } = require("../instant-lesson/instantLessonActions");
+        await cancelInstantLessonByTraineeAction({
+          lessonId: String(lessonId),
+          traineeId: socketTraineeId,
         });
+
+        const coachSocketId = MemCache.getDetail(
+          process.env.SOCKET_CONFIG,
+          String(coachId ?? "")
+        );
+        if (coachSocketId) {
+          socket.to(coachSocketId).emit(EVENTS.INSTANT_LESSON.TRAINEE_CANCELLED, {
+            lessonId,
+            coachId,
+            traineeId: socketTraineeId,
+          });
+        }
       } catch (_err) {
         /* intentionally quiet */
       }

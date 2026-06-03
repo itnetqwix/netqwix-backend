@@ -6,6 +6,7 @@ import {
   drainLiveNotesForPersist,
   type LiveNoteEntry,
 } from "./lessonLiveStateStore";
+import { clearLessonClientTelemetry } from "../../helpers/lesson/lessonClientTelemetry";
 
 export type SessionHandoffSummary = {
   sessionId: string;
@@ -70,6 +71,7 @@ export async function persistLessonLiveStateOnEnd(sessionId: string): Promise<vo
   const notes = drainLiveNotesForPersist(sid);
   if (!notes.length) {
     clearLessonLiveState(sid);
+    await clearLessonClientTelemetry(sid);
     return;
   }
 
@@ -90,6 +92,7 @@ export async function persistLessonLiveStateOnEnd(sessionId: string): Promise<vo
     }
   );
   clearLessonLiveState(sid);
+  await clearLessonClientTelemetry(sid);
 }
 
 export async function getSessionHandoffSummary(

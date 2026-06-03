@@ -1,6 +1,7 @@
 import booked_session from "../../model/booked_sessions.schema";
 import escrow_holds from "../../model/escrow_holds.schema";
 import { WALLET_CONFIG } from "../../config/wallet";
+import { REFUND_STATUS, isRefundTerminal } from "../../config/paymentStatus";
 import { releaseService } from "./releaseService";
 import { BOOKED_SESSIONS_STATUS } from "../../config/constance";
 import { walletTimelineService } from "./walletTimelineService";
@@ -16,9 +17,36 @@ export async function refundSessionEscrow(
     const booking = await booked_session.findById(sessionId).lean();
     if (!booking) return { refunded: false, error: "Session not found" };
 
-    if (booking.refund_status === "completed" || booking.refund_status === "refunded") {
+    if (isRefundTerminal(booking.refund_status)) {
       return { refunded: true };
     }
+
+    const paidAmount = Number(booking.amount ?? booking.charging_price ?? 0);
+    const hasFunding =
+      !!booking.payment_intent_id ||
+      !!(await escrow_holds
+        .findOne({ session_id: sessionId, status: { $in: ["held", "disputed"] } })
+        .select("_id")
+        .lean());
+
+    if (!hasFunding && paidAmount <= 0) {
+      await booked_session.findByIdAndUpdate(sessionId, {
+        $set: {
+          refund_status: REFUND_STATUS.COMPLETED,
+          refund_reason: reason,
+          status: BOOKED_SESSIONS_STATUS.cancel,
+          instant_phase: booking.is_instant ? "cancelled" : booking.instant_phase,
+        },
+      });
+      return { refunded: true };
+    }
+
+    await booked_session.findByIdAndUpdate(sessionId, {
+      $set: {
+        refund_status: REFUND_STATUS.PROCESSING,
+        refund_reason: reason,
+      },
+    });
 
     const hold = await escrow_holds
       .findOne({ session_id: sessionId, status: { $in: ["held", "disputed"] } })
@@ -42,7 +70,7 @@ export async function refundSessionEscrow(
         console.error("[refundSessionEscrow] Stripe refund failed", stripeErr?.message);
         await booked_session.findByIdAndUpdate(sessionId, {
           $set: {
-            refund_status: "failed",
+            refund_status: REFUND_STATUS.FAILED,
             refund_reason: reason,
             status: BOOKED_SESSIONS_STATUS.cancel,
             instant_phase: booking.is_instant ? "cancelled" : booking.instant_phase,
@@ -63,17 +91,18 @@ export async function refundSessionEscrow(
       } catch (e) {
         console.error("[refundSessionEscrow] recordRefundTransfer", e);
       }
-    } else {
-      stripeRefundOk = true;
     }
 
     if (!stripeRefundOk && !hold) {
+      await booked_session.findByIdAndUpdate(sessionId, {
+        $set: { refund_status: REFUND_STATUS.FAILED },
+      });
       return { refunded: false, error: "No escrow hold or payment intent to refund" };
     }
 
     await booked_session.findByIdAndUpdate(sessionId, {
       $set: {
-        refund_status: "completed",
+        refund_status: REFUND_STATUS.COMPLETED,
         refund_reason: reason,
         status: BOOKED_SESSIONS_STATUS.cancel,
         instant_phase: booking.is_instant ? "cancelled" : booking.instant_phase,
@@ -149,14 +178,15 @@ export async function refundSessionEscrow(
   }
 }
 
-/** Process sessions marked for refund but not yet completed (24h SLA cron). */
+/** Process cancelled sessions marked for refund but not yet completed (cron SLA). */
 export async function processPendingInstantRefunds(): Promise<number> {
   const pending = await booked_session
     .find({
-      is_instant: true,
       status: BOOKED_SESSIONS_STATUS.cancel,
       refund_reason: { $exists: true, $ne: null },
-      refund_status: { $nin: ["completed", "refunded"] },
+      refund_status: {
+        $nin: [REFUND_STATUS.COMPLETED, REFUND_STATUS.REFUNDED, REFUND_STATUS.FAILED],
+      },
     })
     .limit(50)
     .lean();

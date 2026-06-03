@@ -132,7 +132,20 @@ npm install   # ensures jest + ts-jest from devDependencies
 npm test
 ```
 
-Tests cover: instant lesson windows, ledger idempotency keys, chat dedupe filter shape, mute signaling payload normalization.
+Tests cover:
+
+| Area | Test file |
+|------|-----------|
+| Instant accept/decline | `instantLessonActions.test.ts` |
+| Join policy / early window | `liveLessonRules.test.ts` |
+| Scheduled book guards (bookSessionCore) | `scheduledBookingValidation.test.ts`, `bookSessionCore.integration.test.ts` |
+| Lesson client telemetry (Redis) | `lessonClientTelemetryStore.test.ts` |
+| Refund escrow + pending cron | `instantLessonRefundService.test.ts` |
+| Scheduled no-show refund job | `scheduledNoShowJob.test.ts` |
+| Mixed client warning | `lessonClientTelemetry.test.ts` |
+| Booking overlap | `bookingConflict.test.ts` |
+| Call quality payload | `callQualityPayload.test.ts` |
+| Chat dedupe / signaling | `chatDedupe.test.ts`, `signalingPayload.test.ts` |
 
 ---
 
