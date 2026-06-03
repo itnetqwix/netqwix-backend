@@ -57,6 +57,8 @@ route.post("/generate-thumbnail", upload.single('video'), commonC.generateThumbn
 route.post("/featured-content-upload-url", commonC.featuredContentUploadUrl);
 
 route.post("/chat-media-upload-url", commonC.chatMediaUploadUrl);
+route.get("/lesson-call-slot/:sessionId", commonC.getLessonCallSlotStatus);
+route.post("/lesson-call-slot/:sessionId/takeover", commonC.takeoverLessonCallSlot);
 
 const chatC = new ChatController();
 route.get("/chat-conversations", chatC.getConversations);

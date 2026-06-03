@@ -95,6 +95,88 @@ export class commonService {
     }
   }
 
+  public async getLessonCallSlotStatus(req: any, res: Response) {
+    try {
+      const userId = req?.authUser?._id;
+      if (!userId) {
+        return res.status(401).json({ success: 0, message: "Unauthorized" });
+      }
+      const sessionId = String(req.params?.sessionId ?? "").trim();
+      if (!sessionId) {
+        return res.status(400).json({ success: 0, message: "sessionId is required" });
+      }
+      const { assertSessionParticipant } = require("../../helpers/chatBlockCheck");
+      const allowed = await assertSessionParticipant(sessionId, String(userId));
+      if (!allowed) {
+        return res.status(403).json({ success: 0, message: "Not a participant" });
+      }
+      const headers = req.headers ?? {};
+      const authSessionId =
+        String(headers["x-nq-auth-session-id"] ?? headers["x-nq-session-id"] ?? "").trim() ||
+        undefined;
+      const deviceId =
+        String(headers["x-nq-device-id"] ?? headers["x-device-id"] ?? "").trim() || undefined;
+      const { getLessonCallSlotStatus } = require("../socket/lessonCallSlotStore");
+      const status = await getLessonCallSlotStatus({
+        sessionId,
+        userId: String(userId),
+        authSessionId,
+        deviceId,
+      });
+      return res.status(200).json({ success: 1, ...status });
+    } catch (error) {
+      console.error("Error reading lesson call slot:", error);
+      return res.status(500).json({ success: 0, message: "Internal server error" });
+    }
+  }
+
+  /** Force-release call slot so this device can join (pre-call lobby). */
+  public async takeoverLessonCallSlot(req: any, res: Response) {
+    try {
+      const userId = req?.authUser?._id;
+      if (!userId) {
+        return res.status(401).json({ success: 0, message: "Unauthorized" });
+      }
+      const sessionId = String(req.params?.sessionId ?? "").trim();
+      if (!sessionId) {
+        return res.status(400).json({ success: 0, message: "sessionId is required" });
+      }
+      const { assertSessionParticipant } = require("../../helpers/chatBlockCheck");
+      const allowed = await assertSessionParticipant(sessionId, String(userId));
+      if (!allowed) {
+        return res.status(403).json({ success: 0, message: "Not a participant" });
+      }
+
+      const { takeoverLessonCallSlotHttp } = require("../socket/lessonCallSlotStore");
+      const { isLessonCallSocketLive } = require("../socket/lessonCallSlotIo");
+      const { getIo } = require("../socket/socket.service");
+      const { EVENTS } = require("../../config/constance");
+
+      const result = await takeoverLessonCallSlotHttp({
+        sessionId,
+        userId: String(userId),
+      });
+      if (!result.ok) {
+        return res.status(409).json({ success: 0, message: result.reason });
+      }
+
+      if (result.previousSocketId && isLessonCallSocketLive(result.previousSocketId)) {
+        const io = getIo();
+        const prev = io?.sockets?.sockets?.get(result.previousSocketId);
+        prev?.emit(EVENTS.VIDEO_CALL.CALL_SLOT_TAKEN_OVER, {
+          sessionId,
+          message:
+            "This lesson was continued on another device. You have left the call on this device.",
+        });
+      }
+
+      return res.status(200).json({ success: 1, sessionId, tookOver: true });
+    } catch (error) {
+      console.error("Error taking over lesson call slot:", error);
+      return res.status(500).json({ success: 0, message: "Internal server error" });
+    }
+  }
+
   generatePreSignedPutUrl = async (fileName, fileType) => {
     const params = {
       Bucket: S3_BUCKET,
