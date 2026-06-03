@@ -27,7 +27,7 @@ Manual and automated coverage for call recovery, signaling, session FSM, payment
 | P2-2 | `MUTE_ME` self-echo ignored | Mute self | Local UI only; remote badge unchanged | ✓ | ✓ |
 | P2-3 | `STOP_FEED` camera off | Partner stops camera | Avatar/profile on remote tile | ✓ | ✓ |
 | P2-4 | Chat `JOIN_CHAT` on reconnect | Open chat room → airplane mode → restore | Room re-joined; new messages appear | ✓ | ✓ |
-| P2-5 | Drawing/layout replay (trainer) | Trainer draws → trainee reconnects | Strokes/layout restored | ✓ | Partial |
+| P2-5 | Drawing/layout replay (trainer) | Trainer draws on clip/live → trainee reconnects | `videoUv` strokes restored (mobile↔mobile) | ✓ | Out of scope |
 
 ---
 

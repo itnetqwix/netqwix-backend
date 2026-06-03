@@ -2659,14 +2659,11 @@ const listenLockModeToggle = (socket) => {
 const listenInstantLessonSessionRecording = (socket) => {
   try {
     socket.on(EVENTS.INSTANT_LESSON.SESSION_RECORDING, async (socketReq: any) => {
-      const { userInfo } = socketReq || {};
-      const toUserSocketId = MemCache.getDetail(
-        process.env.SOCKET_CONFIG,
-        userInfo?.to_user
+      relayInCallBySessionOrPeer(
+        socket,
+        socketReq,
+        EVENTS.INSTANT_LESSON.SESSION_RECORDING
       );
-      if (userInfo?.to_user) {
-        relayPeerByUserId(userInfo?.to_user,EVENTS.INSTANT_LESSON.SESSION_RECORDING, socketReq);
-      }
     });
   } catch (err) {
     console.error(`Error while listening to instant lesson session recording:`, err);

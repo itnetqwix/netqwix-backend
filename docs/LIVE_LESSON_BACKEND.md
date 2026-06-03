@@ -62,8 +62,23 @@ Scheduled booking: invalid promo codes are rejected (same as instant).
 
 - Mobile sends `X-NQ-Client: mobile` on API + socket.
 - `ON_CALL_JOIN` records participant client in `lessonClientTelemetryStore` (Redis key `nq:lesson:client:{sessionId}` when `REDIS_ENABLED=true`, else in-memory).
-- `GET /user/session-join-readiness/:id` returns `mixed_client_warning` when peer is on web (or viewer is on web).
+- `GET /user/session-join-readiness/:id` returns `mixed_client_warning` when peer is on web (or viewer is on web). **Mobile ↔ mobile → `mixed_client_warning: null`.**
 - Telemetry TTL: `REDIS_TTL.LESSON_CLIENT_TELEMETRY_SEC` (4h); cleared on lesson end via `sessionSummaryService`.
+
+## Mobile ↔ mobile in-call sync
+
+| Channel | Event | Relay |
+|---------|-------|-------|
+| Annotations | `DRAW` → `EMIT_DRAWING_CORDS` | `relayInCallBySessionOrPeer` — payload includes `strikes`, `canvasSize`, `sessionId` unchanged |
+| Clear / undo | `EMIT_CLEAR_CANVAS`, `EMIT_UNDO` | Session room or peer fallback |
+| Clip zoom/pan | `ON_VIDEO_ZOOM_PAN` | Session room (see handler) |
+| Recording toggle | `INSTANT_LESSON_SESSION_RECORDING` | Session room (mobile sends `sessionId`) |
+
+Clients should emit **`videoUv`** JSON in `strikes` for cross-size annotation alignment (native app).
+
+## Session recording upload (mobile)
+
+`POST /report/add-session-recording` body: `{ sessions, trainee, format?: "webm" | "m4a" | "mp4" }` — trainer auth; presigned PUT URL returned.
 
 ## Ops
 
