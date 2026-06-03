@@ -283,9 +283,11 @@ export class commonService {
           isNewUser = newUserIds.length > 0;
           processedUserIds = [...existingUserIds, ...newUserIds];
         }
-        // Use selected friends if sharing with friends
-        else if (shareOptions?.type === shareWithConstants.myFriends && shareOptions?.friends) {
-          processedUserIds = shareOptions.friends;
+        // Friends: save to sender locker only; pending share requests go to recipients
+        let friendIdsForShare: string[] = [];
+        if (shareOptions?.type === shareWithConstants.myFriends && shareOptions?.friends) {
+          friendIdsForShare = shareOptions.friends.map(String);
+          processedUserIds = [String(req.authUser._id)];
         }
         // Default to current user if sharing with my clips
         else {
@@ -307,11 +309,18 @@ export class commonService {
           }
           const uploaderDoc: any = await user.findById(req.authUser._id).select("friends").lean();
           uploaderFriendSet = new Set((uploaderDoc?.friends ?? []).map((id: any) => String(id)));
-          const notFriends = processedUserIds.filter((id) => !uploaderFriendSet!.has(String(id)));
+          const idsToValidate = friendIdsForShare.length ? friendIdsForShare : processedUserIds;
+          const notFriends = idsToValidate.filter((id) => !uploaderFriendSet!.has(String(id)));
           if (notFriends.length) {
             return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
               success: 0,
               message: "You can only share clips with friends on your friends list.",
+            });
+          }
+          if (friendIdsForShare.length === 0) {
+            return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
+              success: 0,
+              message: "Select at least one friend to share with.",
             });
           }
         }
@@ -331,7 +340,11 @@ export class commonService {
           (sum, c) => sum + Number(c.fileSizeBytes ?? c.file_size_bytes ?? 0),
           0
         );
-        for (const uid of processedUserIds) {
+        const quotaUserIds =
+          sharingWithFriends && friendIdsForShare.length
+            ? [String(req.authUser._id), ...friendIdsForShare]
+            : processedUserIds;
+        for (const uid of quotaUserIds) {
           const quota = await storageService.assertQuota(String(uid), totalUploadBytes);
           if (!quota.ok) {
             return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
@@ -362,18 +375,10 @@ export class commonService {
           const sharerId = req.authUser._id;
           const estimatedBytes = Number(clipData.fileSizeBytes ?? clipData.file_size_bytes ?? 0);
           for (const userId of processedUserIds) {
-            const isRecipientCopy =
-              sharingWithFriends && String(userId) !== String(sharerId);
             const clipObj = new clip({
               ...clipPayload,
               user_id: userId,
               file_size_bytes: estimatedBytes,
-              ...(isRecipientCopy
-                ? {
-                    shared_from_user_id: sharerId,
-                    shared_at: new Date(),
-                  }
-                : {}),
             });
             await clipObj.save();
             void recordUserActivity(String(userId), UserActivityEvent.CLIP_CREATED, {
@@ -382,19 +387,47 @@ export class commonService {
             });
             savedClips.push(clipObj);
 
-            // Track users who need emails and collect their thumbnails
-            if ((isNewUser && shareOptions.type === shareWithConstants.newUsers) ||
-              (shareOptions.type === shareWithConstants.myFriends)) {
+            if (isNewUser && shareOptions.type === shareWithConstants.newUsers) {
               if (!usersToEmail[userId]) {
                 usersToEmail[userId] = {
                   thumbnails: [],
-                  isNewUser: isNewUser && shareOptions.type === shareWithConstants.newUsers
+                  isNewUser: true,
                 };
               }
               usersToEmail[userId].thumbnails.push({
                 url: `https://data.netqwix.com/${clipObj.thumbnail}`,
-                title: clipObj.title || 'Untitled Video'
+                title: clipObj.title || "Untitled Video",
               });
+            }
+          }
+
+          if (sharingWithFriends && friendIdsForShare.length && savedClips.length) {
+            const { clipShareService } = await import("../clips/clipShareService");
+            const ownClips = savedClips.filter(
+              (c: any) => String(c.user_id) === String(sharerId)
+            );
+            const shareResult = await clipShareService.shareUploadedClipsToFriends({
+              sharerId: String(sharerId),
+              sharerName: req.authUser.fullname || "A friend",
+              friendIds: friendIdsForShare,
+              sourceClips: ownClips.length ? ownClips : savedClips,
+            });
+            if (shareResult.status === CONSTANCE.FAIL || shareResult.code >= 400) {
+              return res.status(shareResult.code || 400).json({
+                success: 0,
+                message: shareResult.error || "Failed to share clips with friends.",
+              });
+            }
+            for (const friendId of friendIdsForShare) {
+              if (!usersToEmail[friendId]) {
+                usersToEmail[friendId] = { thumbnails: [], isNewUser: false };
+              }
+              for (const c of savedClips) {
+                usersToEmail[friendId].thumbnails.push({
+                  url: `https://data.netqwix.com/${c.thumbnail}`,
+                  title: c.title || "Untitled Video",
+                });
+              }
             }
           }
 

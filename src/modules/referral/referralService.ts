@@ -17,7 +17,7 @@ import { WALLET_CONFIG } from "../../config/wallet";
 import { ledgerService } from "../wallet/ledgerService";
 import { walletAccountService } from "../wallet/walletAccountService";
 import { BOOKED_SESSIONS_STATUS } from "../../config/constance";
-import SendEmail from "../../helpers/sendEmail";
+import { SendEmail } from "../../Utils/sendEmail";
 
 const { Types } = mongoose;
 

@@ -16,6 +16,12 @@ route.post("/library-submissions", c.createLibrarySubmission);
 route.get("/library-submissions/mine", c.listMyLibrarySubmissions);
 route.post("/account/reapply", c.reapplyAccount);
 
+route.post("/share-requests", c.createShareRequests);
+route.get("/share-requests/inbox", c.listShareInbox);
+route.get("/share-requests/outbox", c.listShareOutbox);
+route.post("/share-requests/:requestId/respond", c.respondShareRequest);
+route.post("/share-requests/:requestId/cancel", c.cancelShareRequest);
+
 export const clipsRoute: Router = route;
 
 /** Mounted under /admin — admin-only clip & library management */

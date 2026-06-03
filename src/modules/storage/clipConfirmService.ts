@@ -193,7 +193,10 @@ export class ClipConfirmService {
         return res.status(share.status).json({ success: 0, message: share.message });
       }
 
-      for (const uid of share.userIds) {
+      const quotaUserIds = share.sharingWithFriends
+        ? [userId, ...share.userIds.filter((id) => String(id) !== userId)]
+        : share.userIds;
+      for (const uid of quotaUserIds) {
         const quota = await storageService.assertQuota(uid, fileSizeBytes);
         if (!quota.ok) {
           return res.status(CONSTANCE.RES_CODE.error.badRequest).json({
@@ -212,8 +215,11 @@ export class ClipConfirmService {
         { thumbnails: { url: string; title: string }[]; isNewUser: boolean }
       > = {};
 
-      for (const targetUserId of share.userIds) {
-        const isRecipientCopy = share.sharingWithFriends && String(targetUserId) !== sharerId;
+      const targetUserIds = share.sharingWithFriends
+        ? [sharerId]
+        : share.userIds;
+
+      for (const targetUserId of targetUserIds) {
         const clipObj = new clip({
           title,
           category,
@@ -225,9 +231,6 @@ export class ClipConfirmService {
           file_size_bytes: fileSizeBytes,
           user_id: targetUserId,
           user_type: authUser.account_type,
-          ...(isRecipientCopy
-            ? { shared_from_user_id: sharerId, shared_at: new Date() }
-            : {}),
         });
         await clipObj.save();
         void recordUserActivity(String(targetUserId), UserActivityEvent.CLIP_CREATED, {
@@ -235,20 +238,46 @@ export class ClipConfirmService {
           title: clipObj.title,
         });
         savedClips.push(clipObj);
+      }
 
-        if (
-          share.sharingWithFriends ||
-          (share.isNewUser && body.shareOptions?.type === SHARE_NEW_USERS)
-        ) {
+      if (share.sharingWithFriends && savedClips[0]) {
+        const friendIds = share.userIds.filter((id) => String(id) !== sharerId);
+        const { clipShareService } = await import("../clips/clipShareService");
+        const shareResult = await clipShareService.shareUploadedClipsToFriends({
+          sharerId,
+          sharerName: authUser.fullname || "A friend",
+          friendIds,
+          sourceClips: savedClips.filter((c) => String(c.user_id) === sharerId),
+        });
+        if (shareResult.status === CONSTANCE.FAIL || shareResult.code >= 400) {
+          return res.status(shareResult.code || 400).json({
+            success: 0,
+            message: shareResult.error || "Failed to share clips with friends.",
+          });
+        }
+
+        for (const fid of friendIds) {
+          if (!usersToEmail[fid]) {
+            usersToEmail[fid] = { thumbnails: [], isNewUser: false };
+          }
+          usersToEmail[fid].thumbnails.push({
+            url: `https://data.netqwix.com/${thumbnailKey}`,
+            title: title || "Untitled Video",
+          });
+        }
+      }
+
+      if (share.isNewUser && body.shareOptions?.type === SHARE_NEW_USERS) {
+        for (const targetUserId of share.userIds) {
           if (!usersToEmail[targetUserId]) {
             usersToEmail[targetUserId] = {
               thumbnails: [],
-              isNewUser: share.isNewUser && body.shareOptions?.type === SHARE_NEW_USERS,
+              isNewUser: true,
             };
           }
           usersToEmail[targetUserId].thumbnails.push({
-            url: `https://data.netqwix.com/${clipObj.thumbnail}`,
-            title: clipObj.title || "Untitled Video",
+            url: `https://data.netqwix.com/${thumbnailKey}`,
+            title: title || "Untitled Video",
           });
         }
       }

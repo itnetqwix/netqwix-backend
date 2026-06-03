@@ -7,6 +7,7 @@ import { clipLibrarySubmissionService } from "./clipLibrarySubmissionService";
 import { clipLibraryAdminService } from "./clipLibraryAdminService";
 import { traineeAccountReviewService } from "./traineeAccountReviewService";
 import { AccountType } from "../auth/authEnum";
+import { clipShareService } from "./clipShareService";
 
 export class ClipsController {
   getTaxonomy = async (_req: Request, res: Response) => {
@@ -54,6 +55,67 @@ export class ClipsController {
       return res.status(CONSTANCE.RES_CODE.success).json({ success: 1, data: doc });
     } catch (err: any) {
       return res.status(400).json({ success: 0, message: err?.message || "Failed to submit" });
+    }
+  };
+
+  createShareRequests = async (req: any, res: Response) => {
+    try {
+      const friendIds = Array.isArray(req.body?.friendIds) ? req.body.friendIds : [];
+      const clipIds = Array.isArray(req.body?.clipIds) ? req.body.clipIds : [];
+      const result = await clipShareService.createShareRequests({
+        sharerId: String(req.authUser._id),
+        sharerName: req.authUser.fullname || "A friend",
+        friendIds: friendIds.map(String),
+        clipIds: clipIds.map(String),
+        message: req.body?.message,
+      });
+      return res.status(result.code).json(result.result);
+    } catch (err: any) {
+      return res.status(500).json({ success: 0, message: err?.message || "Share failed" });
+    }
+  };
+
+  listShareInbox = async (req: any, res: Response) => {
+    try {
+      const result = await clipShareService.listInbox(String(req.authUser._id));
+      return res.status(result.code).json(result.result);
+    } catch (err: any) {
+      return res.status(500).json({ success: 0, message: err?.message });
+    }
+  };
+
+  listShareOutbox = async (req: any, res: Response) => {
+    try {
+      const result = await clipShareService.listOutbox(String(req.authUser._id));
+      return res.status(result.code).json(result.result);
+    } catch (err: any) {
+      return res.status(500).json({ success: 0, message: err?.message });
+    }
+  };
+
+  respondShareRequest = async (req: any, res: Response) => {
+    try {
+      const action = req.body?.action === "decline" ? "decline" : "accept";
+      const result = await clipShareService.respondToRequest({
+        requestId: req.params.requestId,
+        recipientId: String(req.authUser._id),
+        action,
+      });
+      return res.status(result.code).json(result.result);
+    } catch (err: any) {
+      return res.status(500).json({ success: 0, message: err?.message });
+    }
+  };
+
+  cancelShareRequest = async (req: any, res: Response) => {
+    try {
+      const result = await clipShareService.cancelRequest(
+        req.params.requestId,
+        String(req.authUser._id)
+      );
+      return res.status(result.code).json(result.result);
+    } catch (err: any) {
+      return res.status(500).json({ success: 0, message: err?.message });
     }
   };
 
