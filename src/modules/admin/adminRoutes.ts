@@ -32,6 +32,7 @@ import {
   adminUpsertFaq,
   adminUpsertLegal,
 } from "../cms/cmsController";
+import { adminPresignCmsAsset } from "../cms/cmsAssetService";
 import {
   adminListAccountDeletions,
   adminRestoreAccountDeletion,
@@ -97,6 +98,8 @@ route.post("/banners", adminCreateBanner);
 route.patch("/banners/:id", adminUpdateBanner);
 route.patch("/banners/:id/toggle", adminToggleBanner);
 route.delete("/banners/:id", adminDeleteBanner);
+
+route.post("/cms/asset-presign", adminPresignCmsAsset);
 
 route.get("/cms/legal", adminListLegal);
 route.put("/cms/legal/:slug", adminUpsertLegal);

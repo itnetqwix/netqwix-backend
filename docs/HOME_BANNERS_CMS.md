@@ -14,6 +14,7 @@ Admin-managed banners drive the mobile marketplace home without app releases.
 
 - Public: `GET /banners?placement=hero|strip|sticky_bottom`
 - Admin: CRUD under `/admin/banners` (same `placement` + `auto_advance_sec` fields)
+- Admin image upload: `POST /admin/cms/asset-presign` with `{ kind: "banners"|"tips"|"pages", fileName, contentType, fileSizeBytes }` → presigned S3 PUT; store returned `key` (or `mediaUrl`) in `image_url`
 
 ## Fields
 

@@ -10,6 +10,7 @@ Public routes (mounted at `/cms`):
 
 Admin routes (JWT admin, mounted at `/admin/cms`):
 
+- `POST /admin/cms/asset-presign` — presigned S3 PUT for banner/tip/page images (JPEG/PNG/WebP, max 5 MB)
 - `GET /admin/cms/legal`, `PUT /admin/cms/legal/:slug`
 - `GET /admin/cms/faq`, `PUT /admin/cms/faq`, `POST /admin/cms/faq/seed`
 - `GET /admin/cms/pages`, `POST /admin/cms/pages`, `PATCH /admin/cms/pages/:id`, `PATCH …/toggle`, `DELETE …/:id`
