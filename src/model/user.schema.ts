@@ -70,6 +70,8 @@ const userSchema: Schema = new Schema(
     referral_code: { type: String, unique: true, sparse: true, index: true },
     /** Set once when this user signed up via another member's invite/link. */
     referred_by_user_id: { type: ObjectId, ref: "user", default: null },
+    /** NetQwix points balance (redeem in blocks of 100 = $5 wallet credit). */
+    points_balance: { type: Number, default: 0, min: 0 },
     friends: [{ type: ObjectId, ref: 'user' }],
     blockedUsers: [{ type: ObjectId, ref: 'user' }],
     lastSeen: { type: Date, default: null },

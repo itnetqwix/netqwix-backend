@@ -2,6 +2,8 @@ import { randomUUID } from "crypto";
 import admin_setting from "../../model/default_admin_setting.schema";
 import user from "../../model/user.schema";
 import pricing_config from "../../model/pricing_config.schema";
+import type { PromoSponsorType } from "../../config/promo";
+import { computePromoPayoutSplit } from "./promoSponsorPricing";
 import {
   CA_PROVINCE_TAX_RATES,
   DEFAULT_PRICING_CONFIG,
@@ -38,6 +40,7 @@ export type QuoteParams = {
   paymentMethodHint?: string;
   billingAddress?: BillingAddress;
   promoDiscountCents?: number;
+  promoSponsorType?: PromoSponsorType | null;
   userId?: string;
 };
 
@@ -59,6 +62,9 @@ export type QuoteResult = {
   commissionRate: number;
   trainerNetCents: number;
   platformNetMarginCents: number;
+  promoSponsorType: PromoSponsorType;
+  platformPromoSubsidyCents: number;
+  commissionBaseCents: number;
   paymentMethodHint: string;
   taxRate: number;
   taxLabel: string;
@@ -250,11 +256,15 @@ async function computeQuoteFromConfig(
   const trainerPlatformFeeCents = productFee.trainerPlatformFeeMinor;
 
   const commissionRate = await resolveCommissionRate(params.trainerId, region, config);
-  const platformFeePercentCents = Math.round(discountedSubtotalCents * commissionRate);
-  const trainerNetCents = Math.max(
-    0,
-    discountedSubtotalCents - platformFeePercentCents - trainerPlatformFeeCents
-  );
+  const payout = computePromoPayoutSplit({
+    sessionSubtotalCents,
+    promoDiscountCents,
+    promoSponsorType: params.promoSponsorType,
+    commissionRate,
+    trainerPlatformFeeCents,
+  });
+  const platformFeePercentCents = payout.platformFeePercentCents;
+  const trainerNetCents = payout.trainerNetCents;
 
   const chargeBaseMinor = discountedSubtotalCents + traineePlatformFeeCents;
   const { key: paymentMethodHint, fee: pmFee } = resolvePaymentMethodFee(
@@ -278,6 +288,7 @@ async function computeQuoteFromConfig(
     platformFeePercentCents +
     traineePlatformFeeCents +
     trainerPlatformFeeCents -
+    payout.platformPromoSubsidyCents -
     processingFeeCents -
     cogsMinor;
 
@@ -285,7 +296,11 @@ async function computeQuoteFromConfig(
     { key: "session_subtotal", label: "Session price", amountMinor: discountedSubtotalCents },
   ];
   if (promoDiscountCents > 0) {
-    breakdown.push({ key: "promo_discount", label: "Promo discount", amountMinor: -promoDiscountCents });
+    const promoLabel =
+      payout.promoSponsorType === "trainer"
+        ? "Coach promo"
+        : "Promo discount";
+    breakdown.push({ key: "promo_discount", label: promoLabel, amountMinor: -promoDiscountCents });
   }
   if (traineePlatformFeeCents > 0) {
     breakdown.push({
@@ -324,6 +339,9 @@ async function computeQuoteFromConfig(
     commissionRate,
     trainerNetCents,
     platformNetMarginCents,
+    promoSponsorType: payout.promoSponsorType,
+    platformPromoSubsidyCents: payout.platformPromoSubsidyCents,
+    commissionBaseCents: payout.commissionBaseCents,
     paymentMethodHint,
     taxRate,
     taxLabel,

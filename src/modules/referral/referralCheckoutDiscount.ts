@@ -8,6 +8,7 @@ import {
   estimateFirstLessonCheckoutDiscount,
 } from "../../config/referral";
 import { PromoCodeService } from "../promo-code/promoCodeService";
+import type { PromoSponsorType } from "../../config/promo";
 
 export type BookingCheckoutType = "instant" | "scheduled";
 
@@ -18,6 +19,8 @@ export type CheckoutDiscountResult = {
   totalDiscount: number;
   finalPrice: number;
   appliedPromoCode: string | null;
+  promoSponsorType?: PromoSponsorType | null;
+  promoTrainerId?: string | null;
   promoError?: string;
   referralEligible: boolean;
   referralAttributionId?: string;
@@ -57,10 +60,13 @@ export async function computeBookingCheckoutDiscounts(params: {
   originalPrice: number;
   bookingType: BookingCheckoutType;
   couponCode?: string | null;
+  trainerId?: string | null;
 }): Promise<CheckoutDiscountResult> {
   const originalPrice = Number(params.originalPrice);
   let promoDiscount = 0;
   let appliedPromoCode: string | null = null;
+  let promoSponsorType: PromoSponsorType | null = null;
+  let promoTrainerId: string | null = null;
 
   if (params.couponCode && String(params.couponCode).trim()) {
     const promoService = new PromoCodeService();
@@ -69,7 +75,9 @@ export async function computeBookingCheckoutDiscounts(params: {
       params.traineeId,
       "Trainee",
       params.bookingType,
-      originalPrice
+      originalPrice,
+      undefined,
+      params.trainerId ?? undefined
     );
     if (!promoResult.valid) {
       return {
@@ -85,11 +93,14 @@ export async function computeBookingCheckoutDiscounts(params: {
     }
     promoDiscount = promoResult.discount_amount ?? 0;
     appliedPromoCode = String(params.couponCode).trim().toUpperCase();
+    promoSponsorType = promoResult.sponsor_type ?? null;
+    promoTrainerId = promoResult.trainer_id ?? null;
   }
 
   const afterPromo = Number(Math.max(originalPrice - promoDiscount, 0).toFixed(2));
   const attr = await findEligibleReferralAttribution(params.traineeId);
-  const referralDiscount = attr ? computeReferralDiscountOnRemainder(afterPromo) : 0;
+  /** Referral checkout $ discount disabled — use points program instead. */
+  const referralDiscount = 0;
   const totalDiscount = Number((promoDiscount + referralDiscount).toFixed(2));
   const finalPrice = Number(Math.max(originalPrice - totalDiscount, 0).toFixed(2));
 
@@ -100,6 +111,8 @@ export async function computeBookingCheckoutDiscounts(params: {
     totalDiscount,
     finalPrice,
     appliedPromoCode,
+    promoSponsorType,
+    promoTrainerId,
     referralEligible: !!attr && referralDiscount > 0,
     referralAttributionId: attr?._id ? String(attr._id) : undefined,
   };

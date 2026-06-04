@@ -93,9 +93,9 @@ const FIRST_LESSON_DISCOUNT_TYPE =
 
 export const REFERRAL_CONFIG = {
   enabled: process.env.REFERRAL_ENABLED !== "false",
-  /** Auto discount on referee's first paid lesson (stacks with promo codes). */
+  /** Disabled — referral benefits are points-only (redeem in Wallet). */
   firstLessonDiscount: {
-    enabled: process.env.REFERRAL_FIRST_LESSON_DISCOUNT_ENABLED !== "false",
+    enabled: false,
     discountType: FIRST_LESSON_DISCOUNT_TYPE as "percentage" | "fixed_amount",
     /** Dollars if fixed_amount; percent 0–100 if percentage. */
     discountValue:

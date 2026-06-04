@@ -2,6 +2,9 @@ import PromoCode from "../../model/promo_code.schema";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { assertAdminUser } from "../admin/adminPermission";
 import { CONSTANCE } from "../../config/constance";
+import { PROMO_SPONSOR, type PromoSponsorType } from "../../config/promo";
+import { AccountType } from "../auth/authEnum";
+import user from "../../model/user.schema";
 
 export class PromoCodeService {
   /**
@@ -31,13 +34,16 @@ export class PromoCodeService {
     userType: string,
     bookingType?: string,
     amount?: number,
-    userLocation?: string
+    userLocation?: string,
+    trainerId?: string
   ): Promise<{
     valid: boolean;
     reason?: string;
     promo?: any;
     discount_amount?: number;
     final_amount?: number;
+    sponsor_type?: PromoSponsorType;
+    trainer_id?: string | null;
   }> {
     const promo = await PromoCode.findOne({
       code: code.toUpperCase().trim(),
@@ -45,6 +51,23 @@ export class PromoCodeService {
 
     if (!promo) return { valid: false, reason: "Promo code not found." };
     if (!promo.is_active) return { valid: false, reason: "This promo code is no longer active." };
+
+    const sponsorType = (promo.sponsor_type as PromoSponsorType) || PROMO_SPONSOR.PLATFORM;
+    const promoTrainerId = promo.trainer_id ? String(promo.trainer_id) : null;
+
+    if (sponsorType === PROMO_SPONSOR.TRAINER) {
+      if (!promoTrainerId) {
+        return { valid: false, reason: "This promo code is not configured correctly." };
+      }
+      if (!trainerId || promoTrainerId !== String(trainerId)) {
+        return {
+          valid: false,
+          reason: "This promo code only works for sessions with the coach who shared it.",
+        };
+      }
+    } else if (promoTrainerId && trainerId && promoTrainerId !== String(trainerId)) {
+      return { valid: false, reason: "This promo code is not valid for this coach." };
+    }
 
     const now = new Date();
     if (now < new Date(promo.start_date))
@@ -103,6 +126,8 @@ export class PromoCodeService {
       promo,
       discount_amount,
       final_amount,
+      sponsor_type: sponsorType,
+      trainer_id: promoTrainerId,
     };
   }
 
@@ -132,11 +157,44 @@ export class PromoCodeService {
   }
 
   /**
+   * Restore per-user promo allowance when a booking using the code is cancelled/refunded.
+   */
+  public async revertPromoUsage(
+    code: string,
+    userId: string,
+    bookingId: string
+  ): Promise<{ reverted: boolean }> {
+    const normalized = code.toUpperCase().trim();
+    const promo = await PromoCode.findOne({ code: normalized });
+    if (!promo) return { reverted: false };
+
+    const bid = String(bookingId);
+    const had = (promo.used_by ?? []).some(
+      (row: any) => String(row.booking_id) === bid && String(row.user_id) === String(userId)
+    );
+    if (!had) return { reverted: false };
+
+    await PromoCode.updateOne(
+      { code: normalized },
+      {
+        $pull: { used_by: { booking_id: bookingId, user_id: userId } },
+        $inc: { usage_count: -1 },
+      }
+    );
+    await PromoCode.updateOne(
+      { code: normalized, usage_count: { $lt: 0 } },
+      { $set: { usage_count: 0 } }
+    );
+    return { reverted: true };
+  }
+
+  /**
    * Get visible promos for a given user type / location.
    */
   public async getVisiblePromos(
     userType: string,
-    userLocation?: string
+    userLocation?: string,
+    trainerId?: string
   ): Promise<any[]> {
     const now = new Date();
     const query: any = {
@@ -148,7 +206,7 @@ export class PromoCodeService {
 
     const promos = await PromoCode.find(query)
       .select(
-        "code display_label description discount_type discount_value min_order_amount max_discount_amount end_date applicable_user_types applicable_booking_types applicable_locations"
+        "code display_label description discount_type discount_value min_order_amount max_discount_amount end_date applicable_user_types applicable_booking_types applicable_locations sponsor_type trainer_id"
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -157,6 +215,15 @@ export class PromoCodeService {
       const types = p.applicable_user_types as string[];
       if (types.length > 0 && !types.includes("All") && !types.includes(userType))
         return false;
+
+      const sponsor = p.sponsor_type || PROMO_SPONSOR.PLATFORM;
+      if (sponsor === PROMO_SPONSOR.TRAINER) {
+        if (!trainerId || !p.trainer_id || String(p.trainer_id) !== String(trainerId)) {
+          return false;
+        }
+      } else if (p.trainer_id) {
+        return false;
+      }
 
       if (p.applicable_locations.length > 0 && userLocation) {
         const locLower = userLocation.toLowerCase();
@@ -192,11 +259,64 @@ export class PromoCodeService {
     const promo = new PromoCode({
       ...body,
       code: body.code.toUpperCase().trim(),
+      sponsor_type: PROMO_SPONSOR.PLATFORM,
+      trainer_id: null,
       created_by: authUser._id,
     });
     const saved = await promo.save();
 
     return ResponseBuilder.data(saved.toObject(), "Promo code created successfully.");
+  }
+
+  public async getPromoAdminStats(authUser: any): Promise<ResponseBuilder> {
+    const adminErr = assertAdminUser(authUser);
+    if (adminErr) return ResponseBuilder.badRequest(adminErr, 403);
+
+    const now = new Date();
+    const activeWindow = {
+      is_active: true,
+      start_date: { $lte: now },
+      end_date: { $gte: now },
+    };
+
+    const [
+      platformTotal,
+      platformActive,
+      trainerTotal,
+      trainerActive,
+      totalRedemptions,
+      expiringSoon,
+    ] = await Promise.all([
+      PromoCode.countDocuments({ sponsor_type: PROMO_SPONSOR.PLATFORM }),
+      PromoCode.countDocuments({
+        sponsor_type: PROMO_SPONSOR.PLATFORM,
+        ...activeWindow,
+      }),
+      PromoCode.countDocuments({ sponsor_type: PROMO_SPONSOR.TRAINER }),
+      PromoCode.countDocuments({
+        sponsor_type: PROMO_SPONSOR.TRAINER,
+        ...activeWindow,
+      }),
+      PromoCode.aggregate([
+        { $group: { _id: null, sum: { $sum: "$usage_count" } } },
+      ]).then((r) => r[0]?.sum ?? 0),
+      PromoCode.countDocuments({
+        is_active: true,
+        end_date: { $gte: now, $lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) },
+      }),
+    ]);
+
+    return ResponseBuilder.data(
+      {
+        platformTotal,
+        platformActive,
+        trainerTotal,
+        trainerActive,
+        totalRedemptions,
+        expiringSoon,
+      },
+      "Promo stats"
+    );
   }
 
   public async listPromoCodes(
@@ -212,9 +332,13 @@ export class PromoCodeService {
       limit = 25,
       is_active,
       is_visible,
+      sponsor_type,
+      lifecycle,
     } = query;
 
     const filter: any = {};
+    const now = new Date();
+
     if (search) {
       filter.$or = [
         { code: { $regex: search, $options: "i" } },
@@ -227,6 +351,22 @@ export class PromoCodeService {
     if (is_visible === "true") filter.is_visible = true;
     else if (is_visible === "false") filter.is_visible = false;
 
+    if (sponsor_type === PROMO_SPONSOR.PLATFORM || sponsor_type === PROMO_SPONSOR.TRAINER) {
+      filter.sponsor_type = sponsor_type;
+    }
+
+    if (lifecycle === "active") {
+      filter.is_active = true;
+      filter.start_date = { $lte: now };
+      filter.end_date = { $gte: now };
+    } else if (lifecycle === "expired") {
+      filter.end_date = { $lt: now };
+    } else if (lifecycle === "upcoming") {
+      filter.start_date = { $gt: now };
+    } else if (lifecycle === "inactive") {
+      filter.is_active = false;
+    }
+
     const skip = (Number(page) - 1) * Number(limit);
     const [promos, total] = await Promise.all([
       PromoCode.find(filter)
@@ -234,6 +374,7 @@ export class PromoCodeService {
         .skip(skip)
         .limit(Number(limit))
         .populate("created_by", "fullname email")
+        .populate("trainer_id", "fullname email")
         .lean(),
       PromoCode.countDocuments(filter),
     ]);
@@ -257,6 +398,7 @@ export class PromoCodeService {
 
     const promo = await PromoCode.findById(id)
       .populate("created_by", "fullname email")
+      .populate("trainer_id", "fullname email")
       .populate("used_by.user_id", "fullname email")
       .lean();
     if (!promo) return ResponseBuilder.badRequest("Promo code not found.", 404);
@@ -272,7 +414,30 @@ export class PromoCodeService {
     const adminErr = assertAdminUser(authUser);
     if (adminErr) return ResponseBuilder.badRequest(adminErr, 403);
 
-    if (body.code) body.code = body.code.toUpperCase().trim();
+    const existing = await PromoCode.findById(id).lean();
+    if (!existing) return ResponseBuilder.badRequest("Promo code not found.", 404);
+
+    delete body.sponsor_type;
+    delete body.trainer_id;
+    delete body.created_by;
+
+    if (existing.sponsor_type === PROMO_SPONSOR.TRAINER) {
+      const allowed = [
+        "description",
+        "display_label",
+        "end_date",
+        "usage_limit",
+        "per_user_limit",
+        "is_active",
+        "is_visible",
+        "applicable_booking_types",
+      ];
+      Object.keys(body).forEach((k) => {
+        if (!allowed.includes(k)) delete body[k];
+      });
+    } else if (body.code) {
+      body.code = body.code.toUpperCase().trim();
+    }
 
     if (
       body.discount_type === "percentage" &&
@@ -281,7 +446,9 @@ export class PromoCodeService {
     )
       return ResponseBuilder.badRequest("Percentage discount must be between 0 and 100.");
 
-    const updated = await PromoCode.findByIdAndUpdate(id, { $set: body }, { new: true }).lean();
+    const updated = await PromoCode.findByIdAndUpdate(id, { $set: body }, { new: true })
+      .populate("trainer_id", "fullname email")
+      .lean();
     if (!updated) return ResponseBuilder.badRequest("Promo code not found.", 404);
 
     return ResponseBuilder.data(updated, "Promo code updated successfully.");
@@ -336,5 +503,119 @@ export class PromoCodeService {
       result,
       `Promo code is now ${promo.is_visible ? "visible" : "hidden"} to users.`
     );
+  }
+
+  // ─── Trainer-owned promos (discount from trainer payout) ───────
+
+  private assertTrainerAccount(authUser: any): string | null {
+    if (authUser?.account_type !== AccountType.TRAINER) {
+      return "Only trainer accounts can manage coach promo codes.";
+    }
+    return null;
+  }
+
+  public async listTrainerPromoCodes(authUser: any): Promise<ResponseBuilder> {
+    const err = this.assertTrainerAccount(authUser);
+    if (err) return ResponseBuilder.badRequest(err, 403);
+
+    const promos = await PromoCode.find({
+      sponsor_type: PROMO_SPONSOR.TRAINER,
+      trainer_id: authUser._id,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return ResponseBuilder.data({ promos }, "Trainer promo codes");
+  }
+
+  public async createTrainerPromoCode(authUser: any, body: any): Promise<ResponseBuilder> {
+    const err = this.assertTrainerAccount(authUser);
+    if (err) return ResponseBuilder.badRequest(err, 403);
+
+    const code = String(body.code || "").toUpperCase().trim();
+    if (!code || code.length < 4) {
+      return ResponseBuilder.badRequest("Promo code must be at least 4 characters.");
+    }
+
+    const existing = await PromoCode.findOne({ code });
+    if (existing) return ResponseBuilder.badRequest("This code is already in use.");
+
+    if (
+      body.discount_type === "percentage" &&
+      (body.discount_value < 0 || body.discount_value > 100)
+    ) {
+      return ResponseBuilder.badRequest("Percentage discount must be between 0 and 100.");
+    }
+
+    const trainerDoc: any = await user.findById(authUser._id).select("fullname").lean();
+
+    const promo = new PromoCode({
+      code,
+      description: body.description || "",
+      discount_type: body.discount_type,
+      discount_value: body.discount_value,
+      min_order_amount: body.min_order_amount ?? 0,
+      max_discount_amount: body.max_discount_amount ?? 0,
+      start_date: body.start_date,
+      end_date: body.end_date,
+      usage_limit: body.usage_limit ?? 0,
+      per_user_limit: body.per_user_limit ?? 1,
+      applicable_user_types: ["Trainee"],
+      applicable_booking_types: body.applicable_booking_types ?? ["all"],
+      applicable_locations: [],
+      is_active: body.is_active !== false,
+      is_visible: body.is_visible === true,
+      display_label:
+        body.display_label?.trim() ||
+        `${trainerDoc?.fullname || "Coach"} special`,
+      sponsor_type: PROMO_SPONSOR.TRAINER,
+      trainer_id: authUser._id,
+      created_by: authUser._id,
+    });
+
+    const saved = await promo.save();
+    return ResponseBuilder.data(saved.toObject(), "Promo code created for your sessions.");
+  }
+
+  public async updateTrainerPromoCode(
+    authUser: any,
+    id: string,
+    body: any
+  ): Promise<ResponseBuilder> {
+    const err = this.assertTrainerAccount(authUser);
+    if (err) return ResponseBuilder.badRequest(err, 403);
+
+    delete body.code;
+    delete body.sponsor_type;
+    delete body.trainer_id;
+
+    const updated = await PromoCode.findOneAndUpdate(
+      {
+        _id: id,
+        sponsor_type: PROMO_SPONSOR.TRAINER,
+        trainer_id: authUser._id,
+      },
+      { $set: body },
+      { new: true }
+    ).lean();
+
+    if (!updated) return ResponseBuilder.badRequest("Promo code not found.", 404);
+    return ResponseBuilder.data(updated, "Promo code updated.");
+  }
+
+  public async toggleTrainerPromoCode(authUser: any, id: string): Promise<ResponseBuilder> {
+    const err = this.assertTrainerAccount(authUser);
+    if (err) return ResponseBuilder.badRequest(err, 403);
+
+    const promo = await PromoCode.findOne({
+      _id: id,
+      sponsor_type: PROMO_SPONSOR.TRAINER,
+      trainer_id: authUser._id,
+    });
+    if (!promo) return ResponseBuilder.badRequest("Promo code not found.", 404);
+
+    promo.is_active = !promo.is_active;
+    await promo.save();
+    return ResponseBuilder.data(promo.toObject(), `Promo code ${promo.is_active ? "activated" : "paused"}.`);
   }
 }

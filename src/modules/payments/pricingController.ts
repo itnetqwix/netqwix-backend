@@ -21,6 +21,7 @@ export class PricingController {
         paymentMethodHint,
         billingAddress,
         promoDiscountCents,
+        promoSponsorType,
       } = req.body;
 
       const subtotal = Number(sessionSubtotalCents);
@@ -36,6 +37,7 @@ export class PricingController {
         paymentMethodHint,
         billingAddress,
         promoDiscountCents: Number(promoDiscountCents || 0),
+        promoSponsorType: promoSponsorType || null,
         userId: req["authUser"]?._id,
       });
 

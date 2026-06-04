@@ -15,6 +15,7 @@ route.use([
 ]);
 
 route.post("/", controller.create);
+route.get("/stats", controller.stats);
 route.get("/", controller.list);
 route.get("/:id", controller.getById);
 route.put("/:id", controller.update);

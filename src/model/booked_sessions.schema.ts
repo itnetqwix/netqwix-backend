@@ -175,6 +175,17 @@ const bookedSessionsSchema: Schema = new Schema(
             type: String,
             default: null,
         },
+        /** platform | trainer — who funded the promo discount at payout */
+        promo_sponsor_type: {
+            type: String,
+            enum: ["platform", "trainer"],
+            default: null,
+        },
+        /** Promo-only discount (USD); excludes referral_discount_applied */
+        promo_discount_applied: {
+            type: Number,
+            default: 0,
+        },
         discount_applied: {
             type: Number,
             default: 0,

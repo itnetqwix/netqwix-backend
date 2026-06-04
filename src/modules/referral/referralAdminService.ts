@@ -4,7 +4,9 @@ import ReferralAttribution from "../../model/referral_attribution.schema";
 import ReferralReward from "../../model/referral_reward.schema";
 import user from "../../model/user.schema";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
-import { REFERRAL_CONFIG, formatRewardPreview } from "../../config/referral";
+import { REFERRAL_CONFIG } from "../../config/referral";
+import { formatRewardPreviewPoints } from "../../config/points";
+import PointsRedemption from "../../model/points_redemption.schema";
 import { AccountType } from "../auth/authEnum";
 
 export class ReferralAdminService {
@@ -16,6 +18,7 @@ export class ReferralAdminService {
       attributionsTotal,
       rewardAgg,
       checkoutDiscountAgg,
+      redemptionAgg,
       pairAgg,
       recentRewards,
       recentAttributions,
@@ -30,6 +33,7 @@ export class ReferralAdminService {
             _id: "$status",
             count: { $sum: 1 },
             amountMinor: { $sum: "$amount_minor" },
+            pointsAwarded: { $sum: "$points_awarded" },
           },
         },
       ]),
@@ -40,6 +44,16 @@ export class ReferralAdminService {
             _id: null,
             count: { $sum: 1 },
             totalDollars: { $sum: "$first_lesson_discount_amount" },
+          },
+        },
+      ]),
+      PointsRedemption.aggregate([
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            pointsSpent: { $sum: "$points_spent" },
+            amountMinor: { $sum: "$amount_minor" },
           },
         },
       ]),
@@ -64,9 +78,16 @@ export class ReferralAdminService {
         .lean(),
     ]);
 
-    const rewardByStatus: Record<string, { count: number; amountMinor: number }> = {};
+    const rewardByStatus: Record<
+      string,
+      { count: number; amountMinor: number; pointsAwarded: number }
+    > = {};
     for (const row of rewardAgg) {
-      rewardByStatus[row._id] = { count: row.count, amountMinor: row.amountMinor };
+      rewardByStatus[row._id] = {
+        count: row.count,
+        amountMinor: row.amountMinor,
+        pointsAwarded: row.pointsAwarded ?? 0,
+      };
     }
 
     const referrerIds = [
@@ -105,11 +126,23 @@ export class ReferralAdminService {
         enabled: REFERRAL_CONFIG.enabled,
         currency: REFERRAL_CONFIG.currency,
         firstLessonDiscount: REFERRAL_CONFIG.firstLessonDiscount,
-        rewardMatrix: {
-          trainerInviteTrainee: formatRewardPreview(AccountType.TRAINER, AccountType.TRAINEE),
-          trainerInviteTrainer: formatRewardPreview(AccountType.TRAINER, AccountType.TRAINER),
-          traineeInviteTrainee: formatRewardPreview(AccountType.TRAINEE, AccountType.TRAINEE),
-          traineeInviteTrainer: formatRewardPreview(AccountType.TRAINEE, AccountType.TRAINER),
+        rewardMatrixPoints: {
+          trainerInviteTrainee: formatRewardPreviewPoints(
+            AccountType.TRAINER,
+            AccountType.TRAINEE
+          ),
+          trainerInviteTrainer: formatRewardPreviewPoints(
+            AccountType.TRAINER,
+            AccountType.TRAINER
+          ),
+          traineeInviteTrainee: formatRewardPreviewPoints(
+            AccountType.TRAINEE,
+            AccountType.TRAINEE
+          ),
+          traineeInviteTrainer: formatRewardPreviewPoints(
+            AccountType.TRAINEE,
+            AccountType.TRAINER
+          ),
         },
         summary: {
           invitesTotal,
@@ -118,8 +151,12 @@ export class ReferralAdminService {
           attributionsTotal,
           rewardsCreditedCount: rewardByStatus.credited?.count ?? 0,
           rewardsCreditedMinor: rewardByStatus.credited?.amountMinor ?? 0,
+          referralPointsIssued: rewardByStatus.credited?.pointsAwarded ?? 0,
           rewardsSkippedCount: rewardByStatus.skipped?.count ?? 0,
           rewardsFailedCount: rewardByStatus.failed?.count ?? 0,
+          pointsRedemptionsCount: redemptionAgg[0]?.count ?? 0,
+          pointsRedeemedTotal: redemptionAgg[0]?.pointsSpent ?? 0,
+          pointsRedeemedWalletMinor: redemptionAgg[0]?.amountMinor ?? 0,
           checkoutDiscountsUsed: checkoutDiscountAgg[0]?.count ?? 0,
           checkoutDiscountDollars: checkoutDiscountAgg[0]?.totalDollars ?? 0,
         },

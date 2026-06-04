@@ -125,6 +125,20 @@ export class UserService {
           } catch (_e) {
             /* ignore */
           }
+          try {
+            const wasCompleted =
+              bookedSessionDetail.status === BOOKED_SESSIONS_STATUS.completed;
+            const { onBookingCancelled } = await import("../points/bookingPointsHooks");
+            void onBookingCancelled({
+              _id: String(bookedSessionDetail._id),
+              trainee_id: bookedSessionDetail.trainee_id,
+              trainer_id: bookedSessionDetail.trainer_id,
+              coupon_code: (bookedSessionDetail as any).coupon_code,
+              wasCompleted,
+            });
+          } catch (hookErr) {
+            console.warn("[updateBookedSession] booking points hook failed", hookErr);
+          }
         }
         if (payload.booked_status === BOOKED_SESSIONS_STATUS.confirm) {
           const traineeInfo = await user.findById(
@@ -769,6 +783,19 @@ export class UserService {
         );
         const { referralService } = await import("../referral/referralService");
         void referralService.onSessionCompleted(bookingInfo);
+        const { onSessionCompletedPoints } = await import("../points/pointsActivityHooks");
+        void onSessionCompletedPoints(bookingInfo);
+      }
+      if (
+        userInfo.account_type === AccountType.TRAINEE &&
+        updatePayload?.trainee?.sessionRating &&
+        bookingInfo.status === BOOKED_SESSIONS_STATUS.completed
+      ) {
+        const { onReviewSubmittedPoints } = await import("../points/pointsActivityHooks");
+        void onReviewSubmittedPoints({
+          traineeId: String(bookingInfo.trainee_id),
+          bookingId: String(bookingInfo._id),
+        });
       }
       return ResponseBuilder.data({ bookingInfo }, l10n.t("RATING_SUBMITTED"));
     } catch (err) {

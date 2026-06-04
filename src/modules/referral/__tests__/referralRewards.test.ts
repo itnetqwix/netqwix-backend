@@ -1,25 +1,24 @@
-import {
-  formatRewardPreview,
-  referralMatrixAmount,
-} from "../../../config/referral";
+import { formatRewardPreviewPoints, referralMatrixPoints } from "../../../config/points";
 import { AccountType } from "../../auth/authEnum";
 
-describe("referral reward matrix", () => {
-  it("trainer referring trainee earns signup + first booking", () => {
-    const preview = formatRewardPreview(AccountType.TRAINER, AccountType.TRAINEE);
-    expect(preview.referrerSignupMinor).toBeGreaterThan(0);
-    expect(preview.refereeSignupMinor).toBeGreaterThan(0);
-    expect(preview.referrerFirstBookingMinor).toBeGreaterThan(0);
+describe("referral reward matrix (points)", () => {
+  it("trainer referring trainee earns signup + first booking points", () => {
+    const preview = formatRewardPreviewPoints(AccountType.TRAINER, AccountType.TRAINEE);
+    expect(preview.referrerSignupPoints).toBeGreaterThan(0);
+    expect(preview.refereeSignupPoints).toBeGreaterThan(0);
+    expect(preview.referrerFirstBookingPoints).toBeGreaterThan(0);
+    expect(preview.referrerSignupPoints).toBeLessThanOrEqual(5);
+    expect(preview.refereeSignupPoints).toBeLessThanOrEqual(5);
   });
 
   it("trainee referring trainer has referrer signup only", () => {
-    const referrer = referralMatrixAmount(
+    const referrer = referralMatrixPoints(
       "signup",
       "referrer",
       AccountType.TRAINEE,
       AccountType.TRAINER
     );
-    const firstBooking = referralMatrixAmount(
+    const firstBooking = referralMatrixPoints(
       "first_booking",
       "referrer",
       AccountType.TRAINEE,
@@ -30,8 +29,8 @@ describe("referral reward matrix", () => {
   });
 
   it("matrix keys are symmetric for trainee-trainee", () => {
-    const a = formatRewardPreview(AccountType.TRAINEE, AccountType.TRAINEE);
-    const b = formatRewardPreview(AccountType.TRAINEE, AccountType.TRAINEE);
+    const a = formatRewardPreviewPoints(AccountType.TRAINEE, AccountType.TRAINEE);
+    const b = formatRewardPreviewPoints(AccountType.TRAINEE, AccountType.TRAINEE);
     expect(a).toEqual(b);
   });
 });

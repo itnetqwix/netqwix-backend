@@ -172,6 +172,8 @@ async function buildDetailPayload(
       amount: row.amount ?? null,
       original_amount: row.original_amount ?? null,
       coupon_code: row.coupon_code ?? null,
+      promo_sponsor_type: row.promo_sponsor_type ?? null,
+      promo_discount_applied: row.promo_discount_applied ?? null,
       discount_applied: row.discount_applied ?? null,
       refund_status: row.refund_status ?? null,
       refund_reason: row.refund_reason ?? null,

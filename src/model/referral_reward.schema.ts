@@ -10,6 +10,7 @@ export interface IReferralReward extends Document {
   beneficiary_role: ReferralBeneficiary;
   trigger: ReferralRewardTrigger;
   amount_minor: number;
+  points_awarded: number;
   currency: string;
   status: ReferralRewardStatus;
   idempotency_key: string;
@@ -35,7 +36,8 @@ const referralRewardSchema = new Schema(
     },
     beneficiary_role: { type: String, enum: ["referrer", "referee"], required: true },
     trigger: { type: String, enum: ["signup", "first_booking"], required: true },
-    amount_minor: { type: Number, required: true, min: 0 },
+    amount_minor: { type: Number, required: true, min: 0, default: 0 },
+    points_awarded: { type: Number, default: 0, min: 0 },
     currency: { type: String, default: "USD" },
     status: {
       type: String,

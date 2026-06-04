@@ -114,7 +114,7 @@ flowchart TB
 
 ### How commission works
 
-- Commission applies to the **session subtotal** (after promo discounts).  
+- Commission base depends on **promo sponsor**: platform promos use full list price; coach promos use discounted subtotal. See [PROMO_CODES.md](./PROMO_CODES.md).  
 - It is deducted when funds are **released to the trainer**, not as an extra charge to the trainee.  
 - **Promo codes** reduce the subtotal first, then commission is calculated.
 

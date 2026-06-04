@@ -73,6 +73,15 @@ export class ReportService {
           updatedAt: new Date().toISOString(),
         });
       }
+      if (
+        trainerId &&
+        mongoose.isValidObjectId(trainerId) &&
+        (kind === "game_plan_saved" || (!hadReport && sessionId))
+      ) {
+        const reportId = sessionId || String(hadReport?._id ?? filter.sessions ?? trainerId);
+        const { onGamePlanSavedPoints } = await import("../points/pointsActivityHooks");
+        void onGamePlanSavedPoints({ trainerId, reportId });
+      }
       if (traineeId && mongoose.isValidObjectId(traineeId)) {
         try {
           const { NotificationsService } = require("../notifications/notificationsService");

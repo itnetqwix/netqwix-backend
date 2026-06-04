@@ -635,6 +635,7 @@ export class TraineeService {
         originalPrice,
         bookingType: "scheduled",
         couponCode: payload.coupon_code,
+        trainerId: payload.trainer_id ? String(payload.trainer_id) : undefined,
       });
       if (checkout.promoError) {
         return ResponseBuilder.badRequest(checkout.promoError);
@@ -673,6 +674,10 @@ export class TraineeService {
         amount: String(finalPrice),
         original_amount: String(originalPrice),
         ...(appliedPromoCode && { coupon_code: appliedPromoCode }),
+        ...(checkout.promoSponsorType && {
+          promo_sponsor_type: checkout.promoSponsorType,
+        }),
+        promo_discount_applied: promoDiscountAmount,
         discount_applied: checkout.totalDiscount,
         ...(referralDiscountAmount > 0 && {
           referral_discount_applied: referralDiscountAmount,
@@ -936,6 +941,7 @@ export class TraineeService {
         originalPrice: expectedPrice,
         bookingType: "instant",
         couponCode: payload.coupon_code,
+        trainerId: trainer_id ? String(trainer_id) : undefined,
       });
       if (checkout.promoError) {
         return ResponseBuilder.badRequest(checkout.promoError);
@@ -1017,6 +1023,12 @@ export class TraineeService {
         bookingFields.discount_applied = checkout.totalDiscount;
       }
       if (appliedPromoCode) bookingFields.coupon_code = appliedPromoCode;
+      if (checkout.promoSponsorType) {
+        bookingFields.promo_sponsor_type = checkout.promoSponsorType;
+      }
+      if (promoDiscountAmount > 0) {
+        bookingFields.promo_discount_applied = promoDiscountAmount;
+      }
       if (referralDiscountAmount > 0) {
         bookingFields.referral_discount_applied = referralDiscountAmount;
       }

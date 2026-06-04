@@ -23,6 +23,7 @@ import { bannersRoute } from "./src/modules/banners/bannersRoutes";
 import { cmsRoute } from "./src/modules/cms/cmsRoutes";
 import { paymentsRoute } from "./src/modules/payments/pricingRoutes";
 import { referralRoute } from "./src/modules/referral/referralRoutes";
+import { pointsRoute } from "./src/modules/points/pointsRoutes";
 export class Routes {
   protected app: express.Application;
   constructor() {}
@@ -53,6 +54,7 @@ export class Routes {
     router.use("/cms", cmsRoute);
     router.use("/payments", paymentsRoute);
     router.use("/referral", referralRoute);
+    router.use("/points", pointsRoute);
     router.get("/", (req, res) => {
       res.send("Welcome to NetQwix :) ");
     });

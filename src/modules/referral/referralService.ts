@@ -10,12 +10,14 @@ import { ResponseBuilder } from "../../helpers/responseBuilder";
 import {
   REFERRAL_CONFIG,
   formatRewardPreview,
-  referralMatrixAmount,
   type ReferralRole,
 } from "../../config/referral";
-import { WALLET_CONFIG } from "../../config/wallet";
-import { ledgerService } from "../wallet/ledgerService";
-import { walletAccountService } from "../wallet/walletAccountService";
+import {
+  POINTS_CONFIG,
+  formatRewardPreviewPoints,
+  referralMatrixPoints,
+} from "../../config/points";
+import { pointsService } from "../points/pointsService";
 import { BOOKED_SESSIONS_STATUS } from "../../config/constance";
 import { SendEmail } from "../../Utils/sendEmail";
 
@@ -79,8 +81,13 @@ export class ReferralService {
       inviteTrainee: formatRewardPreview(role, AccountType.TRAINEE),
       inviteTrainer: formatRewardPreview(role, AccountType.TRAINER),
     };
+    const rewardMatrixPoints = {
+      inviteTrainee: formatRewardPreviewPoints(role, AccountType.TRAINEE),
+      inviteTrainer: formatRewardPreviewPoints(role, AccountType.TRAINER),
+    };
 
-    const [inviteCount, registeredCount, rewardsEarnedMinor] = await Promise.all([
+    const [inviteCount, registeredCount, rewardsEarnedPoints, pointsBalance] =
+      await Promise.all([
       ReferredUser.countDocuments({ referrerId: authUser._id }),
       ReferredUser.countDocuments({ referrerId: authUser._id, status: { $ne: "pending" } }),
       ReferralReward.aggregate([
@@ -90,22 +97,29 @@ export class ReferralService {
             status: "credited",
           },
         },
-        { $group: { _id: null, total: { $sum: "$amount_minor" } } },
+        { $group: { _id: null, total: { $sum: "$points_awarded" } } },
       ]),
+      user.findById(authUser._id).select("points_balance").lean(),
     ]);
 
     return ResponseBuilder.data(
       {
         enabled: REFERRAL_CONFIG.enabled,
         currency: REFERRAL_CONFIG.currency,
+        pointsEnabled: POINTS_CONFIG.enabled,
+        redemptionBlockPoints: POINTS_CONFIG.redemptionBlockPoints,
+        walletDollarsPer100Points:
+          POINTS_CONFIG.redemptionBlockPoints / POINTS_CONFIG.pointsPerDollar,
         accountType: role,
         referrerName: authUser.fullname ?? "",
         ...links,
         rewardMatrix,
+        rewardMatrixPoints,
         stats: {
           invitesSent: inviteCount,
           registered: registeredCount,
-          totalEarnedMinor: rewardsEarnedMinor[0]?.total ?? 0,
+          totalEarnedPoints: rewardsEarnedPoints[0]?.total ?? 0,
+          pointsBalance: pointsBalance?.points_balance ?? 0,
         },
       },
       "Referral program"
@@ -134,9 +148,9 @@ export class ReferralService {
         referrerUserId: referrer._id,
         referrerName: referrer.fullname,
         referrerAccountType: role,
-        rewardPreview: {
-          ifYouJoinAsTrainee: formatRewardPreview(role, AccountType.TRAINEE),
-          ifYouJoinAsTrainer: formatRewardPreview(role, AccountType.TRAINER),
+        rewardPreviewPoints: {
+          ifYouJoinAsTrainee: formatRewardPreviewPoints(role, AccountType.TRAINEE),
+          ifYouJoinAsTrainer: formatRewardPreviewPoints(role, AccountType.TRAINER),
         },
       },
       "Referral resolved"
@@ -298,31 +312,28 @@ export class ReferralService {
   }
 
   async getRefereeBenefits(userId: string) {
-    const { findEligibleReferralAttribution } = await import("./referralCheckoutDiscount");
-    const u = await user.findById(userId).select("account_type referred_by_user_id").lean();
-    if (!u || u.account_type !== AccountType.TRAINEE) {
-      return ResponseBuilder.data(
-        { firstLessonCheckout: { eligible: false } },
-        "Benefits"
-      );
-    }
-    const attr = await findEligibleReferralAttribution(userId);
-    const samplePrice = 50;
-    const { estimateFirstLessonCheckoutDiscount } = await import("../../config/referral");
-    const estimatedDiscount = attr
-      ? estimateFirstLessonCheckoutDiscount(samplePrice)
-      : 0;
+    const u = await user.findById(userId).select("account_type referred_by_user_id points_balance").lean();
+    const referred = Boolean(u?.referred_by_user_id);
     return ResponseBuilder.data(
       {
-        referred: Boolean(u.referred_by_user_id || attr),
-        firstLessonCheckout: {
-          eligible: !!attr,
-          estimatedDiscountDollars: estimatedDiscount,
-          stacksWithPromo: true,
-          config: REFERRAL_CONFIG.firstLessonDiscount,
+        referred,
+        pointsProgram: {
+          enabled: POINTS_CONFIG.enabled,
+          balance: u?.points_balance ?? 0,
+          redeemBlockPoints: POINTS_CONFIG.redemptionBlockPoints,
+          walletDollarsPerBlock:
+            POINTS_CONFIG.redemptionBlockPoints / POINTS_CONFIG.pointsPerDollar,
+          earnNote:
+            "Referral and activity rewards are issued as points (1–5 per event). Redeem in Wallet.",
         },
-        walletSignupCreditsNote:
-          "Signup wallet credits are applied separately after registration.",
+        /** @deprecated Dollar checkout discount disabled — use pointsProgram only. */
+        firstLessonCheckout: {
+          eligible: false,
+          estimatedDiscountDollars: 0,
+          stacksWithPromo: false,
+          disabled: true,
+          config: { ...REFERRAL_CONFIG.firstLessonDiscount, enabled: false },
+        },
       },
       "Benefits"
     );
@@ -437,7 +448,7 @@ export class ReferralService {
       beneficiaryUserId: referrerId,
       beneficiaryRole: "referrer",
       trigger: "signup",
-      amountMinor: referralMatrixAmount("signup", "referrer", referrerType, refereeType),
+      points: referralMatrixPoints("signup", "referrer", referrerType, refereeType),
       idempotencyKey: `referral:signup:referrer:${attrId}`,
     });
     await this.creditReward({
@@ -445,7 +456,7 @@ export class ReferralService {
       beneficiaryUserId: refereeId,
       beneficiaryRole: "referee",
       trigger: "signup",
-      amountMinor: referralMatrixAmount("signup", "referee", referrerType, refereeType),
+      points: referralMatrixPoints("signup", "referee", referrerType, refereeType),
       idempotencyKey: `referral:signup:referee:${attrId}`,
     });
     await ReferralAttribution.findByIdAndUpdate(attributionId, {
@@ -474,15 +485,23 @@ export class ReferralService {
       }).lean();
       if (!attribution) continue;
 
+      const refereeType = attribution.referee_account_type as ReferralRole;
+      const roleMatch =
+        refereeType === AccountType.TRAINEE
+          ? { trainee_id: participantId }
+          : refereeType === AccountType.TRAINER
+            ? { trainer_id: participantId }
+            : null;
+      if (!roleMatch) continue;
+
       const completedCount = await booked_session.countDocuments({
         status: BOOKED_SESSIONS_STATUS.completed,
-        $or: [{ trainee_id: participantId }, { trainer_id: participantId }],
+        ...roleMatch,
       });
       if (completedCount !== 1) continue;
 
       const referrerType = attribution.referrer_account_type as ReferralRole;
-      const refereeType = attribution.referee_account_type as ReferralRole;
-      const amountMinor = referralMatrixAmount(
+      const points = referralMatrixPoints(
         "first_booking",
         "referrer",
         referrerType,
@@ -494,7 +513,7 @@ export class ReferralService {
         beneficiaryUserId: String(attribution.referrer_user_id),
         beneficiaryRole: "referrer",
         trigger: "first_booking",
-        amountMinor,
+        points,
         idempotencyKey: `referral:first_booking:referrer:${attribution._id}`,
         bookingId,
       });
@@ -515,7 +534,7 @@ export class ReferralService {
     beneficiaryUserId: string;
     beneficiaryRole: "referrer" | "referee";
     trigger: "signup" | "first_booking";
-    amountMinor: number;
+    points: number;
     idempotencyKey: string;
     bookingId?: string;
   }) {
@@ -524,79 +543,61 @@ export class ReferralService {
     }).lean();
     if (existing) return;
 
-    if (params.amountMinor <= 0) {
+    const actionKey =
+      params.trigger === "signup"
+        ? params.beneficiaryRole === "referrer"
+          ? "referral_signup_referrer"
+          : "referral_signup_referee"
+        : "referral_first_booking_referrer";
+
+    if (params.points <= 0) {
       await ReferralReward.create({
         attribution_id: params.attributionId,
         beneficiary_user_id: params.beneficiaryUserId,
         beneficiary_role: params.beneficiaryRole,
         trigger: params.trigger,
         amount_minor: 0,
+        points_awarded: 0,
         currency: REFERRAL_CONFIG.currency,
         status: "skipped",
         idempotency_key: params.idempotencyKey,
         booking_id: params.bookingId,
-        skip_reason: "zero_amount",
+        skip_reason: "zero_points",
       });
       return;
     }
 
-    if (!WALLET_CONFIG.enabled) {
+    if (!POINTS_CONFIG.enabled) {
       await ReferralReward.create({
         attribution_id: params.attributionId,
         beneficiary_user_id: params.beneficiaryUserId,
         beneficiary_role: params.beneficiaryRole,
         trigger: params.trigger,
-        amount_minor: params.amountMinor,
+        amount_minor: 0,
+        points_awarded: 0,
         currency: REFERRAL_CONFIG.currency,
         status: "skipped",
         idempotency_key: params.idempotencyKey,
         booking_id: params.bookingId,
-        skip_reason: "wallet_disabled",
+        skip_reason: "points_disabled",
       });
       return;
     }
 
     try {
-      const beneficiary = await user
-        .findById(params.beneficiaryUserId)
-        .select("account_type")
-        .lean();
-      const walletType =
-        beneficiary?.account_type === AccountType.TRAINER ? "trainer" : "trainee";
-
-      const wallet = await walletAccountService.getOrCreateUserWallet({
+      const award = await pointsService.awardPoints({
         userId: params.beneficiaryUserId,
-        accountType: walletType,
-        currency: REFERRAL_CONFIG.currency,
-      });
-      const platform = await walletAccountService.getOrCreatePlatformAccount(
-        REFERRAL_CONFIG.currency
-      );
-
-      const ledgerResult = await ledgerService.post({
-        idempotencyKey: params.idempotencyKey,
+        actionKey,
+        points: params.points,
         referenceType: "referral",
         referenceId: params.attributionId,
-        sessionId: params.bookingId,
-        actor: "system",
+        idempotencyKey: `points:${params.idempotencyKey}`,
         metadata: {
           trigger: params.trigger,
           beneficiaryRole: params.beneficiaryRole,
+          bookingId: params.bookingId,
         },
-        legs: [
-          {
-            walletAccountId: new Types.ObjectId(String(wallet._id)),
-            bucket: "available",
-            entryType: "credit",
-            amountMinor: params.amountMinor,
-          },
-          {
-            walletAccountId: new Types.ObjectId(String(platform._id)),
-            bucket: "available",
-            entryType: "debit",
-            amountMinor: params.amountMinor,
-          },
-        ],
+        skipCaps: true,
       });
 
       await ReferralReward.create({
@@ -604,26 +605,27 @@ export class ReferralService {
         beneficiary_user_id: params.beneficiaryUserId,
         beneficiary_role: params.beneficiaryRole,
         trigger: params.trigger,
-        amount_minor: params.amountMinor,
+        amount_minor: 0,
+        points_awarded: award.awarded ? award.points : 0,
         currency: REFERRAL_CONFIG.currency,
-        status: "credited",
+        status: award.awarded ? "credited" : "skipped",
         idempotency_key: params.idempotencyKey,
         booking_id: params.bookingId,
-        ledger_entry_ids: ledgerResult.entryIds,
+        skip_reason: award.awarded ? undefined : award.reason,
       });
-      await ledgerService.refreshBalanceCache(wallet._id);
     } catch (e: any) {
       await ReferralReward.create({
         attribution_id: params.attributionId,
         beneficiary_user_id: params.beneficiaryUserId,
         beneficiary_role: params.beneficiaryRole,
         trigger: params.trigger,
-        amount_minor: params.amountMinor,
+        amount_minor: 0,
+        points_awarded: 0,
         currency: REFERRAL_CONFIG.currency,
         status: "failed",
         idempotency_key: params.idempotencyKey,
         booking_id: params.bookingId,
-        skip_reason: e?.message || "ledger_failed",
+        skip_reason: e?.message || "points_failed",
       });
     }
   }

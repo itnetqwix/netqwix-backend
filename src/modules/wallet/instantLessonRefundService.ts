@@ -17,6 +17,8 @@ export async function refundSessionEscrow(
     const booking = await booked_session.findById(sessionId).lean();
     if (!booking) return { refunded: false, error: "Session not found" };
 
+    const wasCompleted = booking.status === BOOKED_SESSIONS_STATUS.completed;
+
     if (isRefundTerminal(booking.refund_status)) {
       return { refunded: true };
     }
@@ -38,6 +40,18 @@ export async function refundSessionEscrow(
           instant_phase: booking.is_instant ? "cancelled" : booking.instant_phase,
         },
       });
+      try {
+        const { onBookingCancelled } = await import("../points/bookingPointsHooks");
+        void onBookingCancelled({
+          _id: String(booking._id),
+          trainee_id: booking.trainee_id,
+          trainer_id: booking.trainer_id,
+          coupon_code: (booking as any).coupon_code,
+          wasCompleted,
+        });
+      } catch (hookErr) {
+        console.warn("[refundSessionEscrow] booking points hook failed", sessionId, hookErr);
+      }
       return { refunded: true };
     }
 
@@ -108,6 +122,19 @@ export async function refundSessionEscrow(
         instant_phase: booking.is_instant ? "cancelled" : booking.instant_phase,
       },
     });
+
+    try {
+      const { onBookingCancelled } = await import("../points/bookingPointsHooks");
+      void onBookingCancelled({
+        _id: String(booking._id),
+        trainee_id: booking.trainee_id,
+        trainer_id: booking.trainer_id,
+        coupon_code: (booking as any).coupon_code,
+        wasCompleted,
+      });
+    } catch (hookErr) {
+      console.warn("[refundSessionEscrow] booking points hook failed", sessionId, hookErr);
+    }
 
     // Emit timeline events so TransactionDetailScreen renders the refund flow.
     try {

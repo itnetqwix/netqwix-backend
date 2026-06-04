@@ -89,6 +89,7 @@ export class ReferralController {
         originalPrice: amount,
         bookingType,
         couponCode: req.body?.coupon_code,
+        trainerId: req.body?.trainer_id ? String(req.body.trainer_id) : undefined,
       });
       if (checkout.promoError) {
         return res.status(400).json(ResponseBuilder.badRequest(checkout.promoError).result);

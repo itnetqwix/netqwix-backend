@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { trainerController } from "./trainerController";
+import { PromoCodeController } from "../promo-code/promoCodeController";
 import { validator } from "../../validate";
 import {
   updateProfileModal,
@@ -15,6 +16,7 @@ import {
 
 const route: Router = Router();
 const trainerC = new trainerController();
+const promoC = new PromoCodeController();
 const V: validator = new validator();
 const authorizeMiddleware = new AuthorizeMiddleware();
 const trainerMiddleware = new TrainerMiddleware();
@@ -131,5 +133,10 @@ route.post(
   trainerMiddleware.isTrainer,
   trainerC.postSessionRecap
 );
+
+route.get("/promo-codes", trainerMiddleware.isTrainer, promoC.listTrainerPromos);
+route.post("/promo-codes", trainerMiddleware.isTrainer, promoC.createTrainerPromo);
+route.put("/promo-codes/:id", trainerMiddleware.isTrainer, promoC.updateTrainerPromo);
+route.patch("/promo-codes/:id/toggle", trainerMiddleware.isTrainer, promoC.toggleTrainerPromo);
 
 export const trainerRoute: Router = route;

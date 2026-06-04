@@ -39,6 +39,20 @@ const promoCodeSchema: Schema = new Schema(
     is_active: { type: Boolean, default: true },
     is_visible: { type: Boolean, default: false },
     display_label: { type: String, default: "" },
+    /** platform = NetQwix absorbs discount from commission; trainer = discount from trainer payout */
+    sponsor_type: {
+      type: String,
+      enum: ["platform", "trainer"],
+      default: "platform",
+      index: true,
+    },
+    /** Required when sponsor_type is trainer — promo only applies to that trainer's sessions */
+    trainer_id: {
+      type: Schema.Types.ObjectId,
+      ref: Tables.user,
+      default: null,
+      index: true,
+    },
     created_by: {
       type: Schema.Types.ObjectId,
       ref: Tables.user,
@@ -61,5 +75,6 @@ const promoCodeSchema: Schema = new Schema(
 
 promoCodeSchema.index({ is_active: 1, start_date: 1, end_date: 1 });
 promoCodeSchema.index({ is_visible: 1, is_active: 1 });
+promoCodeSchema.index({ trainer_id: 1, sponsor_type: 1, is_active: 1 });
 
 export default Model(Tables.promo_code, promoCodeSchema);

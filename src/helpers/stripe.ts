@@ -45,18 +45,22 @@ export class StripeHelper {
       let appliedPromoCode: string | null = null;
       let sessionSubtotal = amount;
 
+      let promoSponsorType: string | null = null;
       if (couponCode && !quoteId) {
         const promoResult = await this.promoService.validatePromoCode(
           couponCode,
           userId,
           userType,
           bookingType,
-          amount
+          amount,
+          undefined,
+          trainer_id || body.trainer_id
         );
 
         if (promoResult.valid) {
           discountAmount = promoResult.discount_amount!;
           appliedPromoCode = couponCode;
+          promoSponsorType = promoResult.sponsor_type ?? null;
         } else {
           return ResponseBuilder.badRequest(promoResult.reason || "Invalid or expired promo code.", 400);
         }
@@ -87,11 +91,12 @@ export class StripeHelper {
         quoteResult = await buildQuote({
           region,
           productType: bookingType === "instant" ? "instant_lesson" : bookingType === "session_extension" ? "session_extension" : "session_booking",
-          sessionSubtotalCents: Math.round((amount - discountAmount) * 100) + promoDiscountCents,
+          sessionSubtotalCents: Math.round(amount * 100),
           trainerId: trainer_id || body.trainer_id,
           paymentMethodHint,
           billingAddress,
           promoDiscountCents,
+          promoSponsorType: promoSponsorType as any,
           userId,
         });
         finalAmountMinor = quoteResult.chargeTotalCents;
