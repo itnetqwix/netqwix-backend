@@ -55,6 +55,11 @@ function serialize(b: any) {
     cta_label: b.cta_label ?? null,
     cta_url: b.cta_url ?? null,
     ctas,
+    placement: sanitizePlacement(b.placement ?? (b.image_url ? "hero" : "strip")),
+    auto_advance_sec:
+      typeof b.auto_advance_sec === "number" && b.auto_advance_sec >= 0
+        ? Math.min(60, b.auto_advance_sec)
+        : 5,
     dismissible: b.dismissible !== false,
     is_active: !!b.is_active,
     sort_order: b.sort_order ?? 0,
@@ -70,17 +75,21 @@ function serialize(b: any) {
 export async function listActiveBanners(req: Request, res: Response) {
   try {
     const audiences = audiencesForCaller(req);
+    const placement = String(req.query?.placement ?? "").toLowerCase();
     const now = new Date();
+    const placementClause = placementQuery(placement);
+    const scheduleAnd = [
+      { $or: [{ start_date: null }, { start_date: { $lte: now } }] },
+      { $or: [{ end_date: null }, { end_date: { $gte: now } }] },
+    ];
+    if (placementClause) scheduleAnd.push(placementClause as any);
     const rows = await HomeBanner.find({
       is_active: true,
       audience: { $in: audiences },
-      $and: [
-        { $or: [{ start_date: null }, { start_date: { $lte: now } }] },
-        { $or: [{ end_date: null }, { end_date: { $gte: now } }] },
-      ],
+      $and: scheduleAnd,
     })
       .sort({ sort_order: 1, createdAt: -1 })
-      .limit(10)
+      .limit(placement ? 15 : 30)
       .lean();
     return res.status(200).send({
       status: CONSTANCE.SUCCESS,
@@ -95,6 +104,47 @@ export async function listActiveBanners(req: Request, res: Response) {
 
 const SEVERITIES = ["info", "promo", "maintenance", "critical", "success"] as const;
 const AUDIENCE_VALUES = ["guest", "trainer", "trainee", "all"] as const;
+const PLACEMENTS = ["hero", "strip", "sticky_bottom"] as const;
+
+function sanitizePlacement(input: any): (typeof PLACEMENTS)[number] {
+  const p = String(input ?? "hero").toLowerCase();
+  return (PLACEMENTS as readonly string[]).includes(p)
+    ? (p as (typeof PLACEMENTS)[number])
+    : "hero";
+}
+
+/** Legacy rows without `placement` map to hero/strip/sticky by heuristics. */
+function placementQuery(placement: string): Record<string, unknown> | null {
+  if (!(PLACEMENTS as readonly string[]).includes(placement)) return null;
+  if (placement === "hero") {
+    return {
+      $or: [
+        { placement: "hero" },
+        {
+          placement: { $exists: false },
+          image_url: { $nin: [null, ""] },
+        },
+      ],
+    };
+  }
+  if (placement === "strip") {
+    return {
+      $or: [
+        { placement: "strip" },
+        {
+          placement: { $exists: false },
+          $or: [{ image_url: null }, { image_url: "" }],
+        },
+      ],
+    };
+  }
+  return {
+    $or: [
+      { placement: "sticky_bottom" },
+      { placement: { $exists: false }, severity: "promo" },
+    ],
+  };
+}
 
 function sanitizeAudience(input: any): string[] {
   if (!Array.isArray(input)) return ["all"];
@@ -130,6 +180,9 @@ export async function adminListBanners(req: Request, res: Response) {
     if ((AUDIENCE_VALUES as readonly string[]).includes(audience)) {
       filter.audience = audience;
     }
+    const placement = String(req.query?.placement ?? "").toLowerCase();
+    const placementClause = placementQuery(placement);
+    if (placementClause) Object.assign(filter, placementClause);
 
     const [rows, total] = await Promise.all([
       HomeBanner.find(filter)
@@ -177,6 +230,11 @@ export async function adminCreateBanner(req: Request, res: Response) {
       cta_label: body.cta_label || null,
       cta_url: body.cta_url || null,
       ctas: sanitizeCtas(body.ctas),
+      placement: sanitizePlacement(body.placement),
+      auto_advance_sec:
+        typeof body.auto_advance_sec === "number"
+          ? Math.min(60, Math.max(0, body.auto_advance_sec))
+          : 5,
       dismissible: body.dismissible !== false,
       is_active: body.is_active !== false,
       sort_order: typeof body.sort_order === "number" ? body.sort_order : 0,
@@ -216,6 +274,10 @@ export async function adminUpdateBanner(req: Request, res: Response) {
     if ("cta_label" in body) patch.cta_label = body.cta_label || null;
     if ("cta_url" in body) patch.cta_url = body.cta_url || null;
     if ("ctas" in body) patch.ctas = sanitizeCtas(body.ctas);
+    if ("placement" in body) patch.placement = sanitizePlacement(body.placement);
+    if (typeof body.auto_advance_sec === "number") {
+      patch.auto_advance_sec = Math.min(60, Math.max(0, body.auto_advance_sec));
+    }
     if (typeof body.dismissible === "boolean") patch.dismissible = body.dismissible;
     if (typeof body.is_active === "boolean") patch.is_active = body.is_active;
     if (typeof body.sort_order === "number") patch.sort_order = body.sort_order;

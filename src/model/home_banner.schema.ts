@@ -42,6 +42,15 @@ const homeBannerSchema: Schema = new Schema(
       ],
       default: [],
     },
+    /** Where the mobile/web client renders this banner (CMS-controlled). */
+    placement: {
+      type: String,
+      enum: ["hero", "strip", "sticky_bottom"],
+      default: "hero",
+      index: true,
+    },
+    /** Hero carousel auto-advance interval (seconds). 0 = client default only. */
+    auto_advance_sec: { type: Number, default: 5, min: 0, max: 60 },
     dismissible: { type: Boolean, default: true },
     is_active: { type: Boolean, default: true, index: true },
     sort_order: { type: Number, default: 0, index: true },
@@ -58,6 +67,7 @@ const homeBannerSchema: Schema = new Schema(
 
 homeBannerSchema.index({ is_active: 1, sort_order: 1 });
 homeBannerSchema.index({ audience: 1, is_active: 1 });
+homeBannerSchema.index({ placement: 1, is_active: 1, sort_order: 1 });
 
 const HomeBanner = Model(Tables.home_banner, homeBannerSchema);
 export default HomeBanner;
