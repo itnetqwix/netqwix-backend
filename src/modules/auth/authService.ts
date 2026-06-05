@@ -30,6 +30,7 @@ import {
   clearLoginFailures,
   recordLoginFailure,
 } from "./loginLockoutService";
+import { buildAuthTokenBundle } from "./authTokenResponse";
 import { refreshTokenService } from "./refreshTokenService";
 import type { ClientSessionMeta } from "./clientSessionMeta";
 import { logSecurityEvent } from "../security/securityAuditService";
@@ -329,14 +330,6 @@ export class AuthService {
               ? rawIp.split(",")[0].trim()
               : rawIp;
           void recordUserActivity(String(userDetails._id), UserActivityEvent.LOGIN, { channel: "password" }, ip);
-          const payload = {
-            user_id: userDetails._id,
-            account_type: userDetails.account_type,
-          };
-          const access_token = refreshTokenService.issueAccessToken(
-            String(userDetails._id),
-            String(userDetails.account_type)
-          );
           const meta: ClientSessionMeta = sessionMeta ?? {
             clientType: "unknown",
             platform: "unknown",
@@ -349,6 +342,16 @@ export class AuthService {
             String(userDetails._id),
             meta
           );
+          const tokens = buildAuthTokenBundle({
+            access_token: refreshTokenService.issueAccessToken(
+              String(userDetails._id),
+              String(userDetails.account_type),
+              issued.sessionId
+            ),
+            refresh_token: issued.refreshToken,
+            session_id: issued.sessionId,
+            account_type: String(userDetails.account_type),
+          });
           await ensureTrainerGracePeriod(String(userDetails._id));
           await syncSignupOtpContactVerification(String(userDetails._id));
           await syncTrustedContactVerification(String(userDetails._id), {
@@ -359,10 +362,7 @@ export class AuthService {
           return ResponseBuilder.data(
             {
               data: {
-                access_token,
-                refresh_token: issued.refreshToken,
-                session_id: issued.sessionId,
-                account_type: userDetails.account_type,
+                ...tokens,
                 onboarding,
               },
             },
@@ -491,10 +491,6 @@ export class AuthService {
 
   public googleLogin = async (user, sessionMeta?: ClientSessionMeta): Promise<any> => {
     try {
-      const access_token = refreshTokenService.issueAccessToken(
-        String(user._id),
-        String(user.account_type)
-      );
       const meta: ClientSessionMeta = sessionMeta ?? {
         clientType: "unknown",
         platform: "unknown",
@@ -504,6 +500,16 @@ export class AuthService {
         userAgent: "",
       };
       const issued = await refreshTokenService.issueRefreshToken(String(user._id), meta);
+      const tokens = buildAuthTokenBundle({
+        access_token: refreshTokenService.issueAccessToken(
+          String(user._id),
+          String(user.account_type),
+          issued.sessionId
+        ),
+        refresh_token: issued.refreshToken,
+        session_id: issued.sessionId,
+        account_type: String(user.account_type),
+      });
       await ensureTrainerGracePeriod(String(user._id));
       await syncSignupOtpContactVerification(String(user._id));
       await syncTrustedContactVerification(String(user._id), { trustEmailFromLogin: true });
@@ -512,10 +518,7 @@ export class AuthService {
       return ResponseBuilder.data(
         {
           data: {
-            access_token,
-            refresh_token: issued.refreshToken,
-            session_id: issued.sessionId,
-            account_type: user.account_type,
+            ...tokens,
             onboarding,
           },
         },

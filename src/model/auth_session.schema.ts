@@ -7,6 +7,8 @@ const authSessionSchema = new Schema(
     /** Public id shown in the app (e.g. NQ-A1B2C3D4). */
     publicId: { type: String, required: true, unique: true },
     refreshTokenHash: { type: String, required: true, unique: true },
+    /** Previous hash after rotation — detects refresh-token reuse attacks. */
+    replacedRefreshTokenHash: { type: String, default: null, index: true },
     clientType: {
       type: String,
       enum: ["mobile", "web", "tablet", "desktop", "unknown"],

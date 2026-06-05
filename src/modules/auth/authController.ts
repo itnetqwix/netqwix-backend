@@ -5,6 +5,7 @@ import { UserService } from "../user/userService";
 import { AuthService } from "./authService";
 import { Request, Response } from "express";
 import { AccountType } from "./authEnum";
+import { buildAuthTokenBundle, sendAuthTokenSuccess } from "./authTokenResponse";
 import { refreshTokenService } from "./refreshTokenService";
 import { authSessionService } from "./authSessionService";
 import { parseClientSessionMeta } from "./clientSessionMeta";
@@ -329,19 +330,19 @@ export class authController {
         return res.status(401).json({ status: CONSTANCE.FAIL, error: "Invalid refresh token." });
       }
       const rotated = await refreshTokenService.rotateRefreshToken(refresh_token, touchMeta);
-      const access_token = refreshTokenService.issueAccessToken(
-        String(userDoc._id),
-        String(userDoc.account_type)
-      );
-      return res.status(200).json({
-        status: CONSTANCE.SUCCESS,
-        data: {
-          access_token,
+      return sendAuthTokenSuccess(
+        res,
+        buildAuthTokenBundle({
+          access_token: refreshTokenService.issueAccessToken(
+            String(userDoc._id),
+            String(userDoc.account_type),
+            rotated.sessionId
+          ),
           refresh_token: rotated.refreshToken,
           session_id: rotated.sessionId,
-          account_type: userDoc.account_type,
-        },
-      });
+          account_type: String(userDoc.account_type),
+        })
+      );
     } catch (error) {
       this.logger.error(error);
       return res.status(401).json({
@@ -357,16 +358,15 @@ export class authController {
       const accountType = String(req["authUser"]?.account_type ?? "");
       const sessionMeta = parseClientSessionMeta(req, "password");
       const issued = await refreshTokenService.issueRefreshToken(userId, sessionMeta);
-      const access_token = refreshTokenService.issueAccessToken(userId, accountType);
-      return res.status(200).json({
-        status: CONSTANCE.SUCCESS,
-        data: {
-          access_token,
+      return sendAuthTokenSuccess(
+        res,
+        buildAuthTokenBundle({
+          access_token: refreshTokenService.issueAccessToken(userId, accountType, issued.sessionId),
           refresh_token: issued.refreshToken,
           session_id: issued.sessionId,
           account_type: accountType,
-        },
-      });
+        })
+      );
     } catch (error) {
       this.logger.error(error);
       return res.status(500).json({

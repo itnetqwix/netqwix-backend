@@ -13,6 +13,7 @@ import { appleLoginModel } from "./authValidator/appleSignIn";
 import {
   authForgotLimiter,
   authLoginLimiter,
+  authRefreshLimiter,
   authSignupOtpLimiter,
 } from "../../middleware/rateLimit.middleware";
 import { AuthorizeMiddleware } from "../../middleware/authorize.middleware";
@@ -37,8 +38,8 @@ route.post(
 route.post("/login", authLoginLimiter, V.validate(loginModel), authC.login);
 route.post("/magic-link/request", authLoginLimiter, authC.requestMagicLink);
 route.post("/magic-link/verify", authLoginLimiter, authC.verifyMagicLink);
-route.post("/refresh", authC.refreshToken);
-route.post("/logout", authC.logout);
+route.post("/refresh", authRefreshLimiter, authC.refreshToken);
+route.post("/logout", authRefreshLimiter, authC.logout);
 
 route.post("/wake-up/start", authLoginLimiter, startWakeUp);
 route.post("/wake-up/confirm", authLoginLimiter, confirmWakeUp);

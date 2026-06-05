@@ -62,17 +62,29 @@ export class AuthSessionService {
   async validateAndTouch(refreshToken: string): Promise<{ userId: string; sessionId: string }> {
     const hash = hashToken(refreshToken);
     const now = new Date();
-    const doc = await authSessionModel.findOne({
+    let doc = await authSessionModel.findOne({
       refreshTokenHash: hash,
       revokedAt: null,
       expiresAt: { $gt: now },
     });
 
     if (!doc) {
+      const reused = await authSessionModel.findOne({
+        replacedRefreshTokenHash: hash,
+        revokedAt: null,
+        expiresAt: { $gt: now },
+      });
+      if (reused) {
+        await this.revokeAllForUser(String(reused.userId));
+        throw new Error("Refresh token reuse detected. All sessions revoked.");
+      }
       throw new Error("Invalid refresh token.");
     }
 
     doc.lastUsedAt = now;
+    if (doc.replacedRefreshTokenHash) {
+      doc.replacedRefreshTokenHash = null;
+    }
     await doc.save();
 
     return { userId: String(doc.userId), sessionId: String(doc._id) };
@@ -88,6 +100,7 @@ export class AuthSessionService {
 
     const update: Record<string, unknown> = {
       refreshTokenHash: hashToken(newToken),
+      replacedRefreshTokenHash: hash,
       lastUsedAt: new Date(),
     };
     if (meta?.deviceLabel) update.deviceLabel = meta.deviceLabel;

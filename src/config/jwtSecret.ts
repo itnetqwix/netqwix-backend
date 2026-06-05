@@ -62,6 +62,39 @@ export function assertJwtConfiguredAtStartup(): void {
   }
 }
 
+/** Legacy env — used when JWT_ACCESS_EXPIRATION_TIME is unset. */
 export function getJwtExpiration(): string {
   return process.env.JWT_EXPIRATION_TIME?.trim() || "7d";
+}
+
+/** Short-lived access JWT (refresh tokens carry long sessions). */
+export function getAccessJwtExpiration(): string {
+  return (
+    process.env.JWT_ACCESS_EXPIRATION_TIME?.trim() ||
+    process.env.JWT_EXPIRATION_TIME?.trim() ||
+    "1h"
+  );
+}
+
+function parseDurationToSeconds(raw: string): number {
+  const s = raw.trim();
+  const m = /^(\d+)([smhd])$/i.exec(s);
+  if (!m) return 3600;
+  const n = Number(m[1]);
+  const unit = m[2].toLowerCase();
+  if (unit === "s") return n;
+  if (unit === "m") return n * 60;
+  if (unit === "h") return n * 3600;
+  return n * 86400;
+}
+
+export function getAccessJwtExpirationSeconds(): number {
+  return parseDurationToSeconds(getAccessJwtExpiration());
+}
+
+/** Refresh session TTL in days (server-side session document). */
+export function getRefreshSessionTtlDays(): number {
+  const raw = process.env.JWT_REFRESH_TTL_DAYS?.trim();
+  const n = raw ? Number(raw) : 30;
+  return Number.isFinite(n) && n > 0 ? n : 30;
 }

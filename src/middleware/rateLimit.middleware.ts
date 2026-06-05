@@ -68,6 +68,13 @@ export const authForgotLimiter = createRateLimiter({
   max: 10,
 });
 
+export const authRefreshLimiter = createRateLimiter({
+  name: "auth-refresh",
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: "Too many token refresh attempts. Try again later.",
+});
+
 export const authSignupOtpLimiter = createRateLimiter({
   name: "auth-signup-otp",
   windowMs: 60 * 60 * 1000,

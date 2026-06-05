@@ -4,6 +4,7 @@ import magicLinkTokenModel from "../../model/magic_link_token.schema";
 import userModel from "../../model/user.schema";
 import { SendEmail } from "../../Utils/sendEmail";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
+import { buildAuthTokenBundle } from "./authTokenResponse";
 import { refreshTokenService } from "./refreshTokenService";
 import type { ClientSessionMeta } from "./clientSessionMeta";
 import { log } from "../../../logger";
@@ -229,23 +230,24 @@ export class MagicLinkService {
     row.consumed_at = now;
     await row.save();
 
-    const access_token = refreshTokenService.issueAccessToken(
-      String(userDoc._id),
-      String(userDoc.account_type)
-    );
     const issued = await refreshTokenService.issueRefreshToken(
       String(userDoc._id),
       { ...sessionMeta, loginMethod: "magic-link" }
     );
+    const tokens = buildAuthTokenBundle({
+      access_token: refreshTokenService.issueAccessToken(
+        String(userDoc._id),
+        String(userDoc.account_type),
+        issued.sessionId
+      ),
+      refresh_token: issued.refreshToken,
+      session_id: issued.sessionId,
+      account_type: String(userDoc.account_type),
+    });
 
     return ResponseBuilder.data(
       {
-        data: {
-          access_token,
-          refresh_token: issued.refreshToken,
-          session_id: issued.sessionId,
-          account_type: userDoc.account_type,
-        },
+        data: tokens,
       },
       "Signed in."
     );
