@@ -14,7 +14,7 @@ import { refundSessionEscrow } from "../wallet/instantLessonRefundService";
 import { publishSocketEventToUsers } from "../../services/eventPubSub";
 import { MemCache } from "../../Utils/memCache";
 import { getIo } from "../socket/socket.service";
-import { runInstantLessonExpire } from "../socket/socket.service";
+import { runInstantLessonExpire } from "./instantLessonLifecycle";
 import booked_session from "../../model/booked_sessions.schema";
 import user from "../../model/user.schema";
 import { logInstantLessonOps } from "../ops/opsInstantLogger";

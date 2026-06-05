@@ -12,6 +12,7 @@ import { CONSTANCE } from "../../config/constance";
 import Tip from "../../model/tip.schema";
 import { assertAdminUser } from "../admin/adminPermission";
 import { notifyCmsUpdated } from "../cms/cmsNotify";
+import { activeTipFilter, audiencesForTipCaller } from "../cms/cmsContentQuery";
 
 function adminDenied(req: Request): string | null {
   return assertAdminUser((req as any)?.authUser);
@@ -28,7 +29,7 @@ function audienceForAccountType(
   return ["all"];
 }
 
-function serialize(t: any) {
+export function serializeTip(t: any) {
   return {
     _id: String(t._id),
     title: t.title,
@@ -52,22 +53,17 @@ function serialize(t: any) {
 export async function listActiveTips(req: Request, res: Response) {
   try {
     const authUser = (req as any)?.authUser;
-    const audiences = audienceForAccountType(authUser?.account_type, !!authUser);
-    const now = new Date();
+    const audiences = audiencesForTipCaller(authUser, !!authUser);
     const rows = await Tip.find({
-      is_active: true,
+      ...activeTipFilter(),
       audience: { $in: audiences },
-      $and: [
-        { $or: [{ start_date: null }, { start_date: { $lte: now } }] },
-        { $or: [{ end_date: null }, { end_date: { $gte: now } }] },
-      ],
     })
       .sort({ sort_order: 1, createdAt: -1 })
       .limit(20)
       .lean();
     return res.status(200).send({
       status: CONSTANCE.SUCCESS,
-      data: rows.map(serialize),
+      data: rows.map(serializeTip),
     });
   } catch (err: any) {
     return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
@@ -110,7 +106,7 @@ export async function adminListTips(req: Request, res: Response) {
     return res.status(200).send({
       status: CONSTANCE.SUCCESS,
       data: {
-        items: rows.map(serialize),
+        items: rows.map(serializeTip),
         total,
         page,
         pageSize,
@@ -151,7 +147,7 @@ export async function adminCreateTip(req: Request, res: Response) {
     void notifyCmsUpdated("tips").catch(() => {});
     return res
       .status(200)
-      .send({ status: CONSTANCE.SUCCESS, data: serialize(created.toObject()) });
+      .send({ status: CONSTANCE.SUCCESS, data: serializeTip(created.toObject()) });
   } catch (err: any) {
     return res.status(400).send({ status: CONSTANCE.FAIL, error: err.message });
   }
@@ -185,7 +181,7 @@ export async function adminUpdateTip(req: Request, res: Response) {
       return res.status(404).send({ status: CONSTANCE.FAIL, error: "Tip not found." });
     }
     void notifyCmsUpdated("tips").catch(() => {});
-    return res.status(200).send({ status: CONSTANCE.SUCCESS, data: serialize(updated) });
+    return res.status(200).send({ status: CONSTANCE.SUCCESS, data: serializeTip(updated) });
   } catch (err: any) {
     return res.status(400).send({ status: CONSTANCE.FAIL, error: err.message });
   }
@@ -225,7 +221,7 @@ export async function adminToggleTip(req: Request, res: Response) {
       { new: true }
     ).lean();
     void notifyCmsUpdated("tips").catch(() => {});
-    return res.status(200).send({ status: CONSTANCE.SUCCESS, data: serialize(updated) });
+    return res.status(200).send({ status: CONSTANCE.SUCCESS, data: serializeTip(updated) });
   } catch (err: any) {
     return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
   }

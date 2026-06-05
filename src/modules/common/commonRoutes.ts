@@ -60,6 +60,7 @@ route.post("/chat-media-upload-url", commonC.chatMediaUploadUrl);
 route.get("/lesson-call-slot/:sessionId", commonC.getLessonCallSlotStatus);
 route.post("/lesson-call-slot/:sessionId/takeover", commonC.takeoverLessonCallSlot);
 
+/** Legacy aliases — canonical routes live under `/chat` (same ChatController). */
 const chatC = new ChatController();
 route.get("/chat-conversations", chatC.getConversations);
 route.get("/chat-messages/:conversationId", chatC.getMessages);

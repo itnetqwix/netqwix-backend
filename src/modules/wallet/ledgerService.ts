@@ -159,6 +159,32 @@ export class LedgerService {
           if (bal < debitSum) {
             throw new Error("Insufficient wallet balance.");
           }
+          const reserved = await wallet_accounts.findOneAndUpdate(
+            {
+              _id: leg.walletAccountId,
+              $expr: {
+                $gte: [
+                  {
+                    $subtract: [
+                      { $ifNull: ["$balance_cache.available", bal] },
+                      debitSum,
+                    ],
+                  },
+                  0,
+                ],
+              },
+            },
+            {
+              $inc: {
+                "balance_cache.available": -debitSum,
+                ledger_reserve_version: 1,
+              },
+            },
+            { session, new: true }
+          );
+          if (!reserved) {
+            throw new Error("Insufficient wallet balance.");
+          }
         }
       }
 

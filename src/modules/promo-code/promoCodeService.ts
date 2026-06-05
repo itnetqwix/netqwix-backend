@@ -134,6 +134,37 @@ export class PromoCodeService {
   /**
    * Record usage of a promo code after a successful booking.
    */
+  /** Checkout facade entry — validate before payment. */
+  public async validateForCheckout(
+    code: string,
+    userId: string,
+    userType: string,
+    bookingType?: string,
+    amount?: number,
+    userLocation?: string,
+    trainerId?: string
+  ) {
+    return this.validatePromoCode(
+      code,
+      userId,
+      userType,
+      bookingType,
+      amount,
+      userLocation,
+      trainerId
+    );
+  }
+
+  /** Checkout facade entry — record usage after booking save. */
+  public async applyAfterBooking(
+    code: string,
+    userId: string,
+    bookingId: string,
+    discountApplied: number
+  ): Promise<void> {
+    return this.applyPromoCode(code, userId, bookingId, discountApplied);
+  }
+
   public async applyPromoCode(
     code: string,
     userId: string,

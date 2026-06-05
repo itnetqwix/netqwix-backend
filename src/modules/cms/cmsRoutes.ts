@@ -7,9 +7,11 @@ import {
   getLegalBySlug,
   listCmsPages,
 } from "./cmsController";
+import { getCmsHome } from "./cmsHomeController";
 
 const route = Router();
 
+route.get("/home", optionalAuthorize, getCmsHome);
 route.get("/manifest", getCmsManifest);
 route.get("/faq", getCmsFaq);
 route.get("/legal/:slug", getLegalBySlug);

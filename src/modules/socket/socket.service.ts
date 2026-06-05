@@ -68,6 +68,9 @@ import {
   publishSocketEventToUsers,
   publishSocketBroadcast,
 } from "./socketEmit";
+import { runInstantLessonExpire as runInstantLessonExpireFn } from "../instant-lesson/instantLessonLifecycle";
+
+export { runInstantLessonExpire } from "../instant-lesson/instantLessonLifecycle";
 
 const pushService = new NotificationsService();
 const logoPath = path.resolve(__dirname, "../../assets/netqwix_logo.png");
@@ -101,7 +104,7 @@ export function getActiveUserIds(): string[] {
 }
 
 /** Cluster-safe peer relay (WebRTC + in-call); `peerUserId` is the Mongo user id. */
-function relayPeerByUserId(
+export function relayPeerByUserId(
   peerUserId: string | undefined | null,
   event: string,
   payload: unknown
@@ -112,7 +115,7 @@ function relayPeerByUserId(
 }
 
 /** Prefer session room broadcast; fall back to peer user relay (reconnect-safe). */
-function relayInCallBySessionOrPeer(
+export function relayInCallBySessionOrPeer(
   socket: { to: (room: string) => { emit: (event: string, payload: unknown) => void } },
   payload: { sessionId?: string; userInfo?: { to_user?: string } },
   event: string
@@ -253,7 +256,7 @@ export type PendingExtensionRequestSnapshot = {
 };
 
 // Lesson session state tracking - backend is authoritative for timer start
-type LessonSessionState = {
+export type LessonSessionState = {
   sessionId: string; // booked_session._id
   coachJoined: boolean;
   userJoined: boolean;
@@ -281,10 +284,10 @@ type LessonSessionState = {
 const TRAINEE_LATE_AUTO_START_MS = 120_000;
 
 /** @deprecated Use getLessonSession / setLessonSession — backed by lessonTimerStore + Redis. */
-function lessonSessionsGet(sessionId: string): LessonSessionState | undefined {
+export function lessonSessionsGet(sessionId: string): LessonSessionState | undefined {
   return getLessonSession(sessionId) as LessonSessionState | undefined;
 }
-function lessonSessionsSet(sessionId: string, session: LessonSessionState): void {
+export function lessonSessionsSet(sessionId: string, session: LessonSessionState): void {
   setLessonSession(sessionId, session as any);
 }
 function lessonSessionsDelete(sessionId: string): void {
@@ -296,7 +299,7 @@ function lessonSessionsDelete(sessionId: string): void {
 const SESSION_LEAVE_GRACE_MS = 45000;
 const pendingLessonDisconnectTimers = new Map<string, NodeJS.Timeout>();
 
-function cancelLessonDisconnectGrace(sessionId: string, userId: string) {
+export function cancelLessonDisconnectGrace(sessionId: string, userId: string) {
   const key = `${String(sessionId)}:${String(userId)}`;
   const t = pendingLessonDisconnectTimers.get(key);
   if (t) {
@@ -305,7 +308,7 @@ function cancelLessonDisconnectGrace(sessionId: string, userId: string) {
   }
 }
 
-function lessonRoomEmit(roomName: string, event: string, payload: unknown) {
+export function lessonRoomEmit(roomName: string, event: string, payload: unknown) {
   const sessionMatch = /^session:(.+)$/.exec(roomName);
   if (sessionMatch) {
     void publishSocketEventToSession(sessionMatch[1], event, payload);
@@ -314,7 +317,7 @@ function lessonRoomEmit(roomName: string, event: string, payload: unknown) {
   }
 }
 
-function startLessonTimerInRoom(
+export function startLessonTimerInRoom(
   socket: any,
   roomName: string,
   session: LessonSessionState,
@@ -343,7 +346,7 @@ function startLessonTimerInRoom(
   );
 }
 
-function maybeAutoStartLessonTimer(socket: any, roomName: string, session: LessonSessionState) {
+export function maybeAutoStartLessonTimer(socket: any, roomName: string, session: LessonSessionState) {
   if (session.status !== "waiting") return;
   if (!session.coachJoined || !session.userJoined) return;
 
@@ -443,7 +446,7 @@ function finalizeLessonParticipantDisconnect(
   });
 }
 
-const emitLessonStateSync = (socket: any, roomName: string, session: LessonSessionState) => {
+export const emitLessonStateSync = (socket: any, roomName: string, session: LessonSessionState) => {
   const liveState = getLessonLiveStateSnapshot(session.sessionId, "trainer");
   const statePayload = {
     sessionId: session.sessionId,
@@ -476,7 +479,7 @@ async function finalizeLessonEnd(sessionId: string): Promise<void> {
   }
 }
 
-const clearLessonTimeouts = (session: LessonSessionState) => {
+export const clearLessonTimeouts = (session: LessonSessionState) => {
   if (session.warningTimeoutId) clearTimeout(session.warningTimeoutId);
   session.warningTimeoutId = null;
   if (session.warningTimeoutIds?.length) {
@@ -733,7 +736,7 @@ export function broadcastSessionExtensionEvent(
   void publishSocketEventToSession(sid, event, { sessionId: sid, ...payload });
 }
 
-const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSessionState) => {
+export const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSessionState) => {
   clearLessonTimeouts(session);
 
   const remainingMs = Math.max(0, session.remainingSeconds) * 1000;
@@ -770,7 +773,7 @@ const scheduleLessonEnd = (socket: any, roomName: string, session: LessonSession
 };
 
 /** Socket user may be a Mongoose document or plain object — avoid relying on `_doc`. */
-function socketAttachedUserId(socket: any): string {
+export function socketAttachedUserId(socket: any): string {
   const u = socket?.user;
   if (!u) return "";
   const id = u._id ?? u._doc?._id;
@@ -1034,732 +1037,35 @@ export const handleSocketEvents = (socket, connections = {}) => {
     }
   });
 
-  // Connection quality stats from WebRTC calls
   socket.on("CALL_QUALITY_STATS", async (payload) => {
     try {
       const userId = socket?.user?._doc?._id || socket?.user?._id;
       const accountType =
         socket?.user?._doc?.account_type || socket?.user?.account_type;
-
+      const { role } = payload || {};
+      const { ingestCallQualityStats } = require("../session/callQualityIngestService");
       const normalized = normalizeCallQualityStatsPayload(payload);
-      const { role, stats } = payload || {};
       const sessionId = String(
-        (payload as { sessionId?: string })?.sessionId ??
-          normalized?.sessionId ??
-          ""
+        (payload as { sessionId?: string })?.sessionId ?? normalized?.sessionId ?? ""
       ).trim();
       if (!sessionId) return;
-
-      // Log quality metrics for monitoring
-      if (stats?.quality) {
-        console.log("[CallQuality] Stats:", {
-          userId,
-          accountType,
-          sessionId,
-          role,
-          overallScore: stats.quality.overallScore,
-          audioScore: stats.quality.audioScore,
-          videoScore: stats.quality.videoScore,
-          rtt: stats.quality.rtt,
-          usingRelay: stats.quality.usingRelay,
-          timestamp: stats.timestamp,
-        });
-
-        // Save to database for analytics (only sample every 5th report to avoid DB overload)
-        if (sessionId && userId && Math.random() < 0.2) {
-          try {
-            await CallDiagnostics.create({
-              sessionId,
-              userId,
-              accountType,
-              role,
-              eventType: "CALL_QUALITY_STATS",
-              qualityStats: stats,
-            });
-          } catch (dbErr) {
-            console.error("[CallQuality] Failed to save to DB:", dbErr);
-          }
-        }
-        if (sessionId && userId) {
-          logCallQualityOps({
-            sessionId: String(sessionId),
-            userId: String(userId),
-            stats,
-            role,
-          });
-
-          const qualityRole =
-            role === "trainer" || accountType === "Trainer"
-              ? "trainer"
-              : "trainee";
-          const snap = updateQualitySnapshot(String(sessionId), qualityRole, {
-            overallScore: stats?.quality?.overallScore,
-            rtt: stats?.quality?.rtt,
-          });
-          lessonRoomEmit(`session:${sessionId}`, "LESSON_QUALITY_UPDATE", {
-            sessionId: String(sessionId),
-            role: qualityRole,
-            quality: snap,
-          });
-        }
-      }
+      await ingestCallQualityStats({
+        payload,
+        userId: userId ? String(userId) : undefined,
+        accountType,
+        role,
+        emitToRoom: (event, data) => lessonRoomEmit(`session:${sessionId}`, event, data),
+      });
     } catch (err) {
-      console.error(
-        "[CallQuality] Failed to process CALL_QUALITY_STATS:",
-        err
-      );
+      console.error("[CallQuality] Failed to process CALL_QUALITY_STATS:", err);
     }
   });
 
-  socket.on(EVENTS.VIDEO_CALL.ON_OFFER, ({ offer, userInfo }) => {
-    const toUserId = MemCache.getDetail(
-      process.env.SOCKET_CONFIG,
-      userInfo?.to_user
-    );
-    console.log("[VideoCall:ON_OFFER]", {
-      from_user: userInfo?.from_user,
-      to_user: userInfo?.to_user,
-      toUserSocketMapped: !!toUserId,
-    });
-    if (!userInfo?.to_user) {
-      console.warn("[VideoCall:ON_OFFER] Target user missing", {
-        from_user: userInfo?.from_user,
-      });
-      return;
-    }
-    void publishSocketEventToUser(String(userInfo.to_user), "offer", offer);
-    // TODO:for now broadcasting the event, it needs to send to specific user.
-    // socket.broadcast.emit('offer', offer);
-  });
+  const { registerWebrtcRelayHandlers } = require("./handlers/webrtcRelayHandlers");
+  registerWebrtcRelayHandlers(socket);
 
-  const processOnCallJoin = async (
-    socket: any,
-    { userInfo }: { userInfo?: any }
-  ) => {
-    const toUserId = MemCache.getDetail(
-      process.env.SOCKET_CONFIG,
-      userInfo?.to_user
-    );
-
-    // Critical: log the full MemCache lookup result so we can see if the target user's socket is registered
-    console.log("[VideoCall:ON_CALL_JOIN] 🔍 MemCache socket lookup:", {
-      from_user: userInfo?.from_user,
-      to_user: userInfo?.to_user,
-      peerId: userInfo?.peerId,
-      toUserSocketId: toUserId || "❌ NOT FOUND IN MEMCACHE",
-      socketConfigKey: process.env.SOCKET_CONFIG,
-      WARNING: !toUserId ? "⚠️ Target user socket not in MemCache — ON_CALL_JOIN will NOT reach them. Is the other user connected?" : undefined,
-      WARNING_peerId: !userInfo?.peerId ? "⚠️ peerId is missing in userInfo — trainer cannot dial trainee without peerId!" : undefined,
-    });
-
-    if (!toUserId) {
-      console.warn("[VideoCall:ON_CALL_JOIN] No socket mapping found for target user", {
-        to_user: userInfo?.to_user,
-        from_user: userInfo?.from_user,
-        peerId: userInfo?.peerId,
-      });
-    }
-
-    // Track join state for timer logic - sessionId is booked_session._id
-    const sessionId = userInfo?.sessionId || userInfo?.meetingId || userInfo?.lessonId;
-    const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
-    const userId = socket?.user?._doc?._id || socket?.user?._id;
-
-    console.log("[VideoCall:ON_CALL_JOIN]", {
-      sessionId,
-      userId,
-      accountType,
-      peerId: userInfo?.peerId,
-      from_user: userInfo?.from_user,
-      to_user: userInfo?.to_user,
-      toUserSocketMapped: !!toUserId,
-    });
-    
-    if (sessionId && mongoose.isValidObjectId(sessionId)) {
-      const { assertSessionParticipant } = require("../../helpers/chatBlockCheck");
-      const allowed = userId
-        ? await assertSessionParticipant(String(sessionId), String(userId))
-        : false;
-      if (!allowed) {
-        console.warn(`[SESSION] Denied join for user ${userId} on session ${sessionId}`);
-        return;
-      }
-
-      let isInstantLesson = false;
-      try {
-        const slotMeta = await booked_session
-          .findById(sessionId)
-          .select("is_instant")
-          .lean();
-        isInstantLesson = !!slotMeta?.is_instant;
-      } catch {
-        /* non-fatal */
-      }
-
-      try {
-        const {
-          recordLessonParticipantClient,
-        } = require("../../helpers/lesson/lessonClientTelemetry");
-        await recordLessonParticipantClient({
-          sessionId: String(sessionId),
-          userId: String(userId),
-          accountType: String(accountType ?? ""),
-          clientKind: (socket as any).nqLessonClientKind ?? "unknown",
-        });
-      } catch {
-        /* non-fatal */
-      }
-
-      const slot = await claimLessonCallSlot({
-        sessionId: String(sessionId),
-        userId: String(userId),
-        socketId: socket.id,
-        authSessionId: (socket as any).nqAuthSessionId,
-        deviceId: (socket as any).nqDeviceId,
-        isInstant: isInstantLesson,
-      });
-      if (slot.ok === false) {
-        const denyReason = slot.reason;
-        console.warn(
-          `[SESSION] Call slot denied for user ${userId} on session ${sessionId}: ${denyReason}`
-        );
-        socket.emit(EVENTS.VIDEO_CALL.CALL_JOIN_DENIED, {
-          sessionId: String(sessionId),
-          reason: denyReason,
-          canTakeOver: denyReason === "already_active_elsewhere",
-          message:
-            "This lesson is already active on another device. Leave the other device or use that session to continue.",
-        });
-        return;
-      }
-
-      // Join the room immediately when user joins (don't wait for both parties)
-      const roomName = `session:${sessionId}`;
-      socket.join(roomName);
-      cancelLessonDisconnectGrace(sessionId, String(userId));
-      console.log(`[SESSION] User ${userId} (${accountType}) joined room ${roomName} for session ${sessionId}`);
-      
-      let session = lessonSessionsGet(sessionId);
-      if (!session) {
-        session = (await hydrateLessonSessionFromRedis(String(sessionId))) as
-          | LessonSessionState
-          | undefined;
-      }
-      if (!session) {
-        // Fetch booked session to get duration
-        try {
-          const bookedSession = await booked_session.findById(sessionId);
-          if (bookedSession) {
-            // Calculate duration from start_time and end_time (Date objects) if available
-            // Otherwise calculate from session_start_time and session_end_time (string HH:mm)
-            let durationSeconds = 30 * 60; // default 30 minutes
-            if (bookedSession.is_instant && bookedSession.duration_minutes) {
-              const mins = Number(bookedSession.duration_minutes);
-              if (mins > 0) durationSeconds = mins * 60;
-            } else if (bookedSession.start_time && bookedSession.end_time) {
-              durationSeconds = Math.floor((bookedSession.end_time.getTime() - bookedSession.start_time.getTime()) / 1000);
-            } else if (bookedSession.session_start_time && bookedSession.session_end_time) {
-              // Parse HH:mm strings and calculate duration
-              const [startH, startM] = bookedSession.session_start_time.split(':').map(Number);
-              const [endH, endM] = bookedSession.session_end_time.split(':').map(Number);
-              const startMinutes = startH * 60 + startM;
-              let endMinutes = endH * 60 + endM;
-
-              // If the end time is "earlier" than start time, assume it crosses midnight.
-              // This preserves the exact booked window duration rather than falling back.
-              if (endMinutes < startMinutes) {
-                endMinutes += 24 * 60;
-              }
-
-              durationSeconds = (endMinutes - startMinutes) * 60; // convert to seconds
-            }
-            
-            session = {
-              sessionId,
-              coachJoined: false,
-              userJoined: false,
-              startedAt: null,
-              duration: durationSeconds > 0 ? durationSeconds : 30 * 60,
-              remainingSeconds: durationSeconds > 0 ? durationSeconds : 30 * 60,
-              status: "waiting",
-              warningTimeoutId: null,
-              endTimeoutId: null,
-              isInstant: !!bookedSession.is_instant,
-              coachFirstJoinedAt: null,
-              userFirstJoinedAt: null,
-            };
-            lessonSessionsSet(sessionId, session);
-            console.log(`[TIMER] Session ${sessionId} initialized with duration ${session.duration}s`);
-          }
-        } catch (err) {
-          console.error("Error fetching booked session for timer:", err);
-        }
-      }
-      
-      if (session) {
-        // Determine if this is coach (Trainer) or user (Trainee) based on account_type
-        const wasCoachJoined = session.coachJoined;
-        const wasUserJoined = session.userJoined;
-        
-        if (accountType === "Trainer") {
-          session.coachJoined = true;
-          if (session.coachFirstJoinedAt == null) {
-            session.coachFirstJoinedAt = Date.now();
-          }
-          console.log(`[TIMER] Trainer ${userId} joined session ${sessionId}. Coach joined: ${session.coachJoined}, User joined: ${session.userJoined}`);
-          socket.to(roomName).emit("PARTICIPANT_STATUS_CHANGED", {
-            sessionId,
-            role: "trainer",
-            status: "connected",
-            userId,
-          });
-        } else {
-          session.userJoined = true;
-          if (session.userFirstJoinedAt == null) {
-            session.userFirstJoinedAt = Date.now();
-          }
-          console.log(`[TIMER] Trainee ${userId} joined session ${sessionId}. Coach joined: ${session.coachJoined}, User joined: ${session.userJoined}`);
-          socket.to(roomName).emit("PARTICIPANT_STATUS_CHANGED", {
-            sessionId,
-            role: "trainee",
-            status: "connected",
-            userId,
-          });
-        }
-
-        maybeAutoStartLessonTimer(socket, roomName, session);
-        
-        // Notify the other party that someone joined (if they're connected)
-        const otherSocketId = MemCache.getDetail(process.env.SOCKET_CONFIG, userInfo?.to_user);
-        if (otherSocketId) {
-          const otherSocket = socket.nsp.sockets.get(otherSocketId);
-          if (otherSocket) {
-            // Ensure other party is also in the room
-            otherSocket.join(roomName);
-            // Notify them that this party joined
-            otherSocket.emit(EVENTS.VIDEO_CALL.ON_CALL_JOIN, { 
-              userInfo: {
-                ...userInfo,
-                joinedUserId: userId,
-                accountType: accountType
-              }
-            });
-            console.log(`[SESSION] Notified other party ${userInfo?.to_user} that ${userId} (${accountType}) joined session ${sessionId}`);
-          }
-        }
-        
-        // If trainer rejoins after an auto-disconnect-pause, auto-resume the timer.
-        if (accountType === "Trainer" && session.status === "paused" && session.trainerLeftPaused) {
-          session.startedAt = Date.now();
-          session.status = "running";
-          session.trainerLeftPaused = false;
-          console.log(`[TIMER] Auto-resuming timer for session ${sessionId} after trainer rejoin. Remaining: ${session.remainingSeconds}s`);
-
-          const resumedPayload = {
-            sessionId: session.sessionId,
-            startedAt: session.startedAt,
-            duration: session.duration,
-            remainingSeconds: session.remainingSeconds,
-            reason: "trainer_rejoined",
-          };
-          lessonRoomEmit(roomName, "LESSON_TIME_RESUMED", resumedPayload);
-          scheduleLessonEnd(socket, roomName, session);
-        }
-
-        // Coach manually controls start/pause/resume now.
-        // On join, only sync current state to both peers.
-        emitLessonStateSync(socket, roomName, session);
-
-        // If timer already started (e.g. user reconnected or joined after the other party),
-        // send current timer state (including remainingSeconds) to this socket so the UI
-        // can show an accurate countdown without depending on the client's clock.
-        if (session.status === "running" && session.startedAt != null) {
-          // Send un-adjusted remainingSeconds and original startedAt.
-          // Frontend computes: currentRemaining = remainingSeconds - (now - startedAt), avoiding double-counting.
-          const timerPayload = {
-            sessionId: session.sessionId,
-            startedAt: session.startedAt,
-            duration: session.duration,
-            remainingSeconds: session.remainingSeconds,
-          };
-          socket.emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
-          console.log(`[TIMER] [${new Date().toISOString()}] Sent existing timer state to joining/reconnecting user for session ${sessionId}`);
-        }
-
-        lessonSessionsSet(sessionId, session);
-      }
-    }
-    
-    // Also emit to the specific user (for backward compatibility)
-    if (userInfo?.to_user) {
-      console.log("[VideoCall:ON_CALL_JOIN] 📤 Forwarding via user room:", {
-        to_user: userInfo.to_user,
-        peerId: userInfo?.peerId,
-        from_user: userInfo?.from_user,
-        memCacheSocketId: toUserId || null,
-      });
-      relayPeerByUserId(userInfo.to_user, EVENTS.VIDEO_CALL.ON_CALL_JOIN, { userInfo });
-    } else {
-      console.error("[VideoCall:ON_CALL_JOIN] 🚨 CANNOT FORWARD — missing to_user");
-    }
-  };
-
-  socket.on(EVENTS.VIDEO_CALL.ON_CALL_JOIN, (payload) => {
-    void processOnCallJoin(socket, payload);
-  });
-
-  socket.on(EVENTS.VIDEO_CALL.CALL_JOIN_TAKEOVER, async ({ userInfo }) => {
-    const sessionId =
-      userInfo?.sessionId || userInfo?.meetingId || userInfo?.lessonId;
-    const userId = socketAttachedUserId(socket);
-    if (!sessionId || !mongoose.isValidObjectId(sessionId) || !userId) {
-      return;
-    }
-
-    const { assertSessionParticipant } = require("../../helpers/chatBlockCheck");
-    const allowed = await assertSessionParticipant(String(sessionId), String(userId));
-    if (!allowed) {
-      return;
-    }
-
-    let isInstantLesson = false;
-    try {
-      const slotMeta = await booked_session
-        .findById(sessionId)
-        .select("is_instant")
-        .lean();
-      isInstantLesson = !!slotMeta?.is_instant;
-    } catch {
-      /* non-fatal */
-    }
-
-    const takeover = await takeoverLessonCallSlot({
-      sessionId: String(sessionId),
-      userId: String(userId),
-      socketId: socket.id,
-      authSessionId: (socket as any).nqAuthSessionId,
-      deviceId: (socket as any).nqDeviceId,
-      isInstant: isInstantLesson,
-    });
-    if (!takeover.ok) {
-      socket.emit(EVENTS.VIDEO_CALL.CALL_JOIN_DENIED, {
-        sessionId: String(sessionId),
-        reason: "takeover_failed",
-        canTakeOver: false,
-        message: "Could not take over this lesson on this device.",
-      });
-      return;
-    }
-
-    if (takeover.previousSocketId) {
-      const prev = getIo()?.sockets?.sockets?.get(takeover.previousSocketId);
-      prev?.emit(EVENTS.VIDEO_CALL.CALL_SLOT_TAKEN_OVER, {
-        sessionId: String(sessionId),
-        message:
-          "This lesson was continued on another device. You have left the call on this device.",
-      });
-    }
-
-    await processOnCallJoin(socket, { userInfo });
-  });
-
-  socket.on(EVENTS.VIDEO_CALL.ON_BOTH_JOIN, async (socketReq) => {
-    const toUserId = MemCache.getDetail(
-      process.env.SOCKET_CONFIG,
-      socketReq.userInfo?.to_user
-    );
-    
-    // Check if timer has already started - if so, send current timer info (including
-    // remainingSeconds) to the newly joined party so their UI is in sync.
-    const sessionId = socketReq?.sessionId || socketReq?.userInfo?.sessionId || socketReq?.userInfo?.meetingId || socketReq?.userInfo?.lessonId;
-    if (sessionId && mongoose.isValidObjectId(sessionId)) {
-      void booked_session
-        .findOneAndUpdate(
-          { _id: sessionId, is_instant: true, both_joined_at: null },
-          {
-            $set: {
-              both_joined_at: new Date(),
-              instant_phase: INSTANT_PHASE.ACTIVE,
-            },
-          }
-        )
-        .exec();
-      clearInstantLessonTimers(sessionId);
-
-      const session = lessonSessionsGet(sessionId);
-      if (session && session.status === "running" && session.startedAt !== null) {
-        // Timer already started - send un-adjusted state; frontend derives currentRemaining = remainingSeconds - (now - startedAt)
-        const timerPayload = {
-          sessionId: session.sessionId,
-          startedAt: session.startedAt,
-          duration: session.duration,
-          remainingSeconds: session.remainingSeconds,
-        };
-        socket.emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
-        console.log(`[TIMER] [${new Date().toISOString()}] Sending existing timer state to newly joined party for session ${sessionId}, started at ${new Date(session.startedAt).toISOString()}`);
-      }
-    }
-    
-    relayPeerByUserId(
-      socketReq.userInfo?.to_user,
-      EVENTS.VIDEO_CALL.ON_BOTH_JOIN,
-      { socketReq }
-    );
-  });
-
-  socket.on("LESSON_STATE_REQUEST", async ({ sessionId }) => {
-    if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
-    await hydrateLessonSessionFromRedis(String(sessionId));
-    const session = lessonSessionsGet(sessionId);
-    if (!session) return;
-
-    const roomName = `session:${sessionId}`;
-    emitLessonStateSync(socket, roomName, session);
-
-    if (session.status === "running" && session.startedAt != null) {
-      const timerPayload = {
-        sessionId: session.sessionId,
-        startedAt: session.startedAt,
-        duration: session.duration,
-        remainingSeconds: session.remainingSeconds,
-      };
-      socket.emit(EVENTS.LESSON_TIMER.STARTED, timerPayload);
-    }
-  });
-
-  socket.on(
-    "LESSON_SET_FOCUSED_CLIP",
-    async (payload: { sessionId?: string; clipId?: string; clipTitle?: string }) => {
-      const sessionId = String(payload?.sessionId ?? "");
-      if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
-      const accountType =
-        socket?.user?._doc?.account_type || socket?.user?.account_type;
-      if (accountType !== "Trainer") return;
-
-      setFocusedClip(
-        sessionId,
-        payload?.clipId ? String(payload.clipId) : null,
-        payload?.clipTitle ?? null
-      );
-
-      if (payload?.clipId && mongoose.isValidObjectId(payload.clipId)) {
-        await booked_session.updateOne(
-          { _id: sessionId },
-          { $set: { focused_clip_id: payload.clipId } }
-        );
-      }
-
-      const session = lessonSessionsGet(sessionId);
-      if (session) {
-        emitLessonStateSync(socket, `session:${sessionId}`, session);
-      } else {
-        lessonRoomEmit(`session:${sessionId}`, "LESSON_STATE_SYNC", {
-          sessionId,
-          liveState: getLessonLiveStateSnapshot(sessionId, "trainer"),
-        });
-      }
-    }
-  );
-
-  socket.on(
-    "LESSON_LIVE_NOTE_ADD",
-    (payload: {
-      sessionId?: string;
-      text?: string;
-      elapsedSeconds?: number;
-      sharedWithTrainee?: boolean;
-    }) => {
-      const sessionId = String(payload?.sessionId ?? "");
-      if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
-      const accountType =
-        socket?.user?._doc?.account_type || socket?.user?.account_type;
-      if (accountType !== "Trainer") return;
-      const authorId = socketAttachedUserId(socket);
-      if (!authorId) return;
-
-      addLiveNote(sessionId, {
-        text: String(payload?.text ?? ""),
-        authorId,
-        elapsedSeconds: Number(payload?.elapsedSeconds ?? 0),
-        sharedWithTrainee: !!payload?.sharedWithTrainee,
-      });
-
-      const session = lessonSessionsGet(sessionId);
-      if (session) {
-        emitLessonStateSync(socket, `session:${sessionId}`, session);
-      } else {
-        lessonRoomEmit(`session:${sessionId}`, "LESSON_STATE_SYNC", {
-          sessionId,
-          liveState: getLessonLiveStateSnapshot(sessionId, "trainer"),
-        });
-      }
-    }
-  );
-
-  /** Trainee (or reconnecting party) asks the trainer client to re-emit clip/layout state. */
-  socket.on("LESSON_MEDIA_REPLAY_REQUEST", ({ sessionId }) => {
-    if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
-    const requesterId = socketAttachedUserId(socket);
-    if (!requesterId) return;
-    const roomName = `session:${sessionId}`;
-    lessonRoomEmit(roomName, "LESSON_MEDIA_REPLAY_REQUEST", {
-      sessionId: String(sessionId),
-      requesterId,
-    });
-  });
-
-  socket.on("LESSON_TIMER_START_REQUEST", ({ sessionId }) => {
-    if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
-    const session = lessonSessionsGet(sessionId);
-    if (!session) return;
-
-    const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
-    if (accountType !== "Trainer") {
-      socket.emit("LESSON_TIMER_ERROR", { message: "Only trainer can start lesson timer." });
-      return;
-    }
-    if (!session.coachJoined || !session.userJoined) {
-      socket.emit("LESSON_TIMER_ERROR", { message: "Both participants must be connected before starting timer." });
-      return;
-    }
-    // Idempotent: instant lessons auto-start via maybeAutoStartLessonTimer; manual request is a no-op when running.
-    if (session.status === "running") return;
-
-    const roomName = `session:${sessionId}`;
-    const reason = session.isInstant ? "instant_trainer_start_request" : "trainer_manual_start";
-    startLessonTimerInRoom(socket, roomName, session, reason);
-  });
-
-  socket.on("LESSON_TIMER_PAUSE_REQUEST", ({ sessionId, reason }) => {
-    if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
-    const session = lessonSessionsGet(sessionId);
-    if (!session || session.status !== "running" || session.startedAt == null) return;
-
-    const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
-    if (accountType !== "Trainer") {
-      socket.emit("LESSON_TIMER_ERROR", { message: "Only trainer can pause lesson timer." });
-      return;
-    }
-
-    const roomName = `session:${sessionId}`;
-    const elapsedSeconds = Math.floor((Date.now() - session.startedAt) / 1000);
-    session.remainingSeconds = Math.max(0, session.remainingSeconds - elapsedSeconds);
-    session.startedAt = null;
-    session.status = "paused";
-    const pauseReason =
-      typeof reason === "string" && reason.trim() ? reason.trim() : "trainer_manual";
-    session.trainerLeftPaused = pauseReason === "trainer_left";
-    clearLessonTimeouts(session);
-
-    const pausedPayload = {
-      sessionId: session.sessionId,
-      remainingSeconds: session.remainingSeconds,
-      duration: session.duration,
-      reason: pauseReason,
-    };
-    lessonRoomEmit(roomName, "LESSON_TIME_PAUSED", pausedPayload);
-    emitLessonStateSync(socket, roomName, session);
-  });
-
-  socket.on("LESSON_TIMER_RESUME_REQUEST", ({ sessionId }) => {
-    if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
-    const session = lessonSessionsGet(sessionId);
-    if (!session || session.status !== "paused") return;
-
-    const accountType = socket?.user?._doc?.account_type || socket?.user?.account_type;
-    if (accountType !== "Trainer") {
-      socket.emit("LESSON_TIMER_ERROR", { message: "Only trainer can resume lesson timer." });
-      return;
-    }
-
-    const roomName = `session:${sessionId}`;
-    session.startedAt = Date.now();
-    session.status = "running";
-
-    const resumedPayload = {
-      sessionId: session.sessionId,
-      startedAt: session.startedAt,
-      duration: session.duration,
-      remainingSeconds: session.remainingSeconds,
-    };
-    lessonRoomEmit(roomName, "LESSON_TIME_RESUMED", resumedPayload);
-    emitLessonStateSync(socket, roomName, session);
-    scheduleLessonEnd(socket, roomName, session);
-  });
-
-  socket.on(EVENTS.VIDEO_CALL.ON_ANSWER, ({ answer, userInfo }) => {
-    const toUserId = MemCache.getDetail(
-      process.env.SOCKET_CONFIG,
-      userInfo?.to_user
-    );
-    console.log("[VideoCall:ON_ANSWER]", {
-      from_user: userInfo?.from_user,
-      to_user: userInfo?.to_user,
-      toUserSocketMapped: !!toUserId,
-    });
-    if (!userInfo?.to_user) {
-      console.warn("[VideoCall:ON_ANSWER] Target user missing", {
-        from_user: userInfo?.from_user,
-      });
-      return;
-    }
-    relayPeerByUserId(userInfo.to_user, "answer", answer);
-  });
-
-  socket.on(EVENTS.VIDEO_CALL.ON_ICE_CANDIDATE, (data) => {
-    const { userInfo } = data;
-    const toUserSocketId = MemCache.getDetail(
-      process.env.SOCKET_CONFIG,
-      userInfo?.to_user
-    );
-    console.log("[VideoCall:ON_ICE_CANDIDATE]", {
-      from_user: userInfo?.from_user,
-      to_user: userInfo?.to_user,
-      toUserSocketMapped: !!toUserSocketId,
-    });
-    if (!userInfo?.to_user) {
-      console.warn("[VideoCall:ON_ICE_CANDIDATE] Target user missing", {
-        from_user: userInfo?.from_user,
-      });
-      return;
-    }
-    relayPeerByUserId(userInfo.to_user, "ice-candidate", data);
-  });
-
-  socket.on(EVENTS.EMIT_CLEAR_CANVAS, (payload) => {
-    relayInCallBySessionOrPeer(socket, payload, EVENTS.ON_CLEAR_CANVAS);
-  });
-
-  socket.on(EVENTS.EMIT_UNDO, (payload) => {
-    const { userInfo } = payload;
-    relayPeerByUserId(userInfo?.to_user, EVENTS.ON_UNDO, payload);
-  });
-
-  socket.on(EVENTS.VIDEO_CALL.MUTE_ME, (payload) => {
-    const { muteStatus, isMuted, isClicked, userInfo } = payload ?? {};
-    const muted =
-      typeof isMuted === "boolean"
-        ? isMuted
-        : typeof muteStatus === "boolean"
-          ? muteStatus
-          : typeof isClicked === "boolean"
-            ? isClicked
-            : false;
-    relayPeerByUserId(userInfo?.to_user, EVENTS.VIDEO_CALL.MUTE_ME, {
-      muteStatus: muted,
-      isMuted: muted,
-      userInfo,
-    });
-  });
-
-  socket.on(EVENTS.VIDEO_CALL.STOP_FEED, ({ feedStatus, userInfo }) => {
-    relayPeerByUserId(userInfo?.to_user, EVENTS.VIDEO_CALL.STOP_FEED, { feedStatus });
-  });
-
-  socket.on(EVENTS.VIDEO_CALL.ON_CLOSE, (payload) => {
-    const { userInfo } = payload;
-    relayPeerByUserId(userInfo?.to_user, EVENTS.VIDEO_CALL.ON_CLOSE, {});
-  });
+  const { registerLessonTimerSocketHandlers } = require("./handlers/lessonTimerSocketHandlers");
+  registerLessonTimerSocketHandlers(socket);
 
   // Listen for userActivity event
   // socket.on('userActivity', (data) => {
@@ -1770,24 +1076,13 @@ export const handleSocketEvents = (socket, connections = {}) => {
     // const peerConnection = new RTCPeerConnection();
   };
 
-  listenDrawEvent(socket);
-  stopDrawEvent(socket);
-  listenShowVideoEvent(socket);
-  listenCallEndEvent(socket);
-  listenVideoPositionEvent(socket);
-  listenMeetingTileLayoutEvent(socket);
-  listenPlayPauseVideoEvent(socket);
-  listenVideoTimeEvent(socket);
-  listenVideoShowEvent(socket);
-  listenDrawingModeToggle(socket);
-  listenFullscreenToggle(socket);
-  listenInstantLessonSessionRecording(socket);
-  listenLockModeToggle(socket);
-  listenVideoChunksEvent(socket);
+  const { registerInCallMediaSyncHandlers } = require("./handlers/inCallMediaSyncHandlers");
+  registerInCallMediaSyncHandlers(socket);
   listenNotificationEvents(socket);
   listenInstantLessonEvents(socket);
   listenBookingEvents(socket);
-  listenChatEvents(socket);
+  const { registerChatSocketHandlers } = require("./handlers/chatHandlers");
+  registerChatSocketHandlers(socket);
 };
 
 const listenNotificationEvents = (socket) => {
@@ -1861,197 +1156,8 @@ const listenNotificationEvents = (socket) => {
   }
 };
 
-async function emitInstantLessonExpire(
-  lessonId: string,
-  coachId: string,
-  traineeId: string,
-  _originatingSocket?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } }
-) {
-  const payload = { lessonId, coachId, traineeId };
-  void publishSocketEventToUsers([coachId, traineeId], EVENTS.INSTANT_LESSON.EXPIRE, payload);
-  if (traineeId && !isUserOnline(traineeId)) {
-    void pushService.sendPushNotification(
-      traineeId,
-      "Lesson Expired",
-      "Your instant lesson request expired. The trainer didn't respond in time.",
-      { kind: "instant_lesson_expire", lessonId }
-    );
-  }
-}
-
-function emitInstantLessonPhase(
-  lessonId: string,
-  coachId: string,
-  traineeId: string,
-  phase: string,
-  extra: Record<string, unknown> = {},
-  _originatingSocket?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } }
-) {
-  const payload = { lessonId, coachId, traineeId, phase, ...extra };
-  void publishSocketEventToUsers([coachId, traineeId], EVENTS.INSTANT_LESSON.PHASE, payload);
-}
-
-export async function runInstantLessonExpire(
-  lessonId: string,
-  coachId?: string,
-  traineeId?: string,
-  originatingSocket?: { to: (room: string) => { emit: (event: string, payload: unknown) => void } },
-  kind: "accept" | "join" = "accept"
-) {
-  try {
-    const booking = await booked_session.findById(lessonId).lean();
-    if (!booking?.is_instant) return;
-
-    const resolvedCoachId = coachId || String(booking.trainer_id);
-    const resolvedTraineeId = traineeId || String(booking.trainee_id);
-
-    if (kind === "accept" && booking.status === BOOKED_SESSIONS_STATUS.BOOKED) {
-      await booked_session.findOneAndUpdate(
-        { _id: lessonId, is_instant: true, status: BOOKED_SESSIONS_STATUS.BOOKED },
-        {
-          $set: {
-            status: BOOKED_SESSIONS_STATUS.cancel,
-            instant_phase: INSTANT_PHASE.CANCELLED,
-            refund_reason: INSTANT_REFUND_REASON.ACCEPT_EXPIRED,
-          },
-        }
-      );
-      void refundSessionEscrow(lessonId, INSTANT_REFUND_REASON.ACCEPT_EXPIRED);
-      await emitInstantLessonExpire(lessonId, resolvedCoachId, resolvedTraineeId, originatingSocket);
-      emitInstantLessonPhase(
-        lessonId,
-        resolvedCoachId,
-        resolvedTraineeId,
-        INSTANT_PHASE.CANCELLED,
-        { refundReason: INSTANT_REFUND_REASON.ACCEPT_EXPIRED },
-        originatingSocket
-      );
-      logInstantLessonOps("INSTANT_LESSON_EXPIRED", {
-        lessonId,
-        coachId: resolvedCoachId,
-        traineeId: resolvedTraineeId,
-        severity: "warning",
-        title: "Instant lesson accept window expired",
-        summary: "Trainer did not accept in time; booking cancelled and refund initiated.",
-      });
-      void notifyInstantAcceptExpired(lessonId, resolvedCoachId, resolvedTraineeId);
-    }
-
-    if (
-      kind === "join" &&
-      booking.status === BOOKED_SESSIONS_STATUS.confirm &&
-      !(booking as any).both_joined_at
-    ) {
-      await booked_session.findOneAndUpdate(
-        {
-          _id: lessonId,
-          is_instant: true,
-          status: BOOKED_SESSIONS_STATUS.confirm,
-          both_joined_at: null,
-        },
-        {
-          $set: {
-            status: BOOKED_SESSIONS_STATUS.cancel,
-            instant_phase: INSTANT_PHASE.CANCELLED,
-            refund_reason: INSTANT_REFUND_REASON.JOIN_EXPIRED,
-          },
-        }
-      );
-      void refundSessionEscrow(lessonId, INSTANT_REFUND_REASON.JOIN_EXPIRED);
-      emitInstantLessonPhase(
-        lessonId,
-        resolvedCoachId,
-        resolvedTraineeId,
-        INSTANT_PHASE.CANCELLED,
-        { refundReason: INSTANT_REFUND_REASON.JOIN_EXPIRED },
-        originatingSocket
-      );
-      logInstantLessonOps("INSTANT_LESSON_JOIN_EXPIRED", {
-        lessonId,
-        coachId: resolvedCoachId,
-        traineeId: resolvedTraineeId,
-        severity: "warning",
-        title: "Instant lesson join window expired",
-        summary: "Parties did not join in time; refund initiated.",
-      });
-      void notifyInstantJoinExpired(lessonId, resolvedCoachId, resolvedTraineeId);
-    }
-  } catch (_err) {
-    /* non-fatal */
-  } finally {
-    clearInstantLessonTimers(lessonId);
-  }
-}
-
-async function notifyInstantAcceptExpired(
-  lessonId: string,
-  coachId: string,
-  traineeId: string
-) {
-  const [trainer, trainee] = await Promise.all([
-    user.findById(coachId).select("fullname").lean(),
-    user.findById(traineeId).select("fullname").lean(),
-  ]);
-  const trainerName = (trainer as any)?.fullname;
-  const traineeName = (trainee as any)?.fullname;
-  const nTrainee = INSTANT_NOTIFICATION.acceptExpiredTrainee(trainerName);
-  void notifySessionUser(
-    {
-      receiverId: traineeId,
-      senderId: coachId,
-      title: nTrainee.title,
-      description: nTrainee.description,
-      bookingId: lessonId,
-      kind: nTrainee.kind,
-    },
-    ioInstance
-  );
-  const nTrainer = INSTANT_NOTIFICATION.acceptExpiredTrainer(traineeName);
-  void notifySessionUser(
-    {
-      receiverId: coachId,
-      senderId: traineeId,
-      title: nTrainer.title,
-      description: nTrainer.description,
-      bookingId: lessonId,
-      kind: nTrainer.kind,
-    },
-    ioInstance
-  );
-}
-
-async function notifyInstantJoinExpired(
-  lessonId: string,
-  coachId: string,
-  traineeId: string
-) {
-  const n = INSTANT_NOTIFICATION.joinExpired();
-  void notifySessionUser(
-    {
-      receiverId: traineeId,
-      senderId: coachId,
-      title: n.title,
-      description: n.description,
-      bookingId: lessonId,
-      kind: n.kind,
-    },
-    ioInstance
-  );
-  void notifySessionUser(
-    {
-      receiverId: coachId,
-      senderId: traineeId,
-      title: n.title,
-      description: n.description,
-      bookingId: lessonId,
-      kind: n.kind,
-    },
-    ioInstance
-  );
-}
-
 registerInstantLessonExpireHandler((lessonId, coachId, traineeId, kind) =>
-  runInstantLessonExpire(lessonId, coachId, traineeId, undefined, kind)
+  runInstantLessonExpireFn(lessonId, coachId, traineeId, undefined, kind)
 );
 
 // Instant Lesson Event Handlers
@@ -2128,7 +1234,7 @@ const listenInstantLessonEvents = (socket) => {
         });
         if (!result.ok) {
           if (result.error === "expired") {
-            await runInstantLessonExpire(lessonId, coachId, traineeId, socket);
+            await runInstantLessonExpireFn(lessonId, coachId, traineeId, socket);
           }
           callback?.({
             ok: false,
@@ -2166,7 +1272,7 @@ const listenInstantLessonEvents = (socket) => {
       try {
         const { lessonId, coachId, traineeId } = payload;
         if (!lessonId) return;
-        await runInstantLessonExpire(lessonId, coachId, traineeId, socket);
+        await runInstantLessonExpireFn(lessonId, coachId, traineeId, socket);
       } catch (_err) {
         /* intentionally quiet */
       }
@@ -2249,134 +1355,6 @@ const listenBookingEvents = (socket) => {
     });
   } catch (err) {
     console.error(`[BOOKING] Error setting up booking event listeners:`, err);
-  }
-};
-
-// Chat Event Handlers
-const listenChatEvents = (socket) => {
-  const ChatMessage = require("../../model/chat_message.schema").default;
-
-  try {
-    socket.on(EVENTS.CHAT.JOIN, (payload: any) => {
-      try {
-        const { conversationId } = payload || {};
-        if (!conversationId) return;
-        socket.join(`chat:${conversationId}`);
-      } catch (_err) {
-        /* intentionally quiet */
-      }
-    });
-
-    socket.on(EVENTS.CHAT.LEAVE, (payload: any) => {
-      try {
-        const { conversationId } = payload || {};
-        if (!conversationId) return;
-        socket.leave(`chat:${conversationId}`);
-      } catch (_err) {
-        /* intentionally quiet */
-      }
-    });
-
-    socket.on(EVENTS.CHAT.MESSAGE, async (payload: any) => {
-      try {
-        const { conversationId, receiverId, senderId, _id } = payload || {};
-        if (!conversationId) return;
-
-        void publishSocketEventToChat(conversationId, EVENTS.CHAT.MESSAGE, payload);
-
-        if (receiverId) {
-          const receiverSid = MemCache.getDetail(process.env.SOCKET_CONFIG, String(receiverId));
-          if (receiverSid) {
-            void publishSocketEventToUser(String(receiverId), EVENTS.CHAT.MESSAGE, payload);
-            if (_id && mongoose.isValidObjectId(_id)) {
-              await ChatMessage.findByIdAndUpdate(_id, { status: "delivered", deliveredAt: new Date() });
-              socket.emit(EVENTS.CHAT.DELIVERED, { messageId: _id, conversationId });
-            }
-          } else {
-            const senderDoc = await user.findById(senderId).select("fullname").lean();
-            const senderName = (senderDoc as any)?.fullname ?? "Someone";
-            const content = payload.content ?? "Sent you a message";
-            const preview = content.length > 60 ? content.slice(0, 57) + "..." : content;
-            void pushService.sendPushNotification(
-              String(receiverId),
-              senderName,
-              preview,
-              { kind: "chat_message", conversationId, senderId: String(senderId) }
-            );
-          }
-        }
-      } catch (_err) {
-        /* intentionally quiet */
-      }
-    });
-
-    socket.on(EVENTS.CHAT.DELIVERED, async (payload: any) => {
-      try {
-        const { messageIds, conversationId } = payload || {};
-        if (!messageIds?.length || !conversationId) return;
-        const validIds = messageIds.filter((id: string) => mongoose.isValidObjectId(id));
-        if (validIds.length) {
-          await ChatMessage.updateMany(
-            { _id: { $in: validIds }, status: "sent" },
-            { status: "delivered", deliveredAt: new Date() }
-          );
-        }
-        void publishSocketEventToChat(conversationId, EVENTS.CHAT.DELIVERED, {
-          messageIds: validIds,
-          conversationId,
-        });
-      } catch (_err) {
-        /* intentionally quiet */
-      }
-    });
-
-    socket.on(EVENTS.CHAT.READ, async (payload: any) => {
-      try {
-        const { conversationId, readerId } = payload || {};
-        if (!conversationId) return;
-        const reader = String(readerId || socket?.user?._doc?._id || "");
-        if (!reader) return;
-
-        const User = require("../../model/user.schema").default;
-        const readerDoc = await User.findById(reader).select("privacy.read_receipts_enabled").lean();
-        if (readerDoc?.privacy?.read_receipts_enabled === false) return;
-
-        const now = new Date();
-        await ChatMessage.updateMany(
-          { conversationId, receiverId: reader, isRead: false },
-          { isRead: true, status: "read", readAt: now }
-        );
-        void publishSocketEventToChat(conversationId, EVENTS.CHAT.READ, {
-          conversationId,
-          readerId: reader,
-          readAt: now.toISOString(),
-        });
-      } catch (_err) {
-        /* intentionally quiet */
-      }
-    });
-
-    socket.on(EVENTS.CHAT.TYPING, (payload: any) => {
-      try {
-        const { conversationId, userId } = payload || {};
-        if (!conversationId) return;
-        void publishSocketEventToChat(conversationId, EVENTS.CHAT.TYPING, { conversationId, userId });
-      } catch (_err) {
-        /* intentionally quiet */
-      }
-    });
-
-    socket.on(EVENTS.CHAT.STOP_TYPING, (payload: any) => {
-      try {
-        const { conversationId, userId } = payload || {};
-        if (!conversationId) return;
-        void publishSocketEventToChat(conversationId, EVENTS.CHAT.STOP_TYPING, { conversationId, userId });
-      } catch (_err) {
-        /* intentionally quiet */
-      }
-    });
-  } catch (err) {
-    console.error(`[CHAT] Error setting up chat event listeners:`, err);
   }
 };
 
@@ -2576,464 +1554,4 @@ export const emitBookingStatusUpdated = async (bookingData: any) => {
 
 emitBookingStatusUpdatedDelegate = emitBookingStatusUpdated;
 
-const listenDrawEvent = (socket) => {
-  try {
-    socket.on(EVENTS.DRAW, async (socketReq) => {
-      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.EMIT_DRAWING_CORDS);
-    });
-    // Defensive: older mobile clients emitted server-side event names directly
-    socket.on(EVENTS.EMIT_DRAWING_CORDS, async (socketReq) => {
-      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.EMIT_DRAWING_CORDS);
-    });
-  } catch (err) {
-    console.error(`Error while listening to draw event:`, err);
-    throw err;
-  }
-};
-
-const stopDrawEvent = (socket) => {
-  try {
-    socket.on(EVENTS.STOP_DRAWING, async (socketReq, request) => {
-      const { userInfo } = socketReq;
-      const toUserSocketId = MemCache.getDetail(
-        process.env.SOCKET_CONFIG,
-        userInfo?.to_user
-      );
-
-      relayPeerByUserId(userInfo?.to_user,EVENTS.EMIT_STOP_DRAWING, socketReq);
-    });
-  } catch (err) {
-    console.error(`Error while listening to stop draw event:`, err);
-    throw err;
-  }
-};
-
-const listenVideoShowEvent = (socket) => {
-  try {
-    socket.on(EVENTS.ON_VIDEO_SHOW, async (socketReq) => {
-      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.ON_VIDEO_SHOW);
-    });
-    socket.on(EVENTS.ON_VIDEO_HIDE, async (socketReq) => {
-      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.ON_VIDEO_HIDE);
-    });
-  } catch (err) {
-    console.error(`Error while listening to video show event:`, err);
-    throw err;
-  }
-};
-
-const listenDrawingModeToggle = (socket) => {
-  try {
-    socket.on(EVENTS.TOGGLE_DRAWING_MODE, async (socketReq) => {
-      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.TOGGLE_DRAWING_MODE);
-    });
-  } catch (err) {
-    console.error(`Error while listening to drawing mode toggle:`, err);
-    throw err;
-  }
-};
-
-const listenFullscreenToggle = (socket) => {
-  try {
-    socket.on(EVENTS.TOGGLE_FULL_SCREEN, async (socketReq) => {
-      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.TOGGLE_FULL_SCREEN);
-    });
-  } catch (err) {
-    console.error(`Error while listening to fullscreen toggle:`, err);
-    throw err;
-  }
-};
-
-const listenLockModeToggle = (socket) => {
-  try {
-    socket.on(EVENTS.TOGGLE_LOCK_MODE, async (socketReq) => {
-      relayInCallBySessionOrPeer(socket, socketReq, EVENTS.TOGGLE_LOCK_MODE);
-    });
-  } catch (err) {
-    console.error(`Error while listening to lock mode toggle:`, err);
-    throw err;
-  }
-};
-
-/** Instant lesson: trainer toggles "record session" so peer can show the same state in-call */
-const listenInstantLessonSessionRecording = (socket) => {
-  try {
-    socket.on(EVENTS.INSTANT_LESSON.SESSION_RECORDING, async (socketReq: any) => {
-      relayInCallBySessionOrPeer(
-        socket,
-        socketReq,
-        EVENTS.INSTANT_LESSON.SESSION_RECORDING
-      );
-    });
-  } catch (err) {
-    console.error(`Error while listening to instant lesson session recording:`, err);
-    throw err;
-  }
-};
-
-
-
-const listenVideoPositionEvent = (socket) => {
-  try {
-    socket.on(EVENTS.ON_VIDEO_ZOOM_PAN, async (socketReq, request) => {
-      const { userInfo, sessionId } = socketReq;
-      // Prefer session room so trainee receives zoom/pan even after reconnect
-      if (sessionId && mongoose.isValidObjectId(sessionId)) {
-        const roomName = `session:${sessionId}`;
-        socket.to(roomName).emit(EVENTS.ON_VIDEO_ZOOM_PAN, socketReq);
-      } else {
-        const toUserSocketId = MemCache.getDetail(
-          process.env.SOCKET_CONFIG,
-          userInfo?.to_user
-        );
-        if (userInfo?.to_user) {
-          relayPeerByUserId(userInfo?.to_user,EVENTS.ON_VIDEO_ZOOM_PAN, socketReq);
-        }
-      }
-    });
-  } catch (err) {
-    console.error(`Error while listening to video position event:`, err);
-    throw err;
-  }
-};
-
-const listenMeetingTileLayoutEvent = (socket) => {
-  try {
-    socket.on(EVENTS.MEETING_TILE_LAYOUT, async (socketReq) => {
-      const { userInfo, sessionId } = socketReq || {};
-      if (sessionId && mongoose.isValidObjectId(sessionId)) {
-        const roomName = `session:${sessionId}`;
-        socket.to(roomName).emit(EVENTS.MEETING_TILE_LAYOUT, socketReq);
-      } else {
-        const toUserSocketId = MemCache.getDetail(
-          process.env.SOCKET_CONFIG,
-          userInfo?.to_user
-        );
-        if (userInfo?.to_user) {
-          relayPeerByUserId(userInfo?.to_user,EVENTS.MEETING_TILE_LAYOUT, socketReq);
-        }
-      }
-    });
-  } catch (err) {
-    console.error(`Error while listening to meeting tile layout:`, err);
-    throw err;
-  }
-};
-
-const listenShowVideoEvent = (socket) => {
-  try {
-    socket.on(EVENTS.ON_VIDEO_SELECT, async (socketReq, request) => {
-      const { userInfo, sessionId } = socketReq || {};
-
-      // Prefer session room broadcast so updates reach the peer even if the
-      // userId->socketId mapping is stale (reconnects, multi-device, etc).
-      if (sessionId && mongoose.isValidObjectId(sessionId)) {
-        const roomName = `session:${sessionId}`;
-        socket.to(roomName).emit(EVENTS.ON_VIDEO_SELECT, socketReq);
-      } else {
-        const toUserSocketId = MemCache.getDetail(
-          process.env.SOCKET_CONFIG,
-          userInfo?.to_user
-        );
-        if (userInfo?.to_user) {
-          relayPeerByUserId(userInfo?.to_user,EVENTS.ON_VIDEO_SELECT, socketReq);
-        }
-      }
-    });
-  } catch (err) {
-    console.error(`Error while listening to show video event:`, err);
-    throw err;
-  }
-};
-
-const listenCallEndEvent = (socket) => {
-  try {
-    socket.on(EVENTS.CALL_END, async (socketReq, request) => {
-      const { userInfo } = socketReq;
-      const toUserSocketId = MemCache.getDetail(
-        process.env.SOCKET_CONFIG,
-        userInfo?.to_user
-      );
-      relayPeerByUserId(userInfo?.to_user,EVENTS.CALL_END, socketReq);
-    });
-  } catch (err) {
-    console.error(`Error while listening to call end event:`, err);
-    throw err;
-  }
-};
-
-const listenPlayPauseVideoEvent = (socket) => {
-  try {
-    socket.on(EVENTS.ON_VIDEO_PLAY_PAUSE, async (socketReq, request) => {
-      const { userInfo, sessionId } = socketReq;
-      if (sessionId && mongoose.isValidObjectId(sessionId)) {
-        const roomName = `session:${sessionId}`;
-        socket.to(roomName).emit(EVENTS.ON_VIDEO_PLAY_PAUSE, socketReq);
-      } else {
-        const toUserSocketId = MemCache.getDetail(
-          process.env.SOCKET_CONFIG,
-          userInfo?.to_user
-        );
-        if (userInfo?.to_user) {
-          relayPeerByUserId(userInfo?.to_user,EVENTS.ON_VIDEO_PLAY_PAUSE, socketReq);
-        }
-      }
-    });
-  } catch (err) {
-    console.error(`Error while listening to play pause video event:`, err);
-    throw err;
-  }
-};
-const listenVideoTimeEvent = (socket) => {
-  try {
-    socket.on(EVENTS.ON_VIDEO_TIME, async (socketReq, request) => {
-      const { userInfo, sessionId } = socketReq;
-      if (sessionId && mongoose.isValidObjectId(sessionId)) {
-        const roomName = `session:${sessionId}`;
-        socket.to(roomName).emit(EVENTS.ON_VIDEO_TIME, socketReq);
-      } else {
-        const toUserSocketId = MemCache.getDetail(
-          process.env.SOCKET_CONFIG,
-          userInfo?.to_user
-        );
-        if (userInfo?.to_user) {
-          relayPeerByUserId(userInfo?.to_user,EVENTS.ON_VIDEO_TIME, socketReq);
-        }
-      }
-    });
-  } catch (err) {
-    console.error(`Error while listening to video time event:`, err);
-    throw err;
-  }
-};
-
-const generatePreSignedPutUrl = async (fileName, fileType) => {
-  const params = {
-    Bucket: S3_BUCKET,
-    Key: fileName,
-    Expires: 60,
-    // ACL: "public-read",
-    ContentType: fileType,
-  };
-
-  let url;
-  try {
-    url = await s3.getSignedUrlPromise("putObject", params);
-  } catch (err) {
-    console.error("Error generating pre-signed URL:", err);
-    // do something with the error here
-    // and abort the operation.
-    return;
-  }
-  return url;
-};
-
-const chunks = []; // Array to store received chunks
-let videoData: any;
-let ffmpegProcess: any;
-
-const listenVideoChunksEvent = (socket) => {
-  socket.on("chunk", (chunkData) => {
-    const actualChunk = Buffer.from(chunkData?.data); // Assuming chunkData.data is the correct field
-
-    // chunks.push(actualChunk);
-    chunks.push(...chunkData?.data); // Push the buffers directly
-  });
-
-  socket.on("videoUploadData", (data) => {
-    videoData = data;
-  });
-
-
-  // socket.on(EVENTS.ON_DISCONNECT, () => {
-  //   console.log(`socket disconnected`);
-  //   try {
-  //     console.log("All chunks received", chunks);
-
-  //     // Ensure that chunks array is defined
-  //     if (!Array.isArray(chunks)) {
-  //       console.log("Invalid chunks array");
-  //       return;
-  //     }
-
-  //     // Concatenate all chunks into a single buffer
-  //     const combinedBuffer = Buffer.concat(chunks);
-
-  //     // Write the buffer to a file
-  //     const fileName = `webcam-${Date.now()}.mp4`;
-
-  //     //const writable = fs.createWriteStream(fileName);
-  //     //const readable = Readable.from([combinedBuffer]);
-  //     //readable.pipe(writable);
-
-  //     // writable.on("finish", () => {
-  //     //   console.log("Video file saved:", fileName);
-  //     // });
-
-  //     const ffmpegArgs = [
-  //       "-i",
-  //       "pipe:0",
-  //       "-c:v",
-  //       "libx264",
-  //       "-crf",
-  //       "18",
-  //       "-c:a",
-  //       "aac",
-  //       "-b:a",
-  //       "128k",
-  //       "-movflags",
-  //       "frag_keyframe+empty_moov",
-  //       "-f",
-  //       "mp4",
-  //       "pipe:1"
-  //     ];
-  //     // ffmpegArgs.push("-v", "debug");
-  //     ffmpegProcess = spawn("ffmpeg", ffmpegArgs);
-  //     ffmpegProcess.stdin.write(combinedBuffer);
-  //     ffmpegProcess.stdin.end();
-  //     // ffmpegProcess.stdout.on("data", (data) => {
-  //     //   console.log(`child stdout:\n${data.toString()}`);
-  //     // });
-  //     ffmpegProcess.stderr.on("data", (data) => {
-  //       console.log("ffmpeg stdout:", data.toString());
-  //     });
-
-  //     ffmpegProcess.on("exit", function (code, signal) {
-  //       console.log(
-  //         "child process exited with " + `code ${code} and signal ${signal}`
-  //       );
-  //     });
-
-  //     const outputFilePath = fileName;
-  //     const fileStream = fs.createWriteStream(outputFilePath);
-  //     ffmpegProcess.stdout.pipe(fileStream);
-
-  //     const payload = {
-  //       file_name: fileName,
-  //       fileType: "video/mp4",
-  //       title: "Meeting recording",
-  //       category: "Recording",
-  //       sessions: videoData?.sessions,
-  //       trainer: videoData?.trainer,
-  //       trainee: videoData?.trainee,
-  //       user_id: videoData?.user_id,
-  //       trainee_name: videoData?.trainee_name,
-  //       trainer_name: videoData?.trainer_name
-  //     };
-
-  //     ffmpegProcess.on("close", (code) => {
-  //       if (code !== 0) {
-  //         console.error("FFmpeg exited with non-zero code:", code);
-  //         // Handle conversion failure - e.g., notify user, log error, retry
-  //       } else {
-  //         console.log("Conversion successful!");
-  //         console.log("Stream readable:", ffmpegProcess.stdout.readable);
-  //         const fileData = fs.readFileSync(fileName);
-  //         generatePreSignedPutUrl(fileName, "video/mp4").then(async (url) => {
-  //           await axios
-  //             .put(url, fileData, {
-  //               headers: { "Content-Type": "video/*" }
-  //             })
-  //             .then(async (response) => {
-  //               const savedSessionObj = new savedSession(payload);
-  //               var savedSessionData = await savedSessionObj.save();
-  //               console.log("SaveSession ", savedSessionData);
-  //               console.log(`response while uploading video `, response);
-  //               fs.unlink(fileName, (err) => {
-  //                 if (err)
-  //                   console.error("Error deleting file after upload:", err);
-  //               });
-  //             })
-  //             .catch((error) => {
-  //               console.log(`error while uploading video `, error);
-  //             });
-  //         });
-  //         // ... (S3 upload logic as before) ...
-  //       }
-  //     });
-  //     if (chunks.length > 0) {
-  //       console.log("Called");
-  //     }
-
-  //     // Write the buffer to a file
-  //     //   const fileName = `output-${Date.now()}.webm`;
-  //     //   const writable = fs.createWriteStream(fileName);
-  //     //   const readable = Readable.from([combinedBuffer]);
-  //     //   readable.pipe(writable);
-
-  //     //   writable.on('finish', () => {
-  //     //       console.log('Video file saved:', fileName);
-  //     //   });
-
-  //     // const myHeaders = new Headers({ "Content-Type": "video/*" });
-  //     // const fileName = `webcam-${Date.now()}.webm`;
-
-  //     // const payload = {
-  //     //   file_name: fileName,
-  //     //   fileType: "video/webm",
-  //     //   title: "Meeting recording",
-  //     //   category: "Recording",
-  //     //   sessions: videoData?.sessions,
-  //     //   trainer: videoData?.trainer,
-  //     //   trainee: videoData?.trainee,
-  //     //   user_id: videoData?.user_id,
-  //     //   trainee_name: videoData?.trainee_name,
-  //     //   trainer_name: videoData?.trainer_name
-  //     // };
-  //     // if (chunks.length > 0) {
-  //     //   generatePreSignedPutUrl(fileName, "video/webm").then(async (url) => {
-  //     //     await axios
-  //     //       .put(url, combinedBuffer, {
-  //     //         headers: myHeaders
-  //     //       })
-  //     //       .then(async (response) => {
-  //     //         const savedSessionObj = new savedSession(payload);
-  //     //         var savedSessionData = await savedSessionObj.save();
-  //     //         console.log("SaveSession ", savedSessionData);
-  //     //         console.log(`response while uploading video `, response);
-  //     //       })
-  //     //       .catch((error) => {
-  //     //         console.log(`error while uploading video `, error);
-  //     //       });
-  //     //   });
-  //     // }
-
-  //     chunks.length = 0;
-  //   } catch (error) {
-  //     console.log("Error processing chunks:", error);
-  //   }
-  // });
-};
-
-/**
-  * Position:
-  * The basic syntax is overlay=x:y, where x and y are the coordinates for the top-left corner of the watermark.
-
-  * Top-left corner: overlay=0:0
-  * Top-right corner: overlay=main_w-overlay_w:0
-  * Bottom-left corner: overlay=0:main_h-overlay_h
-  * Bottom-right corner: overlay=main_w-overlay_w:main_h-overlay_h
-  * Center: overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2
-
-  * You can also add or subtract pixels for fine-tuning, e.g., overlay=main_w-overlay_w-10:main_h-overlay_h-10
-  Transparency:
-  * Add transparency to the watermark: overlay=x:y:alpha=0.5
-  * This sets the watermark to 50% opacity. Adjust the value (0.0 to 1.0) as needed.
-  * Scaling:
-  * Scale the watermark: overlay=x:y:scale=0.5
-  * This scales the watermark to 50% of its original size.
-  * Timing:
-  * Apply watermark after 5 seconds: overlay=x:y:enable='gte(t,5)'
-  * Remove watermark after 15 seconds: overlay=x:y:enable='between(t,5,15)'
-  * Combining options:
-  * You can combine these options. For example:
-  * overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2:alpha=0.7:scale=0.5
-  * 
-  * const watermarkX = "(main_w-overlay_w)/2";  // Center horizontally
-  * const watermarkY = "(main_h-overlay_h)/2";  // Center vertically
-  * const watermarkOpacity = 0.7;  // 70% opacity
-
-  * const ffmpegArgs = [
-    "-filter_complex", `overlay=${watermarkX}:${watermarkY}:alpha=${watermarkOpacity}`,
-  ];
- */
+/* In-call drawing/video sync: handlers/inCallMediaSyncHandlers.ts */

@@ -15,18 +15,15 @@ import { CONSTANCE } from "../../config/constance";
 import HomeBanner from "../../model/home_banner.schema";
 import { assertAdminUser } from "../admin/adminPermission";
 import { notifyCmsUpdated } from "../cms/cmsNotify";
+import {
+  activeBannerFilter,
+  audiencesForBannerCaller,
+  bannerPlacementFilter,
+  BANNER_PLACEMENTS,
+} from "../cms/cmsContentQuery";
 
 function adminDenied(req: Request): string | null {
   return assertAdminUser((req as any)?.authUser);
-}
-
-function audiencesForCaller(req: Request): string[] {
-  const authUser = (req as any)?.authUser;
-  if (!authUser) return ["guest", "all"];
-  const at = String(authUser.account_type ?? "").toLowerCase();
-  if (at === "trainer") return ["all", "trainer"];
-  if (at === "trainee") return ["all", "trainee"];
-  return ["all"];
 }
 
 function sanitizeCtas(input: any): Array<{ label: string; url: string; variant: string }> {
@@ -43,7 +40,7 @@ function sanitizeCtas(input: any): Array<{ label: string; url: string; variant: 
     .slice(0, 4);
 }
 
-function serialize(b: any) {
+export function serializeHomeBanner(b: any) {
   const ctas = sanitizeCtas(b.ctas);
   return {
     _id: String(b._id),
@@ -74,26 +71,18 @@ function serialize(b: any) {
 
 export async function listActiveBanners(req: Request, res: Response) {
   try {
-    const audiences = audiencesForCaller(req);
+    const audiences = audiencesForBannerCaller((req as any)?.authUser);
     const placement = String(req.query?.placement ?? "").toLowerCase();
-    const now = new Date();
-    const placementClause = placementQuery(placement);
-    const scheduleAnd = [
-      { $or: [{ start_date: null }, { start_date: { $lte: now } }] },
-      { $or: [{ end_date: null }, { end_date: { $gte: now } }] },
-    ];
-    if (placementClause) scheduleAnd.push(placementClause as any);
-    const rows = await HomeBanner.find({
-      is_active: true,
-      audience: { $in: audiences },
-      $and: scheduleAnd,
-    })
+    const placementKey = (BANNER_PLACEMENTS as readonly string[]).includes(placement)
+      ? placement
+      : undefined;
+    const rows = await HomeBanner.find(activeBannerFilter(audiences, placementKey))
       .sort({ sort_order: 1, createdAt: -1 })
-      .limit(placement ? 15 : 30)
+      .limit(placementKey ? 15 : 30)
       .lean();
     return res.status(200).send({
       status: CONSTANCE.SUCCESS,
-      data: rows.map(serialize),
+      data: rows.map(serializeHomeBanner),
     });
   } catch (err: any) {
     return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
@@ -111,39 +100,6 @@ function sanitizePlacement(input: any): (typeof PLACEMENTS)[number] {
   return (PLACEMENTS as readonly string[]).includes(p)
     ? (p as (typeof PLACEMENTS)[number])
     : "hero";
-}
-
-/** Legacy rows without `placement` map to hero/strip/sticky by heuristics. */
-function placementQuery(placement: string): Record<string, unknown> | null {
-  if (!(PLACEMENTS as readonly string[]).includes(placement)) return null;
-  if (placement === "hero") {
-    return {
-      $or: [
-        { placement: "hero" },
-        {
-          placement: { $exists: false },
-          image_url: { $nin: [null, ""] },
-        },
-      ],
-    };
-  }
-  if (placement === "strip") {
-    return {
-      $or: [
-        { placement: "strip" },
-        {
-          placement: { $exists: false },
-          $or: [{ image_url: null }, { image_url: "" }],
-        },
-      ],
-    };
-  }
-  return {
-    $or: [
-      { placement: "sticky_bottom" },
-      { placement: { $exists: false }, severity: "promo" },
-    ],
-  };
 }
 
 function sanitizeAudience(input: any): string[] {
@@ -181,7 +137,7 @@ export async function adminListBanners(req: Request, res: Response) {
       filter.audience = audience;
     }
     const placement = String(req.query?.placement ?? "").toLowerCase();
-    const placementClause = placementQuery(placement);
+    const placementClause = bannerPlacementFilter(placement);
     if (placementClause) Object.assign(filter, placementClause);
 
     const [rows, total] = await Promise.all([
@@ -195,7 +151,7 @@ export async function adminListBanners(req: Request, res: Response) {
     return res.status(200).send({
       status: CONSTANCE.SUCCESS,
       data: {
-        items: rows.map(serialize),
+        items: rows.map(serializeHomeBanner),
         total,
         page,
         pageSize,
@@ -245,7 +201,7 @@ export async function adminCreateBanner(req: Request, res: Response) {
     void notifyCmsUpdated("banners").catch(() => {});
     return res
       .status(200)
-      .send({ status: CONSTANCE.SUCCESS, data: serialize(created.toObject()) });
+      .send({ status: CONSTANCE.SUCCESS, data: serializeHomeBanner(created.toObject()) });
   } catch (err: any) {
     return res.status(400).send({ status: CONSTANCE.FAIL, error: err.message });
   }
@@ -295,9 +251,10 @@ export async function adminUpdateBanner(req: Request, res: Response) {
         .status(404)
         .send({ status: CONSTANCE.FAIL, error: "Banner not found." });
     }
+    void notifyCmsUpdated("banners").catch(() => {});
     return res
       .status(200)
-      .send({ status: CONSTANCE.SUCCESS, data: serialize(updated) });
+      .send({ status: CONSTANCE.SUCCESS, data: serializeHomeBanner(updated) });
   } catch (err: any) {
     return res.status(400).send({ status: CONSTANCE.FAIL, error: err.message });
   }
@@ -341,7 +298,7 @@ export async function adminToggleBanner(req: Request, res: Response) {
     void notifyCmsUpdated("banners").catch(() => {});
     return res
       .status(200)
-      .send({ status: CONSTANCE.SUCCESS, data: serialize(updated) });
+      .send({ status: CONSTANCE.SUCCESS, data: serializeHomeBanner(updated) });
   } catch (err: any) {
     return res.status(500).send({ status: CONSTANCE.FAIL, error: err.message });
   }

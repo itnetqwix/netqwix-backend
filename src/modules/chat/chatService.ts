@@ -4,7 +4,7 @@ import user from "../../model/user.schema";
 import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { checkChatPolicy, getChatPolicyInfo } from "./chatPolicy";
 import { EVENTS } from "../../config/constance";
-import { getIo, isUserOnline } from "../socket/socket.service";
+import { getChatSocketEmitter, emitChatMessage, emitChatDelivered } from "./socketEmitter";
 
 export class ChatService {
   private async assertAllFriends(
@@ -273,7 +273,7 @@ export class ChatService {
           : message;
       const convId = String(conversation._id);
 
-      if (!isGroup && finalReceiverId && isUserOnline(String(finalReceiverId))) {
+      if (!isGroup && finalReceiverId && getChatSocketEmitter().isUserOnline(String(finalReceiverId))) {
         const deliveredAt = new Date();
         await ChatMessage.findByIdAndUpdate(message._id, {
           status: "delivered",
@@ -281,23 +281,17 @@ export class ChatService {
         });
         msgPayload.status = "delivered";
         msgPayload.deliveredAt = deliveredAt;
-        const io = getIo();
-        if (io) {
-          io.to(`chat:${convId}`).emit(EVENTS.CHAT.DELIVERED, {
-            messageId: String(message._id),
-            messageIds: [String(message._id)],
-            conversationId: convId,
-          });
-        }
-      }
-
-      const ioMsg = getIo();
-      if (ioMsg) {
-        ioMsg.to(`chat:${convId}`).emit(EVENTS.CHAT.MESSAGE, {
-          ...msgPayload,
+        emitChatDelivered(convId, {
+          messageId: String(message._id),
+          messageIds: [String(message._id)],
           conversationId: convId,
         });
       }
+
+      emitChatMessage(convId, {
+        ...msgPayload,
+        conversationId: convId,
+      });
 
       const rb = new ResponseBuilder();
       rb.code = 200;
@@ -395,15 +389,16 @@ export class ChatService {
       msg.content = content;
       msg.editedAt = new Date();
       await msg.save();
-      const io = getIo();
-      if (io) {
-        io.to(`chat:${msg.conversationId}`).emit(EVENTS.CHAT.MESSAGE_EDITED, {
+      getChatSocketEmitter().emitToChatRoom(
+        String(msg.conversationId),
+        EVENTS.CHAT.MESSAGE_EDITED,
+        {
           messageId,
           content,
           editedAt: msg.editedAt,
           conversationId: String(msg.conversationId),
-        });
-      }
+        }
+      );
       const rb = new ResponseBuilder();
       rb.code = 200;
       rb.result = msg;
@@ -425,13 +420,14 @@ export class ChatService {
       msg.deletedForAll = true;
       msg.content = "";
       await msg.save();
-      const io = getIo();
-      if (io) {
-        io.to(`chat:${msg.conversationId}`).emit(EVENTS.CHAT.MESSAGE_DELETED, {
+      getChatSocketEmitter().emitToChatRoom(
+        String(msg.conversationId),
+        EVENTS.CHAT.MESSAGE_DELETED,
+        {
           messageId,
           conversationId: String(msg.conversationId),
-        });
-      }
+        }
+      );
       const rb = new ResponseBuilder();
       rb.code = 200;
       rb.result = { ok: true };

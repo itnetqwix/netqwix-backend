@@ -842,85 +842,19 @@ export class userController {
     }
   };
 
-  public getSessionDetail = async (req: any, res: Response) => {
-    try {
-      if (!req["authUser"]) return;
-      const userId = String(req["authUser"]?._id);
-      const accountType = req["authUser"]?.account_type;
-      const bookingId = String(req.params.bookingId);
-      const { sessionDetailService } = require("../session/sessionDetailService");
-      const detail = await sessionDetailService.getSessionDetailForUser(
-        bookingId,
-        userId,
-        accountType
-      );
-      if (!detail) {
-        return res.status(404).json({ success: 0, message: "Session not found." });
-      }
-      return res.status(CONSTANCE.RES_CODE.success).json({ status: CONSTANCE.SUCCESS, data: detail });
-    } catch (error) {
-      res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
-        success: 0,
-        message: Message.internal,
-      });
-    }
+  public getSessionDetail = (req: any, res: Response) => {
+    const { sessionReadController } = require("../session/sessionReadController");
+    return sessionReadController.getSessionDetail(req, res);
   };
 
-  public getSessionJoinReadiness = async (req: any, res: Response) => {
-    try {
-      if (!req["authUser"]) return;
-      const userId = String(req["authUser"]?._id);
-      const accountType = req["authUser"]?.account_type;
-      const bookingId = String(req.params.bookingId);
-      const { getSessionJoinReadiness } = require("../session/sessionJoinReadinessService");
-      const h = req.headers ?? {};
-      const { parseLessonClientKindFromHeaders } = require("../../helpers/lesson/lessonClientTelemetry");
-      const readiness = await getSessionJoinReadiness(bookingId, userId, accountType, {
-        authSessionId:
-          (h["x-nq-auth-session-id"] as string | undefined) ??
-          (h["x-nq-session-id"] as string | undefined) ??
-          (h["x-auth-session-id"] as string | undefined),
-        deviceId:
-          (h["x-nq-device-id"] as string | undefined) ??
-          (h["x-device-id"] as string | undefined),
-        viewerClientKind: parseLessonClientKindFromHeaders(h),
-      });
-      if (!readiness) {
-        return res.status(404).json({ success: 0, message: "Session not found." });
-      }
-      return res
-        .status(CONSTANCE.RES_CODE.success)
-        .json({ status: CONSTANCE.SUCCESS, data: readiness });
-    } catch (error) {
-      res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
-        success: 0,
-        message: Message.internal,
-      });
-    }
+  public getSessionJoinReadiness = (req: any, res: Response) => {
+    const { sessionReadController } = require("../session/sessionReadController");
+    return sessionReadController.getSessionJoinReadiness(req, res);
   };
 
-  public getSessionTimeline = async (req: any, res: Response) => {
-    try {
-      if (!req["authUser"]) return;
-      const userId = String(req["authUser"]?._id);
-      const bookingId = String(req.params.bookingId);
-      const { getSessionTimeline } = require("../session/sessionTimelineService");
-      const result = await getSessionTimeline(bookingId, userId);
-      if (!result.ok) {
-        return res.status(result.code).json({
-          success: 0,
-          message: result.error,
-        });
-      }
-      return res
-        .status(CONSTANCE.RES_CODE.success)
-        .json({ status: CONSTANCE.SUCCESS, data: result.timeline });
-    } catch (error) {
-      res.status(CONSTANCE.RES_CODE.error.internalServerError).json({
-        success: 0,
-        message: Message.internal,
-      });
-    }
+  public getSessionTimeline = (req: any, res: Response) => {
+    const { sessionReadController } = require("../session/sessionReadController");
+    return sessionReadController.getSessionTimeline(req, res);
   };
 
   public getSessionHandoffSummary = async (req: any, res: Response) => {

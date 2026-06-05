@@ -112,74 +112,18 @@ export class transactionController {
       if (!mongoose.isValidObjectId(booking_id)) {
         return res.status(400).json({ status: CONSTANCE.FAIL, error: "Invalid booking_id" });
       }
-      const booking: any = await booked_session.findById(booking_id).lean();
-      if (!booking) {
-        return res.status(400).json({ status: CONSTANCE.FAIL, error: "Booking not found" });
-      }
-      if (String(booking.refund_status) === "refunded") {
-        return res.status(400).json({ status: CONSTANCE.FAIL, error: "Booking is already refunded" });
-      }
-      if (String(booking.payment_intent_id || "") !== String(payment_intent_id)) {
-        return res.status(400).json({
-          status: CONSTANCE.FAIL,
-          error: "Payment intent does not match this booking",
-        });
-      }
-
-      const intent = await stripe.paymentIntents.retrieve(payment_intent_id);
-      const latest_charge = intent.latest_charge;
-      if (!latest_charge) {
-        return res.status(400).json({
-          status: CONSTANCE.FAIL,
-          error: "No charge available for refund",
-        });
-      }
-
-      const bid = new mongoose.Types.ObjectId(booking_id);
-      const existingRefundAudit = await admin_audit.findOne({
-        entity_type: "booked_session",
-        entity_id: bid,
-        action: "stripe_refund",
-      });
-      if (existingRefundAudit) {
-        return res.status(400).json({
-          status: CONSTANCE.FAIL,
-          error: "A refund was already recorded for this booking",
-        });
-      }
-
-      const refund = await stripe.refunds.create({
-        charge: latest_charge,
-        reverse_transfer: true,
-        refund_application_fee: true,
-      });
-
-      const auditRow = await admin_audit.create({
-        admin_id: req["authUser"]?._id,
-        target_user_id: booking.trainee_id || booking.trainer_id || undefined,
-        entity_type: "booked_session",
-        entity_id: bid,
-        action: "stripe_refund",
+      const { processAdminRefundByPaymentIntent } = require("../wallet/adminRefundService");
+      const result = await processAdminRefundByPaymentIntent({
+        paymentIntentId: payment_intent_id,
+        bookingId: booking_id,
         reason: reasonStr,
-        meta: { payment_intent_id, stripe_refund_id: refund.id },
+        adminUserId: req["authUser"]?._id,
       });
 
-      const { recordOpsEvent } = require("../ops/opsEventService");
-      recordOpsEvent({
-        category: "payment",
-        severity: "info",
-        event_type: "STRIPE_REFUND",
-        user_id: booking.trainee_id,
-        related_user_id: booking.trainer_id,
-        session_id: booking_id,
-        title: "Stripe refund processed",
-        summary: reasonStr,
-        payload: auditRow.meta,
-        source: "admin",
-        idempotency_key: `admin_audit:${auditRow._id}`,
+      return res.status(200).send({
+        status: CONSTANCE.SUCCESS,
+        data: result.refund ?? { path: result.path, escrowHoldId: result.escrowHoldId },
       });
-
-      return res.status(200).send({ status: CONSTANCE.SUCCESS, data: refund });
     } catch (error) {
       this.logger.error(error);
       return res

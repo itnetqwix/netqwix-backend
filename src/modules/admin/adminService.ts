@@ -19,8 +19,10 @@ import user_presence from "../../model/user_presence.schema";
 import user_activity from "../../model/user_activity.schema";
 import raise_concern from "../../model/raise_concern.schema";
 import write_us from "../../model/write_us.schema";
-import HomeBanner from "../../model/home_banner.schema";
-import Tip from "../../model/tip.schema";
+import {
+  countLiveBanners,
+  countLiveTips,
+} from "../cms/cmsContentQuery";
 import { s3, S3_BUCKET } from "../../Utils/s3Client";
 import { getTrainerTraineePresenceSnapshot } from "../socket/socketPresenceRegistry";
 import { assertAdminPermission } from "./adminPermission";
@@ -867,14 +869,11 @@ export class AdminService {
         createdAt: { $gte: new Date(Date.now() - 7 * 86400000) },
         account_type: { $in: [AccountType.TRAINER, AccountType.TRAINEE] },
       }),
-      HomeBanner.countDocuments({ is_active: true }),
-      Tip.countDocuments({ is_active: true }),
-      HomeBanner.countDocuments({ is_active: true, placement: "hero" }),
-      HomeBanner.countDocuments({ is_active: true, placement: "strip" }),
-      HomeBanner.countDocuments({
-        is_active: true,
-        placement: "sticky_bottom",
-      }),
+      countLiveBanners(),
+      countLiveTips(),
+      countLiveBanners("hero"),
+      countLiveBanners("strip"),
+      countLiveBanners("sticky_bottom"),
     ]);
 
     const totalRevenue = revenueAgg[0]?.total || 0;

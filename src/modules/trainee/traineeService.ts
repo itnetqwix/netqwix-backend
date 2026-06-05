@@ -628,12 +628,10 @@ export class TraineeService {
         }
       }
 
-      const { computeBookingCheckoutDiscounts, markReferralFirstLessonDiscountUsed } =
-        require("../referral/referralCheckoutDiscount");
-      const checkout = await computeBookingCheckoutDiscounts({
+      const { checkoutOrchestrator } = require("../checkout/checkoutOrchestrator");
+      const checkout = await checkoutOrchestrator.computeScheduledDiscounts({
         traineeId: String(_id),
         originalPrice,
-        bookingType: "scheduled",
         couponCode: payload.coupon_code,
         trainerId: payload.trainer_id ? String(payload.trainer_id) : undefined,
       });
@@ -646,17 +644,21 @@ export class TraineeService {
       const finalPrice = checkout.finalPrice;
 
       const bookingId = new mongoose.Types.ObjectId();
+      if (appliedPromoCode) {
+        await checkoutOrchestrator.reservePromoIfEnabled(
+          appliedPromoCode,
+          String(_id),
+          String(bookingId)
+        );
+      }
       if (payload.payment_method === "wallet" && finalPrice > 0) {
-        const { walletPaymentService } = require("../wallet/walletPaymentService");
         try {
-          await walletPaymentService.payFromWallet({
+          await checkoutOrchestrator.payScheduledBookingFromWallet({
             traineeId: _id,
             sessionId: String(bookingId),
             trainerId: payload.trainer_id,
             amountDollars: finalPrice,
             pinSessionToken: payload.pin_session_token,
-            kind: "booking",
-            idempotencyKey: `book:wallet:${bookingId}`,
             quoteId: (payload as any).quote_id,
             billingAddress: (payload as any).billing_address,
           });
@@ -685,13 +687,6 @@ export class TraineeService {
         ...(start_time && { start_time }),
         ...(end_time && { end_time }),
       });
-      if (checkout.referralAttributionId && referralDiscountAmount > 0) {
-        void markReferralFirstLessonDiscountUsed(
-          checkout.referralAttributionId,
-          referralDiscountAmount,
-          String(bookingId)
-        );
-      }
       const trainerId = sessionObj["trainer_id"];
       const trainerDetails = await user.findById({ _id: trainerId });
       const traineeId = sessionObj["trainee_id"];
@@ -781,13 +776,9 @@ export class TraineeService {
       } catch (saveErr) {
         if (payload.payment_method === "wallet" && finalPrice > 0) {
           try {
-            const { walletPaymentService } = require("../wallet/walletPaymentService");
-            await walletPaymentService.refundWalletPaymentForSession({
+            await checkoutOrchestrator.rollbackScheduledWalletBooking({
               sessionId: String(bookingId),
               traineeId: String(_id),
-              kind: "booking",
-              idempotencyKey: `book:wallet:${bookingId}`,
-              reason: "booking_save_failed",
             });
           } catch (rollbackErr) {
             console.error("[BOOKING] Wallet rollback after save failure:", rollbackErr);
@@ -796,49 +787,22 @@ export class TraineeService {
         throw saveErr;
       }
 
-      if (appliedPromoCode && promoDiscountAmount > 0) {
-        const promoService = new PromoCodeService();
-        void promoService.applyPromoCode(
-          appliedPromoCode,
-          _id,
-          String(bookingData._id),
-          promoDiscountAmount
-        );
-      }
+      await checkoutOrchestrator.afterScheduledBookingSaved({
+        booking: bookingData,
+        payload,
+        appliedPromoCode,
+        promoDiscountAmount,
+        referralAttributionId: checkout.referralAttributionId,
+        referralDiscountAmount,
+        traineeId: String(_id),
+        finalPrice,
+      });
 
       void recordUserActivityMany(
         [String(bookingData.trainee_id), String(bookingData.trainer_id)],
         UserActivityEvent.BOOKING_CREATED,
         { sessionId: String(bookingData._id), kind: "scheduled" }
       );
-      await user.updateOne(
-        { _id: payload.trainer_id },
-        { $inc: { wallet_amount: finalPrice || 0 } }
-      );
-
-      try {
-        const { WALLET_CONFIG } = require("../../config/wallet");
-        const paidByWallet = payload.payment_method === "wallet";
-        const paidByCardPi = !!payload.payment_intent_id;
-        /** Wallet path already creates a hold via payFromWallet; card PI is handled by Stripe webhook. */
-        if (WALLET_CONFIG.escrowEnabled && finalPrice > 0 && !paidByWallet && !paidByCardPi) {
-          const { escrowService } = require("../wallet/escrowService");
-          await escrowService.createCardEscrowRecord({
-            sessionId: String(bookingData._id),
-            traineeId: String(bookingData.trainee_id),
-            trainerId: String(payload.trainer_id),
-            grossMinor: Math.round(finalPrice * 100),
-            platformFeeMinor: 0,
-            fundingSource: "card",
-            stripePaymentIntentId: payload.payment_intent_id,
-            kind: "booking",
-            idempotencyKey: `book:escrow:${bookingData._id}`,
-          });
-        }
-      } catch (walletErr) {
-        console.error("[BOOKING] Escrow record error:", walletErr);
-      }
-      
       // Emit booking created event
       try {
         const { emitBookingCreated } = require("../socket/socket.service");
