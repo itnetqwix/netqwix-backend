@@ -46,10 +46,11 @@ export class NotificationsService {
                 receiverId : userId
             }
         )
-        .populate('senderId')
+        .populate('senderId', 'fullname profile_picture')
         .sort({createdAt : -1})
         .skip(parseInt(limit) * (parseInt(page) - 1))
-        .limit(parseInt(limit));
+        .limit(parseInt(limit))
+        .lean();
         const data =  notifications?.map((notification) =>{
             return {
                 _id : notification?._id ,
@@ -58,9 +59,9 @@ export class NotificationsService {
                 createdAt : notification?.createdAt,
                 isRead : notification?.isRead,
                 sender : {
-                    _id : notification?.senderId?._id,
-                    name : notification?.senderId?.fullname,
-                    profile_picture : notification?.senderId?.profile_picture || null
+                    _id : (notification?.senderId as any)?._id,
+                    name : (notification?.senderId as any)?.fullname,
+                    profile_picture : (notification?.senderId as any)?.profile_picture || null
                 }
             }
         })
@@ -80,9 +81,11 @@ export class NotificationsService {
             receiverId: userId,
             isRead: false
           })
+          .select('_id')
           .sort({ createdAt: -1 }) 
           .limit(10)
           .skip((page - 1) * 10)
+          .lean();
           
           const notificationIds = notifications?.map(notif => notif._id) || [];
           

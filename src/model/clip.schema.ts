@@ -92,5 +92,8 @@ const clipSchema: Schema = new Schema(
   { timestamps: true }
 );
 
+clipSchema.index({ user_id: 1, clip_scope: 1, status: 1 });
+clipSchema.index({ clip_scope: 1, status: 1, sort_order: 1 });
+
 const clip = Model(Tables.clip, clipSchema);
 export default clip;

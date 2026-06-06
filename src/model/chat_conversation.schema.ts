@@ -53,5 +53,7 @@ const chatConversationSchema: Schema = new Schema(
 );
 
 chatConversationSchema.index({ participants: 1 });
+// Inbox sort: conversations for a user sorted by most recent message
+chatConversationSchema.index({ participants: 1, lastMessageAt: -1 });
 
 export default Model(Tables.chat_conversation, chatConversationSchema);

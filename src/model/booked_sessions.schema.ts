@@ -292,8 +292,16 @@ bookedSessionsSchema.index({ status: 1 }); // For filtering by status
 bookedSessionsSchema.index({ trainer_id: 1 }); // For trainer lookups
 bookedSessionsSchema.index({ trainee_id: 1 }); // For trainee lookups
 bookedSessionsSchema.index({ booked_date: 1 }); // For date filtering
-bookedSessionsSchema.index({ trainer_id: 1, status: 1, booked_date: 1 }); // Compound index for common queries
-bookedSessionsSchema.index({ trainee_id: 1, status: 1, booked_date: 1 }); // Compound index for common queries
+bookedSessionsSchema.index({ trainer_id: 1, status: 1, booked_date: 1 });
+bookedSessionsSchema.index({ trainee_id: 1, status: 1, booked_date: 1 });
+bookedSessionsSchema.index({ trainee_id: 1, status: 1, createdAt: -1 });
+// Instant-lesson recovery cron — scans by phase + deadline
+bookedSessionsSchema.index({ is_instant: 1, instant_phase: 1, accept_deadline_at: 1 }, { sparse: true });
+bookedSessionsSchema.index({ is_instant: 1, instant_phase: 1, join_deadline_at: 1 }, { sparse: true });
+// No-show refund cron
+bookedSessionsSchema.index({ status: 1, booked_date: 1, session_start_time: 1 });
+// Scheduled lesson reminder scan
+bookedSessionsSchema.index({ status: 1, refund_reason: 1 }, { sparse: true });
 
 const booked_session = Model(
     Tables.booked_sessions,

@@ -37,5 +37,10 @@ const notificationSchema: Schema = new Schema(
   { timestamps: true }
 );
 
+// Primary access pattern: fetch unread by receiver, newest first
+notificationSchema.index({ receiverId: 1, isRead: 1, createdAt: -1 });
+// Auto-delete notifications older than 90 days
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * 24 * 60 * 60 });
+
 const notification = Model(Tables.notifications, notificationSchema);
 export default notification;

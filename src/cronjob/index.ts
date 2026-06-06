@@ -25,17 +25,27 @@ const aiService = new AIService();
       isBullmqAvailable() &&
       String(process.env.BULLMQ_BOOKING_REMINDERS ?? "true").toLowerCase() !== "false";
 
+    // Booking confirmation reminders (1-min granularity required for scheduling accuracy)
     const job = cron.schedule("* * * * *", () => {
       try {
         if (!useBullmqReminders) {
           meetingConfirmationJob();
         }
-        cleanupInactiveUsers();
       } catch (err) {
         console.log("err on cron job running", err);
       }
     });
     await job.start();
+
+    // Online-user cleanup — runs every 5 min (was every 1 min; 5 min is sufficient)
+    const cleanupJob = cron.schedule("*/5 * * * *", () => {
+      try {
+        cleanupInactiveUsers();
+      } catch (err) {
+        console.log("err on cleanup job running", err);
+      }
+    });
+    await cleanupJob.start();
 
     // Smart re-engagement: daily at 10 AM
     const reEngagementJob = cron.schedule("0 10 * * *", () => {
@@ -318,53 +328,91 @@ async function smartReEngagementJob() {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    // Trainees who haven't booked in 7-30 days
-    const recentBookers = await booked_session.distinct("trainee_id", {
-      createdAt: { $gte: sevenDaysAgo },
-    });
+    // Single aggregate: find inactive trainees + their last completed session in one pass.
+    // Replaces: distinct() + find($nin) + N x findOne() — was O(N+2) queries per run.
+    const results = await booked_session.aggregate([
+      // Last completed session per trainee in the past 30 days window
+      {
+        $match: {
+          status: "completed",
+          createdAt: { $gte: thirtyDaysAgo },
+        },
+      },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: "$trainee_id",
+          lastSessionAt: { $first: "$createdAt" },
+          trainer_id: { $first: "$trainer_id" },
+        },
+      },
+      // Only trainees whose last session was 7–30 days ago
+      {
+        $match: {
+          lastSessionAt: { $lt: sevenDaysAgo, $gte: thirtyDaysAgo },
+        },
+      },
+      // Join user record
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "traineeDoc",
+        },
+      },
+      { $unwind: "$traineeDoc" },
+      {
+        $match: {
+          "traineeDoc.account_type": "Trainee",
+          "traineeDoc.status": "approved",
+          "traineeDoc.notifications.promotional.email": { $ne: false },
+        },
+      },
+      // Join trainer name
+      {
+        $lookup: {
+          from: "users",
+          localField: "trainer_id",
+          foreignField: "_id",
+          pipeline: [{ $project: { fullname: 1 } }],
+          as: "trainerDoc",
+        },
+      },
+      {
+        $project: {
+          traineeId: "$_id",
+          fullname: "$traineeDoc.fullname",
+          category: "$traineeDoc.category",
+          lastSessionAt: 1,
+          lastTrainer: { $arrayElemAt: ["$trainerDoc.fullname", 0] },
+        },
+      },
+      { $limit: 50 },
+    ]);
 
-    const inactiveTrainees = await user
-      .find({
-        account_type: "Trainee",
-        status: "approved",
-        _id: { $nin: recentBookers },
-        createdAt: { $lt: sevenDaysAgo, $gt: thirtyDaysAgo },
-        "notifications.promotional.email": { $ne: false },
-      })
-      .select("_id fullname category")
-      .limit(50)
-      .lean();
-
-    for (const trainee of inactiveTrainees) {
-      const t = trainee as any;
-      const lastSession = await booked_session
-        .findOne({ trainee_id: t._id, status: "completed" })
-        .sort({ createdAt: -1 })
-        .populate("trainer_id", "fullname")
-        .lean();
-
-      const daysSince = lastSession
-        ? Math.floor((Date.now() - new Date((lastSession as any).createdAt).getTime()) / 86400000)
-        : 14;
-
+    for (const row of results) {
+      const daysSince = Math.floor(
+        (Date.now() - new Date(row.lastSessionAt).getTime()) / 86400000
+      );
       try {
         const content = await aiService.generateNotificationContent({
           userType: "Trainee",
-          userName: t.fullname,
+          userName: row.fullname,
           daysSinceLastBooking: daysSince,
-          category: t.category,
-          lastTrainer: (lastSession as any)?.trainer_id?.fullname,
+          category: row.category,
+          lastTrainer: row.lastTrainer,
         });
 
         await notification.create({
           title: content.title,
           description: content.body,
-          receiverId: t._id,
+          receiverId: row.traineeId,
           type: NotificationType.PROMOTIONAL,
         });
 
         void pushService.sendPushNotification(
-          String(t._id),
+          String(row.traineeId),
           content.title,
           content.body,
           { kind: "re_engagement" }
@@ -374,7 +422,7 @@ async function smartReEngagementJob() {
       }
     }
 
-    console.log(`[SmartReEngagement] Processed ${inactiveTrainees.length} inactive trainees.`);
+    console.log(`[SmartReEngagement] Processed ${results.length} inactive trainees.`);
   } catch (err) {
     console.error("[SmartReEngagement] Error:", err);
   }

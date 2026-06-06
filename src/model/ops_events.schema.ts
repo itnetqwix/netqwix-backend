@@ -71,5 +71,13 @@ opsEventSchema.index({ user_id: 1, createdAt: -1 });
 opsEventSchema.index({ session_id: 1, createdAt: -1 });
 opsEventSchema.index({ category: 1, severity: 1, createdAt: -1 });
 opsEventSchema.index({ title: "text", summary: "text" });
+// Auto-purge resolved/info events older than 60 days; critical kept longer via partial filter
+opsEventSchema.index(
+  { createdAt: 1 },
+  {
+    expireAfterSeconds: 60 * 24 * 60 * 60,
+    partialFilterExpression: { severity: { $in: ["info", "warning"] }, resolution_status: "resolved" },
+  }
+);
 
 export default Model(Tables.ops_events, opsEventSchema);

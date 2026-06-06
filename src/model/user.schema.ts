@@ -193,5 +193,15 @@ userSchema.methods.toJSON = function () {
   return userObject;
 };
 
+// email is the primary login lookup — must be indexed
+userSchema.index({ email: 1 }, { unique: true });
+// Segment queries: broadcasts, cron re-engagement, trainer discovery
+userSchema.index({ account_type: 1, status: 1, createdAt: -1 });
+// Trainer verification admin queue
+userSchema.index(
+  { "trainer_verification.onboarding_step": 1, "trainer_verification.submitted_for_review_at": 1 },
+  { sparse: true }
+);
+
 const user = Model(Tables.user, userSchema);
 export default user;

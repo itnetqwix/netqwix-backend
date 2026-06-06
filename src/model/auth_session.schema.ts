@@ -45,6 +45,8 @@ const authSessionSchema = new Schema(
 );
 
 authSessionSchema.index({ userId: 1, revokedAt: 1, lastUsedAt: -1 });
+// Auto-delete expired sessions 7 days after expiry (grace for audit)
+authSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
 
 const auth_session = Model(Tables.auth_sessions, authSessionSchema);
 export default auth_session;

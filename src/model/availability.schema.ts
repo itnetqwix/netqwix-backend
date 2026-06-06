@@ -11,5 +11,8 @@ const availabilitySchema: Schema = new Schema(
   { timestamps: true }
 );
 
+availabilitySchema.index({ trainer_id: 1, start_time: 1, end_time: 1 });
+availabilitySchema.index({ trainer_id: 1, status: 1 });
+
 const availability = Model(Tables.availability, availabilitySchema);
 export default availability;

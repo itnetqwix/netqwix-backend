@@ -17,5 +17,8 @@ const userPresenceSchema: Schema = new Schema(
   { timestamps: true }
 );
 
+// Auto-purge presence records not updated in 24 hours
+userPresenceSchema.index({ last_seen_at: 1 }, { expireAfterSeconds: 24 * 60 * 60 });
+
 const user_presence = Model(Tables.user_presence, userPresenceSchema);
 export default user_presence;

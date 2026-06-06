@@ -2,6 +2,12 @@ import { log } from "../../logger";
 import user_activity from "../model/user_activity.schema";
 import user_presence from "../model/user_presence.schema";
 
+// In-memory debounce: only flush presence to DB every 30s per user.
+// Without this, every socket HEARTBEAT (typically every 5-10s) would
+// generate an individual findOneAndUpdate round-trip to MongoDB.
+const presenceDebounceMs = 30_000;
+const lastPresenceFlush = new Map<string, number>();
+
 const logger = log.getLogger();
 
 export const UserActivityEvent = {
@@ -50,8 +56,13 @@ export async function recordUserActivityMany(
 
 export async function touchUserPresence(userId: string | undefined | null): Promise<void> {
   if (!userId) return;
+  const key = String(userId);
+  const now = Date.now();
+  const last = lastPresenceFlush.get(key) ?? 0;
+  if (now - last < presenceDebounceMs) return; // skip — still within debounce window
+  lastPresenceFlush.set(key, now);
   try {
-    await user_presence.findOneAndUpdate(
+    await user_presence.updateOne(
       { user_id: userId },
       { $set: { last_seen_at: new Date() } },
       { upsert: true }

@@ -14,5 +14,7 @@ const signupVerificationOtpSchema = new Schema(
 );
 
 signupVerificationOtpSchema.index({ destination: 1, channel: 1 });
+// Auto-delete expired OTPs
+signupVerificationOtpSchema.index({ expires_at: 1 }, { expireAfterSeconds: 0 });
 
 export default Model(Tables.signup_verification_otps, signupVerificationOtpSchema);

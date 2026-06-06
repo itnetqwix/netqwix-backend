@@ -47,4 +47,7 @@ const escrowHoldSchema = new Schema(
   { timestamps: true }
 );
 
+// Primary release cron pattern: find eligible holds to release
+escrowHoldSchema.index({ status: 1, release_eligible_at: 1 });
+
 export default Model(Tables.escrow_holds, escrowHoldSchema);

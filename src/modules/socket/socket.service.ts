@@ -806,21 +806,11 @@ async function updateUserActivity(socket) {
       }
       activeUsers[userId] = { ...(userDoc as any) };
       const trainerId = String((userDoc as any)._id);
-      const checkIfUserIsAlreadyAdded = await onlineUser.findOne({
-        trainer_id: trainerId,
-      });
-
-      if (checkIfUserIsAlreadyAdded) {
-        await onlineUser.updateOne(
-          { trainer_id: trainerId },
-          { $set: { last_activity_time: new Date() } }
-        );
-      } else {
-        await new onlineUser({
-          trainer_id: trainerId,
-          last_activity_time: new Date(),
-        }).save();
-      }
+      await onlineUser.updateOne(
+        { trainer_id: trainerId },
+        { $set: { last_activity_time: new Date() } },
+        { upsert: true }
+      );
       void touchUserPresence(trainerId);
     } else if (role === "trainee") {
       activeUsers[userId] = { ...(userDoc as any) };
