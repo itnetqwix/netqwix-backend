@@ -1,0 +1,1502 @@
+{
+  "nodes": [
+    {
+      "id": "templates_5_min_remainder_5_min_reminder_email",
+      "label": "5 Min Reminder Email",
+      "file_type": "document",
+      "source_file": "src/templates/5-min-remainder.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_before_meeting_before_meeting_email",
+      "label": "Before Meeting Email",
+      "file_type": "document",
+      "source_file": "src/templates/before_meeting.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_clip_shared_new_user_clip_shared_new_user_email",
+      "label": "Clip Shared New User Email",
+      "file_type": "document",
+      "source_file": "src/templates/clip-shared-new-user.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_clip_shared_clip_shared_email",
+      "label": "Clip Shared Email",
+      "file_type": "document",
+      "source_file": "src/templates/clip-shared.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_friend_request_friend_request_email",
+      "label": "Friend Request Email",
+      "file_type": "document",
+      "source_file": "src/templates/friend-request.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_meeting_confirmed_meeting_confirmed_email",
+      "label": "Meeting Confirmed Email",
+      "file_type": "document",
+      "source_file": "src/templates/meeting_confirmed.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_meeting_ended_meeting_ended_email",
+      "label": "Meeting Ended Email",
+      "file_type": "document",
+      "source_file": "src/templates/meeting_ended.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_new_trainee_new_trainee_email",
+      "label": "New Trainee Email",
+      "file_type": "document",
+      "source_file": "src/templates/new-trainee.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_new_trainer_new_trainer_email",
+      "label": "New Trainer Email",
+      "file_type": "document",
+      "source_file": "src/templates/new-trainer.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_payment_confirmation_payment_confirmation_email",
+      "label": "Payment Confirmation Email",
+      "file_type": "document",
+      "source_file": "src/templates/payment-confirmation.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_refer_expert_refer_expert_email",
+      "label": "Refer Expert Email",
+      "file_type": "document",
+      "source_file": "src/templates/refer-expert.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_refer_friend_refer_friend_email",
+      "label": "Refer Friend Email",
+      "file_type": "document",
+      "source_file": "src/templates/refer-friend.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_refer_trainee_refer_trainee_email",
+      "label": "Refer Trainee Email",
+      "file_type": "document",
+      "source_file": "src/templates/refer-trainee.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_register_register_email",
+      "label": "Registration Welcome Email",
+      "file_type": "document",
+      "source_file": "src/templates/register.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_session_booking_trainee_session_booking_trainee_email",
+      "label": "Session Booking Trainee Email",
+      "file_type": "document",
+      "source_file": "src/templates/session-booking-trainee.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_session_booking_trainer_session_booking_trainer_email",
+      "label": "Session Booking Trainer Email",
+      "file_type": "document",
+      "source_file": "src/templates/session-booking-trainer.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_session_cancellation_session_cancellation_email",
+      "label": "Session Cancellation Email",
+      "file_type": "document",
+      "source_file": "src/templates/session-cancellation.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_session_confirmation_session_confirmation_email",
+      "label": "Session Confirmation Email",
+      "file_type": "document",
+      "source_file": "src/templates/session-confirmation.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_trainee_join_trainee_join_email",
+      "label": "Trainee Join Email",
+      "file_type": "document",
+      "source_file": "src/templates/trainee-join.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_trainee_welcome_trainee_welcome_email",
+      "label": "Trainee Welcome Email",
+      "file_type": "document",
+      "source_file": "src/templates/trainee-welcome.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_netqwix_email_template_system",
+      "label": "NetQwix Email Template System",
+      "file_type": "concept",
+      "source_file": "src/templates",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_session_lifecycle",
+      "label": "Session Lifecycle",
+      "file_type": "concept",
+      "source_file": "src/templates",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_meeting_link_placeholder",
+      "label": "Meeting Link Placeholder",
+      "file_type": "concept",
+      "source_file": "src/templates",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_session_time_placeholder",
+      "label": "Session Time Placeholder",
+      "file_type": "concept",
+      "source_file": "src/templates",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_trainer_name_placeholder",
+      "label": "Trainer Name Placeholder",
+      "file_type": "concept",
+      "source_file": "src/templates",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_trainee_name_placeholder",
+      "label": "Trainee Name Placeholder",
+      "file_type": "concept",
+      "source_file": "src/templates",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_referral_system",
+      "label": "Referral System",
+      "file_type": "concept",
+      "source_file": "src/templates",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_netqwix_locker",
+      "label": "NetQwix Locker",
+      "file_type": "concept",
+      "source_file": "src/templates",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_clip_analysis_mode",
+      "label": "Clip Analysis Mode",
+      "file_type": "concept",
+      "source_file": "src/templates/clip-shared.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_expert_approval_workflow",
+      "label": "Expert Approval Workflow",
+      "file_type": "concept",
+      "source_file": "src/templates/new-trainer.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_payment_refund_flow",
+      "label": "Payment Refund Flow",
+      "file_type": "concept",
+      "source_file": "src/templates/session-cancellation.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_instant_session_booking",
+      "label": "Instant Session Booking",
+      "file_type": "concept",
+      "source_file": "src/templates/trainee-welcome.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_game_plan",
+      "label": "Game Plan",
+      "file_type": "concept",
+      "source_file": "src/templates/refer-friend.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_trainer_join_trainer_join_email",
+      "label": "Trainer Join Email Template",
+      "file_type": "document",
+      "source_file": "src/templates/trainer-join.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_trainer_welcome_trainer_welcome_email",
+      "label": "Trainer Welcome Email Template",
+      "file_type": "document",
+      "source_file": "src/templates/trainer-welcome.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_verification_approved_verification_approved_email",
+      "label": "Verification Approved Email Template",
+      "file_type": "document",
+      "source_file": "src/templates/verification-approved.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_verification_rejected_verification_rejected_email",
+      "label": "Verification Rejected Email Template",
+      "file_type": "document",
+      "source_file": "src/templates/verification-rejected.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_verification_submitted_admin_verification_submitted_admin_email",
+      "label": "Verification Submitted Admin Notification Email Template",
+      "file_type": "document",
+      "source_file": "src/templates/verification-submitted-admin.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "templates_verification_submitted_user_verification_submitted_user_email",
+      "label": "Verification Submitted User Confirmation Email Template",
+      "file_type": "document",
+      "source_file": "src/templates/verification-submitted-user.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "assets_netqwix_logo_netqwix_logo",
+      "label": "NetQwix Brand Logo",
+      "file_type": "image",
+      "source_file": "src/assets/netqwix_logo.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_trainer_onboarding_flow",
+      "label": "Trainer Onboarding Flow",
+      "file_type": "concept",
+      "source_file": "src/templates/trainer-welcome.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_trainer_verification_flow",
+      "label": "Trainer Verification Flow",
+      "file_type": "concept",
+      "source_file": "src/templates/verification-submitted-user.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "concept_email_notification_system",
+      "label": "Email Notification System",
+      "file_type": "concept",
+      "source_file": "src/templates/trainer-join.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "templates_5_min_remainder_5_min_reminder_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/5-min-remainder.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_before_meeting_before_meeting_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/before_meeting.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_clip_shared_new_user_clip_shared_new_user_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/clip-shared-new-user.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_clip_shared_clip_shared_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/clip-shared.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_friend_request_friend_request_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/friend-request.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_meeting_confirmed_meeting_confirmed_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/meeting_confirmed.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_meeting_ended_meeting_ended_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/meeting_ended.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_new_trainee_new_trainee_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/new-trainee.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_new_trainer_new_trainer_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/new-trainer.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_payment_confirmation_payment_confirmation_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/payment-confirmation.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_refer_expert_refer_expert_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/refer-expert.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_refer_friend_refer_friend_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/refer-friend.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_refer_trainee_refer_trainee_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/refer-trainee.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_register_register_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/register.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_booking_trainee_session_booking_trainee_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/session-booking-trainee.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_booking_trainer_session_booking_trainer_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/session-booking-trainer.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_cancellation_session_cancellation_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/session-cancellation.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_confirmation_session_confirmation_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/session-confirmation.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainee_join_trainee_join_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/trainee-join.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainee_welcome_trainee_welcome_email",
+      "target": "concept_netqwix_email_template_system",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/trainee-welcome.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_booking_trainee_session_booking_trainee_email",
+      "target": "concept_session_lifecycle",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/session-booking-trainee.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_booking_trainer_session_booking_trainer_email",
+      "target": "concept_session_lifecycle",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/session-booking-trainer.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_payment_confirmation_payment_confirmation_email",
+      "target": "concept_session_lifecycle",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/payment-confirmation.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_meeting_confirmed_meeting_confirmed_email",
+      "target": "concept_session_lifecycle",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/meeting_confirmed.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_confirmation_session_confirmation_email",
+      "target": "concept_session_lifecycle",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/session-confirmation.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_before_meeting_before_meeting_email",
+      "target": "concept_session_lifecycle",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/before_meeting.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_5_min_remainder_5_min_reminder_email",
+      "target": "concept_session_lifecycle",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/5-min-remainder.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_meeting_ended_meeting_ended_email",
+      "target": "concept_session_lifecycle",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/meeting_ended.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_cancellation_session_cancellation_email",
+      "target": "concept_session_lifecycle",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates/session-cancellation.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_5_min_remainder_5_min_reminder_email",
+      "target": "concept_meeting_link_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/5-min-remainder.html",
+      "source_location": "line 21",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_before_meeting_before_meeting_email",
+      "target": "concept_meeting_link_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/before_meeting.html",
+      "source_location": "line 21",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_meeting_confirmed_meeting_confirmed_email",
+      "target": "concept_meeting_link_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/meeting_confirmed.html",
+      "source_location": "line 21",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_confirmation_session_confirmation_email",
+      "target": "concept_meeting_link_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/session-confirmation.html",
+      "source_location": "line 21",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_before_meeting_before_meeting_email",
+      "target": "concept_session_time_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/before_meeting.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_meeting_confirmed_meeting_confirmed_email",
+      "target": "concept_session_time_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/meeting_confirmed.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_booking_trainee_session_booking_trainee_email",
+      "target": "concept_session_time_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/session-booking-trainee.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_booking_trainer_session_booking_trainer_email",
+      "target": "concept_session_time_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/session-booking-trainer.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_confirmation_session_confirmation_email",
+      "target": "concept_session_time_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/session-confirmation.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_cancellation_session_cancellation_email",
+      "target": "concept_session_time_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/session-cancellation.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_5_min_remainder_5_min_reminder_email",
+      "target": "concept_trainer_name_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/5-min-remainder.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_before_meeting_before_meeting_email",
+      "target": "concept_trainer_name_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/before_meeting.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_meeting_confirmed_meeting_confirmed_email",
+      "target": "concept_trainer_name_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/meeting_confirmed.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_meeting_ended_meeting_ended_email",
+      "target": "concept_trainer_name_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/meeting_ended.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_new_trainee_new_trainee_email",
+      "target": "concept_trainer_name_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/new-trainee.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_booking_trainee_session_booking_trainee_email",
+      "target": "concept_trainer_name_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/session-booking-trainee.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_booking_trainer_session_booking_trainer_email",
+      "target": "concept_trainee_name_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/session-booking-trainer.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_cancellation_session_cancellation_email",
+      "target": "concept_trainee_name_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/session-cancellation.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_confirmation_session_confirmation_email",
+      "target": "concept_trainee_name_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/session-confirmation.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_meeting_confirmed_meeting_confirmed_email",
+      "target": "concept_trainee_name_placeholder",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/meeting_confirmed.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_refer_expert_refer_expert_email",
+      "target": "concept_referral_system",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/refer-expert.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_refer_friend_refer_friend_email",
+      "target": "concept_referral_system",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/refer-friend.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_refer_trainee_refer_trainee_email",
+      "target": "concept_referral_system",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/refer-trainee.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_clip_shared_clip_shared_email",
+      "target": "concept_netqwix_locker",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/clip-shared.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_clip_shared_new_user_clip_shared_new_user_email",
+      "target": "concept_netqwix_locker",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/clip-shared-new-user.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_refer_trainee_refer_trainee_email",
+      "target": "concept_netqwix_locker",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/refer-trainee.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainee_welcome_trainee_welcome_email",
+      "target": "concept_netqwix_locker",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/trainee-welcome.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_clip_shared_clip_shared_email",
+      "target": "concept_clip_analysis_mode",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/clip-shared.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_new_trainer_new_trainer_email",
+      "target": "concept_expert_approval_workflow",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/new-trainer.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_cancellation_session_cancellation_email",
+      "target": "concept_payment_refund_flow",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/session-cancellation.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainee_welcome_trainee_welcome_email",
+      "target": "concept_instant_session_booking",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/trainee-welcome.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainee_join_trainee_join_email",
+      "target": "concept_instant_session_booking",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/trainee-join.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_refer_friend_refer_friend_email",
+      "target": "concept_game_plan",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/refer-friend.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_refer_trainee_refer_trainee_email",
+      "target": "concept_game_plan",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/refer-trainee.html",
+      "source_location": "line 19",
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_booking_trainee_session_booking_trainee_email",
+      "target": "templates_payment_confirmation_payment_confirmation_email",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/session-booking-trainee.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_payment_confirmation_payment_confirmation_email",
+      "target": "templates_meeting_confirmed_meeting_confirmed_email",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/payment-confirmation.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_meeting_confirmed_meeting_confirmed_email",
+      "target": "templates_session_confirmation_session_confirmation_email",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "src/templates/meeting_confirmed.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_confirmation_session_confirmation_email",
+      "target": "templates_before_meeting_before_meeting_email",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/session-confirmation.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_before_meeting_before_meeting_email",
+      "target": "templates_5_min_remainder_5_min_reminder_email",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/before_meeting.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_5_min_remainder_5_min_reminder_email",
+      "target": "templates_meeting_ended_meeting_ended_email",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "src/templates/5-min-remainder.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_register_register_email",
+      "target": "templates_trainee_welcome_trainee_welcome_email",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/register.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_register_register_email",
+      "target": "templates_trainee_join_trainee_join_email",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "src/templates/register.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_refer_friend_refer_friend_email",
+      "target": "templates_clip_shared_new_user_clip_shared_new_user_email",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.65,
+      "source_file": "src/templates/refer-friend.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_session_booking_trainer_session_booking_trainer_email",
+      "target": "templates_new_trainee_new_trainee_email",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.65,
+      "source_file": "src/templates/session-booking-trainer.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainer_join_trainer_join_email",
+      "target": "concept_trainer_onboarding_flow",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/trainer-join.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainer_welcome_trainer_welcome_email",
+      "target": "concept_trainer_onboarding_flow",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/trainer-welcome.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainer_join_trainer_join_email",
+      "target": "concept_email_notification_system",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/trainer-join.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainer_welcome_trainer_welcome_email",
+      "target": "concept_email_notification_system",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/trainer-welcome.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_approved_verification_approved_email",
+      "target": "concept_trainer_verification_flow",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/verification-approved.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_rejected_verification_rejected_email",
+      "target": "concept_trainer_verification_flow",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/verification-rejected.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_submitted_admin_verification_submitted_admin_email",
+      "target": "concept_trainer_verification_flow",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/verification-submitted-admin.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_submitted_user_verification_submitted_user_email",
+      "target": "concept_trainer_verification_flow",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/verification-submitted-user.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_approved_verification_approved_email",
+      "target": "concept_email_notification_system",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/verification-approved.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_rejected_verification_rejected_email",
+      "target": "concept_email_notification_system",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/verification-rejected.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_submitted_admin_verification_submitted_admin_email",
+      "target": "concept_email_notification_system",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/verification-submitted-admin.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_submitted_user_verification_submitted_user_email",
+      "target": "concept_email_notification_system",
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/verification-submitted-user.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainer_join_trainer_join_email",
+      "target": "assets_netqwix_logo_netqwix_logo",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/trainer-join.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainer_welcome_trainer_welcome_email",
+      "target": "assets_netqwix_logo_netqwix_logo",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/trainer-welcome.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_approved_verification_approved_email",
+      "target": "assets_netqwix_logo_netqwix_logo",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/verification-approved.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_rejected_verification_rejected_email",
+      "target": "assets_netqwix_logo_netqwix_logo",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/verification-rejected.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_submitted_admin_verification_submitted_admin_email",
+      "target": "assets_netqwix_logo_netqwix_logo",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/verification-submitted-admin.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_submitted_user_verification_submitted_user_email",
+      "target": "assets_netqwix_logo_netqwix_logo",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/templates/verification-submitted-user.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_trainer_join_trainer_join_email",
+      "target": "templates_trainer_welcome_trainer_welcome_email",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "src/templates/trainer-join.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_submitted_admin_verification_submitted_admin_email",
+      "target": "templates_verification_submitted_user_verification_submitted_user_email",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/verification-submitted-admin.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_submitted_user_verification_submitted_user_email",
+      "target": "templates_verification_approved_verification_approved_email",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "src/templates/verification-submitted-user.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "templates_verification_submitted_user_verification_submitted_user_email",
+      "target": "templates_verification_rejected_verification_rejected_email",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "src/templates/verification-submitted-user.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "concept_trainer_verification_flow",
+      "target": "concept_trainer_onboarding_flow",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates/verification-approved.html",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "session_booking_flow",
+      "label": "Session Booking Email Flow",
+      "nodes": [
+        "templates_session_booking_trainee_session_booking_trainee_email",
+        "templates_session_booking_trainer_session_booking_trainer_email",
+        "templates_payment_confirmation_payment_confirmation_email",
+        "templates_meeting_confirmed_meeting_confirmed_email",
+        "templates_session_confirmation_session_confirmation_email",
+        "templates_before_meeting_before_meeting_email",
+        "templates_5_min_remainder_5_min_reminder_email",
+        "templates_meeting_ended_meeting_ended_email"
+      ],
+      "relation": "participate_in",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates"
+    },
+    {
+      "id": "referral_email_group",
+      "label": "Referral Email Templates",
+      "nodes": [
+        "templates_refer_expert_refer_expert_email",
+        "templates_refer_friend_refer_friend_email",
+        "templates_refer_trainee_refer_trainee_email",
+        "templates_clip_shared_new_user_clip_shared_new_user_email"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates"
+    },
+    {
+      "id": "onboarding_email_group",
+      "label": "Onboarding Email Templates",
+      "nodes": [
+        "templates_register_register_email",
+        "templates_trainee_welcome_trainee_welcome_email",
+        "templates_trainee_join_trainee_join_email",
+        "templates_new_trainee_new_trainee_email",
+        "templates_new_trainer_new_trainer_email"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "src/templates"
+    },
+    {
+      "id": "session_reminder_group",
+      "label": "Session Reminder Email Templates",
+      "nodes": [
+        "templates_before_meeting_before_meeting_email",
+        "templates_5_min_remainder_5_min_reminder_email"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "src/templates"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}
