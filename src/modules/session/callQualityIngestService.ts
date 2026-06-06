@@ -20,10 +20,11 @@ export type CallQualityIngestInput = {
 export async function ingestCallQualityStats(input: CallQualityIngestInput): Promise<void> {
   const normalized = normalizeCallQualityStatsPayload(input.payload);
   const { role, stats } = (input.payload as Record<string, unknown>) || {};
+  const statsObj = stats as Record<string, unknown> | undefined;
   const sessionId = String(
     (input.payload as { sessionId?: string })?.sessionId ?? normalized?.sessionId ?? ""
   ).trim();
-  if (!sessionId || !stats?.quality) return;
+  if (!sessionId || !(statsObj as any)?.quality) return;
 
   if (input.userId && Math.random() < CALL_QUALITY_DB_SAMPLE_RATE) {
     try {
@@ -44,8 +45,8 @@ export async function ingestCallQualityStats(input: CallQualityIngestInput): Pro
     logCallQualityOps({
       sessionId: String(sessionId),
       userId: String(input.userId),
-      stats,
-      role,
+      stats: statsObj as { quality?: { overallScore?: number } } | undefined,
+      role: role as string | undefined,
     });
 
     const qualityRole =

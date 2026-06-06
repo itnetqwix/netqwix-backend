@@ -5,6 +5,7 @@ import { ResponseBuilder } from "../../helpers/responseBuilder";
 import { checkChatPolicy, getChatPolicyInfo } from "./chatPolicy";
 import { EVENTS } from "../../config/constance";
 import { getChatSocketEmitter, emitChatMessage, emitChatDelivered } from "./socketEmitter";
+import { isUserOnline } from "../socket/socket.service";
 
 export class ChatService {
   private async assertAllFriends(

@@ -3,8 +3,7 @@
  */
 
 import { Request, Response } from "express";
-import { CONSTANCE } from "../../config/constance";
-import { Message } from "../../enum/message.enum";
+import { CONSTANCE, Message } from "../../config/constance";
 import { sessionDetailService } from "./sessionDetailService";
 
 export class SessionReadController {
