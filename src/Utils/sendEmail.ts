@@ -112,7 +112,8 @@ export class SendEmail {
     const data = fs.readFileSync(filePath);
     let html = data.toString();
     keys(replaceData).forEach((key) => {
-      html = html.replace(key, replaceData[key]);
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      html = html.replace(new RegExp(escapedKey, 'g'), replaceData[key]);
     });
     return html;
   };
