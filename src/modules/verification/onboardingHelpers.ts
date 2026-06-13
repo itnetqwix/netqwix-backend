@@ -54,7 +54,7 @@ export function hasTrainerFullAccess(u: any): boolean {
 
 export function isOnboardingRequired(u: any): boolean {
   if (!isTrainer(u)) return false;
-  if (u?.status === "rejected") return false;
+  if (u?.status === "rejected") return true;
   if (hasTrainerFullAccess(u)) return false;
 
   const tv = getTrainerVerification(u);
@@ -138,7 +138,10 @@ export const ONBOARDING_ALLOWED_PATH_PREFIXES = [
   "/user/me",
   "/master/",
   "/common/",
-  "/clips/",
+  "/clips/account/reapply",
+  "/common/update-profile-picture",
+  "/storage/",
+  "/trainer/profile",
 ];
 
 export function isOnboardingWhitelistedPath(path: string, originalUrl?: string): boolean {

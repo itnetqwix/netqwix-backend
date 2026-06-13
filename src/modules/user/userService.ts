@@ -1706,11 +1706,36 @@ export class UserService {
       }
       const trainer = await user.findByIdAndUpdate(
         trainerId,
-        { status: status },
+        {
+          $set: {
+            status: status,
+            ...(status === "approved"
+              ? {
+                  "trainer_verification.onboarding_step": "completed",
+                  "trainer_verification.rejection_reason": "",
+                }
+              : status === "rejected"
+                ? {
+                    "trainer_verification.onboarding_step": "profile_face_complete",
+                  }
+                : {}),
+          },
+        },
         { new: true }
       );
       if (!trainer) {
         return ResponseBuilder.badRequest("Trainer not found");
+      }
+      if (status === "approved") {
+        const { logVerificationAudit } = await import(
+          "../verification/verificationAudit"
+        );
+        await logVerificationAudit(
+          trainerId,
+          "admin_approved_legacy",
+          { via: "update-trainer-status" },
+          authUser?._id?.toString()
+        );
       }
       return ResponseBuilder.data({
         code: 200,

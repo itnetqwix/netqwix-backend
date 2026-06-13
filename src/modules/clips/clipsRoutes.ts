@@ -45,6 +45,8 @@ export function mountAdminClipRoutes(adminRouter: Router) {
   adminRouter.post("/library-submissions/:id/approve", c.adminApproveSubmission);
   adminRouter.post("/library-submissions/:id/reject", c.adminRejectSubmission);
 
+  adminRouter.get("/trainee-accounts/pending", c.adminListPendingTrainees);
+  adminRouter.get("/trainee-accounts/pending-count", c.adminPendingTraineeCount);
   adminRouter.post("/trainee-accounts/:userId/reject", c.adminRejectTrainee);
   adminRouter.post("/trainee-accounts/:userId/approve", c.adminApproveTrainee);
 }

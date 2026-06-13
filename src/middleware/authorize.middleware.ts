@@ -4,6 +4,11 @@ import * as l10n from "jm-ez-l10n";
 import JWT from "../Utils/jwt";
 import user from "../model/user.schema";
 import {
+  buildAccountRestrictedPayload,
+  isAccountAccessRestricted,
+  isAccountStatusWhitelistedPath,
+} from "../modules/verification/accountStatusGate";
+import {
   buildOnboardingStatus,
   isOnboardingRequired,
   isOnboardingWhitelistedPath,
@@ -38,6 +43,24 @@ export class AuthorizeMiddleware {
               req.authUser = result;
               const path = req.path || req.url || "";
               const originalUrl = req.originalUrl || "";
+
+              if (
+                isAccountAccessRestricted(result) &&
+                !isAccountStatusWhitelistedPath(path, originalUrl)
+              ) {
+                const restricted = buildAccountRestrictedPayload(result);
+                return res.status(403).json({
+                  status: CONSTANCE.FAIL,
+                  error:
+                    restricted.code === "ACCOUNT_REJECTED"
+                      ? "Account access restricted"
+                      : "Account pending review",
+                  code: restricted.code,
+                  account: restricted,
+                  onboarding: buildOnboardingStatus(result),
+                });
+              }
+
               if (
                 isOnboardingRequired(result) &&
                 !isOnboardingWhitelistedPath(path, originalUrl)

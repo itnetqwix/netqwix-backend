@@ -46,7 +46,9 @@ export async function ensureTrainerGracePeriod(userId: string): Promise<void> {
     u.status === "pending" &&
     ageHours < 48 &&
     !tv.submitted_for_review_at &&
-    (tv.onboarding_step === "account_created" || !tv.onboarding_step);
+    (tv.onboarding_step === "account_created" ||
+      tv.onboarding_step === "contact_verified" ||
+      !tv.onboarding_step);
 
   if (isBrandNewTrainerSignup) return;
 

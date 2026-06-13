@@ -316,8 +316,36 @@ export class ClipsController {
     const denied = assertAdminUser(req.authUser);
     if (denied) return res.status(403).json({ success: 0, message: denied });
     try {
-      const data = await traineeAccountReviewService.approveTrainee(req.params.userId);
+      const data = await traineeAccountReviewService.approveTrainee(
+        req.params.userId,
+        String(req.authUser._id)
+      );
       return res.status(CONSTANCE.RES_CODE.success).json({ success: 1, data });
+    } catch (err: any) {
+      return res.status(400).json({ success: 0, message: err?.message });
+    }
+  };
+
+  adminListPendingTrainees = async (req: any, res: Response) => {
+    const denied = assertAdminUser(req.authUser);
+    if (denied) return res.status(403).json({ success: 0, message: denied });
+    try {
+      const data = await traineeAccountReviewService.listPending(req.query as Record<string, unknown>);
+      return res.status(CONSTANCE.RES_CODE.success).json({ success: 1, data });
+    } catch (err: any) {
+      return res.status(400).json({ success: 0, message: err?.message });
+    }
+  };
+
+  adminPendingTraineeCount = async (_req: any, res: Response) => {
+    const denied = assertAdminUser(_req.authUser);
+    if (denied) return res.status(403).json({ success: 0, message: denied });
+    try {
+      const data = await traineeAccountReviewService.listPending({ limit: 1 });
+      return res.status(CONSTANCE.RES_CODE.success).json({
+        success: 1,
+        data: { total: data.total },
+      });
     } catch (err: any) {
       return res.status(400).json({ success: 0, message: err?.message });
     }

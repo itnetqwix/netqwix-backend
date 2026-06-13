@@ -10,6 +10,7 @@ import { ensureTrainerGracePeriod } from "./gracePeriod";
 import { rekognitionLivenessService } from "./rekognitionLivenessService";
 import { logVerificationAudit } from "./verificationAudit";
 import { recordOpsEvent } from "../ops/opsEventService";
+import { verificationEmailPlaceholders } from "./emailPlaceholders";
 
 export class OnboardingService {
   async getStatus(userId: string) {
@@ -118,10 +119,7 @@ export class OnboardingService {
     const frontend = VERIFICATION_CONFIG.frontendUrl;
     SendEmail.sendRawEmail(
       "verification-submitted-user",
-      {
-        "[NAME]": u.fullname,
-        "[FRONTEND_URL]": frontend,
-      },
+      verificationEmailPlaceholders({ name: u.fullname, frontendUrl: frontend }),
       [u.email],
       "Your NetQwix trainer application was received",
       `Hi ${u.fullname}, we received your verification. Our team will review within 48 hours.`
@@ -133,12 +131,13 @@ export class OnboardingService {
         (VERIFICATION_CONFIG.adminFrontendUrl || frontend) + "/apps/trainer-verifications";
       SendEmail.sendRawEmail(
         "verification-submitted-admin",
-        {
-          "[TRAINER_NAME]": u.fullname,
-          "[EMAIL]": u.email,
-          "[PHONE]": u.mobile_no || "",
-          "[ADMIN_URL]": adminUrl,
-        },
+        verificationEmailPlaceholders({
+          name: u.fullname,
+          frontendUrl: frontend,
+          email: u.email,
+          phone: u.mobile_no || "",
+          adminUrl,
+        }),
         adminEmails,
         `Trainer verification ready for review: ${u.fullname}`,
         `Review ${u.fullname} at ${adminUrl}`

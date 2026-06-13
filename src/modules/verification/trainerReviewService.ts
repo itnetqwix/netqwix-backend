@@ -6,6 +6,25 @@ import { VERIFICATION_CONFIG } from "../../config/verification";
 import { rekognitionLivenessService } from "./rekognitionLivenessService";
 import { logVerificationAudit } from "./verificationAudit";
 import { recordOpsEvent } from "../ops/opsEventService";
+import { verificationEmailPlaceholders } from "./emailPlaceholders";
+
+async function sendVerificationPush(
+  userId: string,
+  title: string,
+  body: string,
+  data?: Record<string, unknown>
+) {
+  try {
+    const { notificationsService } = await import("../notifications/notificationsService");
+    const push = new notificationsService();
+    await push.sendPushNotification(userId, title, body, {
+      category: "account_verification",
+      ...data,
+    });
+  } catch (e) {
+    console.error("[trainerReview] push failed", e);
+  }
+}
 
 export class TrainerReviewService {
   async list(query: Record<string, unknown> = {}) {
@@ -62,12 +81,19 @@ export class TrainerReviewService {
     if (!u) throw new Error("User not found");
 
     await logVerificationAudit(userId, "admin_approved", {}, adminId);
+    const frontend = VERIFICATION_CONFIG.frontendUrl;
     SendEmail.sendRawEmail(
       "verification-approved",
-      { "[NAME]": u.fullname, "[FRONTEND_URL]": VERIFICATION_CONFIG.frontendUrl },
+      verificationEmailPlaceholders({ name: u.fullname, frontendUrl: frontend }),
       [u.email],
       "Your NetQwix trainer account is approved",
       `Congratulations ${u.fullname}, you can now access NetQwix.`
+    );
+    await sendVerificationPush(
+      String(u._id),
+      "Account approved",
+      "Your NetQwix trainer account is approved. You can start coaching.",
+      { kind: "verification_approved" }
     );
     return u;
   }
@@ -76,18 +102,21 @@ export class TrainerReviewService {
     const u = await user.findById(userId);
     if (!u) throw new Error("User not found");
     if (u.status !== "rejected") throw new Error("Account is not in rejected state");
-    return user.findByIdAndUpdate(
+    const updated = await user.findByIdAndUpdate(
       userId,
       {
         $set: {
           status: "pending",
           "trainer_verification.rejection_reason": "",
-          "trainer_verification.onboarding_step": "under_review",
-          "trainer_verification.submitted_for_review_at": new Date(),
+          "trainer_verification.onboarding_step": "profile_face_complete",
+          "trainer_verification.submitted_for_review_at": null,
+          "trainer_verification.face.submitted_at": null,
         },
       },
       { new: true }
     );
+    await logVerificationAudit(userId, "user_reapplied", { requires_new_face: true });
+    return updated;
   }
 
   async reject(userId: string, adminId: string, reason: string) {
@@ -106,12 +135,23 @@ export class TrainerReviewService {
     if (!u) throw new Error("User not found");
 
     await logVerificationAudit(userId, "admin_rejected", { reason }, adminId);
+    const frontend = VERIFICATION_CONFIG.frontendUrl;
     SendEmail.sendRawEmail(
       "verification-rejected",
-      { "[NAME]": u.fullname, "[REASON]": reason, "[FRONTEND_URL]": VERIFICATION_CONFIG.frontendUrl },
+      verificationEmailPlaceholders({
+        name: u.fullname,
+        frontendUrl: frontend,
+        reason: reason.trim(),
+      }),
       [u.email],
       "Update on your NetQwix trainer application",
       `Hi ${u.fullname}, we could not approve your application: ${reason}`
+    );
+    await sendVerificationPush(
+      String(u._id),
+      "Application update",
+      "Your trainer application needs attention. Open the app to review and resubmit.",
+      { kind: "verification_rejected" }
     );
     return u;
   }
