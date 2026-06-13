@@ -292,19 +292,24 @@ export class ClipConfirmService {
         const templateName = data.isNewUser ? "clip-shared-new-user" : "clip-shared";
         const isSingleVideo = data.thumbnails.length === 1;
         let thumbnailsGridHTML = "";
+        const lockerUrl = `${process.env.FRONTEND_URL_SMS || "https://netqwix.com"}/dashboard`;
         if (isSingleVideo) {
           const video = data.thumbnails[0];
           thumbnailsGridHTML = `
-            <img src="${video.url}" alt="Video Thumbnail" style="width:100%; max-width: 200px; border: 1px solid #ddd; border-radius: 4px;"/>
-            <div style="margin-top: 5px; font-size: 14px; font-weight: bold;">${video.title}</div>
+            <a href="${lockerUrl}" target="_blank" style="text-decoration:none;">
+              <img src="${video.url}" alt="${video.title}" style="width:100%;max-width:220px;border:2px solid #000080;border-radius:8px;display:block;margin:0 auto;"/>
+              <div style="margin-top:8px;font-size:13px;font-weight:700;color:#1a1a2e;text-align:center;">${video.title}</div>
+            </a>
           `;
         } else {
           thumbnailsGridHTML = data.thumbnails
             .map(
               (video, index) => `
-            <td style="padding: 7px; vertical-align: top; width: 50%;">
-              <img src="${video.url}" alt="Video Thumbnail" style="width:100%; max-width: 200px; border: 1px solid #ddd; border-radius: 4px;"/>
-              <div style="margin-top: 5px; font-size: 14px; font-weight: bold;">${video.title}</div>
+            <td style="padding:8px;vertical-align:top;width:50%;">
+              <a href="${lockerUrl}" target="_blank" style="text-decoration:none;">
+                <img src="${video.url}" alt="${video.title}" style="width:100%;max-width:200px;border:2px solid #000080;border-radius:8px;display:block;"/>
+                <div style="margin-top:6px;font-size:12px;font-weight:700;color:#1a1a2e;text-align:center;">${video.title}</div>
+              </a>
             </td>
             ${(index + 1) % 2 === 0 ? "</tr><tr>" : ""}
           `
@@ -324,6 +329,7 @@ export class ClipConfirmService {
             </table></div>`
             : "";
 
+        const recipientName = (userData as any).fullname ?? "";
         await SendEmail.sendRawEmail(
           templateName,
           {
@@ -331,6 +337,11 @@ export class ClipConfirmService {
             "[TRAINER/TRAINEE NAME2]": authUser.fullname,
             "[DISPLAY_SINGLE]": displaySingle,
             "[DISPLAY_MULTIPLE]": displayMultiple,
+            "{FIRSTNAME1}": authUser.fullname.split(" ")[0] || authUser.fullname,
+            "{FIRSTNAME2}": recipientName.split(" ")[0] || "there",
+            "{FULLNAME1}": authUser.fullname,
+            "{FULLNAME2}": recipientName,
+            "{SHARER_NAME}": authUser.fullname,
           },
           [userData.email],
           `Your friend ${authUser.fullname} has shared ${data.thumbnails.length} video(s) in your NetQwix Locker!`
