@@ -4,6 +4,7 @@ import { BOOKED_SESSIONS_STATUS } from "../config/constance";
 import booked_session from "../model/booked_sessions.schema";
 import booking_reminder_log from "../model/booking_reminder_log.schema";
 import { NotificationsService } from "../modules/notifications/notificationsService";
+import { SendEmail } from "../Utils/sendEmail";
 
 const logger = log.getLogger();
 const pushService = new NotificationsService();
