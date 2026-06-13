@@ -56,6 +56,7 @@ export type JoinPolicyInput = {
   join_deadline_at?: unknown;
   start_time?: unknown;
   end_time?: unknown;
+  actual_end_at?: unknown;
   both_joined_at?: unknown;
   first_joined_at?: unknown;
 };
@@ -85,6 +86,15 @@ export function computeJoinPolicy(
   now = new Date()
 ): JoinPolicy {
   const nowMs = now.getTime();
+
+  const actualEndMs = toMs(input.actual_end_at);
+  if (actualEndMs != null && nowMs > actualEndMs) {
+    return {
+      can_join: false,
+      block_reason: "This session has ended.",
+      join_code: LIVE_LESSON_ERROR.SESSION_ENDED,
+    };
+  }
 
   if (cancelled(input.status)) {
     return {

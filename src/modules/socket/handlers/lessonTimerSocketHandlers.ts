@@ -13,6 +13,7 @@ import { clearInstantLessonTimers } from "../../../helpers/instantLessonExpiry";
 import {
   clearLessonTimeouts,
   emitLessonStateSync,
+  endLessonEarly,
   getIo,
   lessonRoomEmit,
   lessonSessionsGet,
@@ -299,5 +300,17 @@ export function registerLessonTimerSocketHandlers(socket: any): void {
     });
     emitLessonStateSync(socket, roomName, session);
     scheduleLessonEnd(socket, roomName, session);
+  });
+
+  socket.on(EVENTS.LESSON_TIMER.END_EARLY_REQUEST, async ({ sessionId }) => {
+    if (!sessionId || !mongoose.isValidObjectId(sessionId)) return;
+    const userId = socketAttachedUserId(socket);
+    if (!userId) return;
+
+    const { assertSessionParticipant } = require("../../helpers/chatBlockCheck");
+    const allowed = await assertSessionParticipant(String(sessionId), String(userId));
+    if (!allowed) return;
+
+    await endLessonEarly(String(sessionId), { reason: "participant_hangup" });
   });
 }

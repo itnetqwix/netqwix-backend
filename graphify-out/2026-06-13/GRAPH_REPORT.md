@@ -1,16 +1,16 @@
-# Graph Report - nq-backend-main  (2026-06-13)
+# Graph Report - nq-backend-main  (2026-06-06)
 
 ## Corpus Check
-- 718 files · ~723,821 words
+- 715 files · ~722,085 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3702 nodes · 7638 edges · 310 communities (241 shown, 69 thin omitted)
-- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 201 edges (avg confidence: 0.82)
+- 3690 nodes · 7574 edges · 313 communities (237 shown, 76 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 200 edges (avg confidence: 0.82)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `140384ed`
+- Built from commit: `40e522a3`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -65,6 +65,7 @@
 - [[_COMMUNITY_Services Ai Service|Services Ai Service]]
 - [[_COMMUNITY_Auth Authservice|Auth Authservice]]
 - [[_COMMUNITY_Auth Totp|Auth Totp]]
+- [[_COMMUNITY_Common Chatmediapendingstore|Common Chatmediapendingstore]]
 - [[_COMMUNITY_Helpers Instantlessonexpiry|Helpers Instantlessonexpiry]]
 - [[_COMMUNITY_Session Lessonlivestatestore|Session Lessonlivestatestore]]
 - [[_COMMUNITY_Verification Contactverificationsync|Verification Contactverificationsync]]
@@ -99,28 +100,41 @@
 - [[_COMMUNITY_Services Cacheservice|Services Cacheservice]]
 - [[_COMMUNITY_Banners Bannerscontroller Listactivebanners|Banners Bannerscontroller Listactivebanners]]
 - [[_COMMUNITY_Clips Clipshareservice Clipshareservice|Clips Clipshareservice Clipshareservice]]
+- [[_COMMUNITY_Common Chatmediapendingstore Clearallpendingchatmediafordev|Common Chatmediapendingstore Clearallpendingchatmediafordev]]
+- [[_COMMUNITY_Queues Bookingreminderqueue|Queues Bookingreminderqueue]]
 - [[_COMMUNITY_Assets NetQwix Logo|Assets NetQwix Logo]]
+- [[_COMMUNITY_Bootstrap Redisbootstrap|Bootstrap Redisbootstrap]]
+- [[_COMMUNITY_Clips Cliplibrarysubmissionservice|Clips Cliplibrarysubmissionservice]]
 - [[_COMMUNITY_Cms Cmsnotify Notifycmsupdated|Cms Cmsnotify Notifycmsupdated]]
 - [[_COMMUNITY_Config Constance Accounttype|Config Constance Accounttype]]
 - [[_COMMUNITY_Http Sendresponse|Http Sendresponse]]
 - [[_COMMUNITY_Ai Aibusinessservice|Ai Aibusinessservice]]
+- [[_COMMUNITY_Lib Structuredlog|Lib Structuredlog]]
 - [[_COMMUNITY_Socket Lessontimerstore|Socket Lessontimerstore]]
+- [[_COMMUNITY_Model Trainee Favorite|Model Trainee Favorite]]
 - [[_COMMUNITY_Notifications Notificationsservice|Notifications Notificationsservice]]
+- [[_COMMUNITY_Bootstrap Sentry|Bootstrap Sentry]]
 - [[_COMMUNITY_Checkout Checkouthookregistry|Checkout Checkouthookregistry]]
 - [[_COMMUNITY_Helpers Error Failure|Helpers Error Failure]]
 - [[_COMMUNITY_Services Whatsapp Service|Services Whatsapp Service]]
 - [[_COMMUNITY_Trainer Traineenudgeservice|Trainer Traineenudgeservice]]
+- [[_COMMUNITY_Broadcast Broadcastcontroller|Broadcast Broadcastcontroller]]
 - [[_COMMUNITY_User Accountdeletionservice Accountdeletionservice|User Accountdeletionservice Accountdeletionservice]]
 - [[_COMMUNITY_Model Clip Share|Model Clip Share]]
 - [[_COMMUNITY_Model Cms Faq|Model Cms Faq]]
+- [[_COMMUNITY_Points Pointscontroller|Points Pointscontroller]]
+- [[_COMMUNITY_Utils Database|Utils Database]]
 - [[_COMMUNITY_Wallet Payoutservice Payoutservice|Wallet Payoutservice Payoutservice]]
 - [[_COMMUNITY_Auth Appletokenverify|Auth Appletokenverify]]
 - [[_COMMUNITY_Model Pricing Config|Model Pricing Config]]
 - [[_COMMUNITY_Model Trainer Review|Model Trainer Review]]
+- [[_COMMUNITY_Points Pointsactivityhooks|Points Pointsactivityhooks]]
+- [[_COMMUNITY_Referral Referraladminservice Referraladminservice|Referral Referraladminservice Referraladminservice]]
 - [[_COMMUNITY_Robustness Ledgerkeys|Robustness Ledgerkeys]]
 - [[_COMMUNITY_Robustness Signalingpayload|Robustness Signalingpayload]]
 - [[_COMMUNITY_Wallet Releaseservice Releaseservice|Wallet Releaseservice Releaseservice]]
 - [[_COMMUNITY_Booking Trainerslotsservice|Booking Trainerslotsservice]]
+- [[_COMMUNITY_Model Cms Legal|Model Cms Legal]]
 - [[_COMMUNITY_Model Cms Page|Model Cms Page]]
 - [[_COMMUNITY_Report Report Schema|Report Report Schema]]
 - [[_COMMUNITY_Robustness Chatdedupe|Robustness Chatdedupe]]
@@ -131,10 +145,14 @@
 - [[_COMMUNITY_Auth Authroutes Authroute|Auth Authroutes Authroute]]
 - [[_COMMUNITY_Banners Bannersroutes Bannersroute|Banners Bannersroutes Bannersroute]]
 - [[_COMMUNITY_Broadcast Broadcastroutes Broadcastroute|Broadcast Broadcastroutes Broadcastroute]]
+- [[_COMMUNITY_Clips Clipsroutes Clipsroute|Clips Clipsroutes Clipsroute]]
+- [[_COMMUNITY_Cms Cmsroutes Cmsroute|Cms Cmsroutes Cmsroute]]
 - [[_COMMUNITY_Common Commonroutes Commonroute|Common Commonroutes Commonroute]]
 - [[_COMMUNITY_Master Masterroutes Masterroute|Master Masterroutes Masterroute]]
 - [[_COMMUNITY_Notifications Notificationsroutes Notificationroute|Notifications Notificationsroutes Notificationroute]]
 - [[_COMMUNITY_Ops Opsroutes Opsroute|Ops Opsroutes Opsroute]]
+- [[_COMMUNITY_Payments Pricingroutes Paymentsroute|Payments Pricingroutes Paymentsroute]]
+- [[_COMMUNITY_Points Pointsroutes Pointsroute|Points Pointsroutes Pointsroute]]
 - [[_COMMUNITY_Promo Code Promocoderoutes|Promo Code Promocoderoutes]]
 - [[_COMMUNITY_Referral Referralroutes Referralroute|Referral Referralroutes Referralroute]]
 - [[_COMMUNITY_Report Reportroutes Reportroute|Report Reportroutes Reportroute]]
@@ -142,6 +160,7 @@
 - [[_COMMUNITY_Tips Tipsroutes Tipsroute|Tips Tipsroutes Tipsroute]]
 - [[_COMMUNITY_Trainee Traineeroute Traineeroute|Trainee Traineeroute Traineeroute]]
 - [[_COMMUNITY_Trainer Trainerroutes Trainerroute|Trainer Trainerroutes Trainerroute]]
+- [[_COMMUNITY_Transaction Transactionroutes Transactionroute|Transaction Transactionroutes Transactionroute]]
 - [[_COMMUNITY_User Userroutes Userroute|User Userroutes Userroute]]
 - [[_COMMUNITY_Verification Verificationroutes Verificationroute|Verification Verificationroutes Verificationroute]]
 - [[_COMMUNITY_Wallet Walletroutes Walletroute|Wallet Walletroutes Walletroute]]
@@ -153,14 +172,17 @@
 - [[_COMMUNITY_Community 156|Community 156]]
 - [[_COMMUNITY_Community 157|Community 157]]
 - [[_COMMUNITY_Community 158|Community 158]]
+- [[_COMMUNITY_Community 159|Community 159]]
 - [[_COMMUNITY_Community 160|Community 160]]
 - [[_COMMUNITY_Community 161|Community 161]]
 - [[_COMMUNITY_Community 162|Community 162]]
 - [[_COMMUNITY_Community 163|Community 163]]
 - [[_COMMUNITY_Community 164|Community 164]]
 - [[_COMMUNITY_Community 165|Community 165]]
+- [[_COMMUNITY_Community 166|Community 166]]
 - [[_COMMUNITY_Community 167|Community 167]]
 - [[_COMMUNITY_Community 169|Community 169]]
+- [[_COMMUNITY_Community 170|Community 170]]
 - [[_COMMUNITY_Community 171|Community 171]]
 - [[_COMMUNITY_Community 172|Community 172]]
 - [[_COMMUNITY_Community 173|Community 173]]
@@ -168,6 +190,7 @@
 - [[_COMMUNITY_Community 175|Community 175]]
 - [[_COMMUNITY_Community 176|Community 176]]
 - [[_COMMUNITY_Community 177|Community 177]]
+- [[_COMMUNITY_Community 178|Community 178]]
 - [[_COMMUNITY_Community 179|Community 179]]
 - [[_COMMUNITY_Community 180|Community 180]]
 - [[_COMMUNITY_Community 181|Community 181]]
@@ -180,6 +203,7 @@
 - [[_COMMUNITY_Community 189|Community 189]]
 - [[_COMMUNITY_Community 190|Community 190]]
 - [[_COMMUNITY_Community 191|Community 191]]
+- [[_COMMUNITY_Community 192|Community 192]]
 - [[_COMMUNITY_Community 194|Community 194]]
 - [[_COMMUNITY_Community 195|Community 195]]
 - [[_COMMUNITY_Community 196|Community 196]]
@@ -207,7 +231,9 @@
 - [[_COMMUNITY_Community 221|Community 221]]
 - [[_COMMUNITY_Community 223|Community 223]]
 - [[_COMMUNITY_Community 224|Community 224]]
+- [[_COMMUNITY_Community 225|Community 225]]
 - [[_COMMUNITY_Community 226|Community 226]]
+- [[_COMMUNITY_Community 227|Community 227]]
 - [[_COMMUNITY_Community 228|Community 228]]
 - [[_COMMUNITY_Community 230|Community 230]]
 - [[_COMMUNITY_Community 231|Community 231]]
@@ -232,12 +258,13 @@
 - [[_COMMUNITY_Community 279|Community 279]]
 - [[_COMMUNITY_Community 280|Community 280]]
 - [[_COMMUNITY_Community 302|Community 302]]
+- [[_COMMUNITY_Community 303|Community 303]]
 - [[_COMMUNITY_Community 306|Community 306]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `ResponseBuilder` - 189 edges
 2. `CONSTANCE` - 61 edges
-3. `AccountType` - 50 edges
+3. `AccountType` - 49 edges
 4. `log` - 48 edges
 5. `isRedisEnabled()` - 44 edges
 6. `UserService` - 43 edges
@@ -247,10 +274,10 @@
 10. `ChatService` - 29 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Customizer()` --calls--> `useSettings()`  [INFERRED]
-  nq-admin-frontend/src/@core/components/customizer/index.js → nq-admin-frontend/src/@core/hooks/useSettings.js
 - `GlobalStyles()` --calls--> `useSettings()`  [INFERRED]
   nq-admin-frontend/src/@core/theme/globalStyles.js → nq-admin-frontend/src/@core/hooks/useSettings.js
+- `Navigation()` --calls--> `themeOptions()`  [INFERRED]
+  nq-admin-frontend/src/@core/layouts/components/vertical/navigation/index.js → nq-admin-frontend/src/@core/theme/ThemeOptions.js
 - `AddEditCommision()` --calls--> `useCommon()`  [INFERRED]
   nq-admin-frontend/src/pages/components/add-edit-commision/index.js → nq-admin-frontend/src/hooks/useCommon.js
 - `handleSocketEvents()` --calls--> `registerChatSocketHandlers()`  [INFERRED]
@@ -267,79 +294,79 @@
 - **Onboarding Email Templates** — templates_register_register_email, templates_trainee_welcome_trainee_welcome_email, templates_trainee_join_trainee_join_email, templates_new_trainee_new_trainee_email, templates_new_trainer_new_trainer_email [INFERRED 0.85]
 - **Session Reminder Email Templates** — templates_before_meeting_before_meeting_email, templates_5_min_remainder_5_min_reminder_email [INFERRED 0.95]
 
-## Communities (310 total, 69 thin omitted)
+## Communities (313 total, 76 thin omitted)
 
 ### Community 0 - "Auth & Login Rate Limiting"
-Cohesion: 0.05
-Nodes (33): AuthSessionListItem, AuthSessionService, hashToken(), IssuedAuthSession, newPublicId(), AuthTokenBundle, buildAuthTokenBundle(), sendAuthTokenSuccess() (+25 more)
+Cohesion: 0.07
+Nodes (23): authController, loginAttemptStore, AuthService, AuthSessionListItem, AuthSessionService, hashToken(), IssuedAuthSession, newPublicId() (+15 more)
 
 ### Community 1 - "2FA & Storage Plans"
 Cohesion: 0.07
-Nodes (49): base32Decode(), base32Encode(), buildOtpAuthUrl(), decryptSecret(), encryptSecret(), generateHotp(), generateTotp(), generateTotpSecret() (+41 more)
+Nodes (48): base32Decode(), base32Encode(), buildOtpAuthUrl(), decryptSecret(), encryptSecret(), generateHotp(), generateTotp(), generateTotpSecret() (+40 more)
 
 ### Community 2 - "Ops Configuration"
-Cohesion: 0.14
-Nodes (14): CLIENT_ALLOWED_EVENT_TYPES, OPS_CATEGORIES, OPS_RESOLUTION_STATUSES, OPS_SEVERITIES, OpsCategory, OpsSeverity, opsEventSchema, suggestedActionSchema (+6 more)
+Cohesion: 0.18
+Nodes (11): CLIENT_ALLOWED_EVENT_TYPES, OPS_CATEGORIES, OPS_RESOLUTION_STATUSES, OPS_SEVERITIES, OpsCategory, OpsSeverity, RecordOpsEventInput, ingestRate (+3 more)
 
 ### Community 3 - "AI Business Services"
-Cohesion: 0.04
-Nodes (15): AIBusinessService, aiService, POISONED_ASSISTANT_SNIPPETS, sanitizeChatMessages(), ChatService, emitChatDelivered(), emitChatMessage(), getChatSocketEmitter() (+7 more)
+Cohesion: 0.07
+Nodes (6): ResponseBuilder, NotificationsService, TrainerNotesService, TrainerService, AccountDeletionService, HibernationService
 
 ### Community 4 - "Pricing & Commission"
 Cohesion: 0.08
-Nodes (39): CA_PM_FEES, CA_PROVINCE_TAX_RATES, DEFAULT_PRICING_CONFIG, defaultPaymentMethodHint(), PaymentMethodFee, PricingConfigDoc, PricingProductType, PricingRegion (+31 more)
+Nodes (39): PricingAdminController, CA_PM_FEES, CA_PROVINCE_TAX_RATES, DEFAULT_PRICING_CONFIG, defaultPaymentMethodHint(), PaymentMethodFee, PricingConfigDoc, PricingProductType (+31 more)
 
 ### Community 5 - "Clips Library Service"
-Cohesion: 0.08
-Nodes (12): adminLibraryKey(), ClipLibraryAdminService, ACTIVE_CLIP, ClipLibrarySubmissionService, OPEN_STATUSES, ClipListService, ensureClipTaxonomySeeded(), slugify() (+4 more)
+Cohesion: 0.16
+Nodes (6): ensureClipTaxonomySeeded(), slugify(), ClipTaxonomyService, slugify(), clip_category, clipCategorySchema
 
 ### Community 6 - "Translations & i18n"
 Cohesion: 0.04
 Nodes (47): CRICKET, PLAYER, DATA_NOT_FOUND, ERR_INTERNAL_SERVER, ERR_TERMS_PRIVACY_REQUIRED, ERR_UNAUTH, ERR_USER_DOESNT_EXIST, ERR_USER_PROFILE_EXIST (+39 more)
 
 ### Community 7 - "Scheduled Booking"
-Cohesion: 0.07
-Nodes (29): PAYMENT_METHODS, resolveScheduledUtcWindow(), ScheduledBookPayloadInput, validateScheduledBookPayload(), validateScheduledBookWindow(), ValidationFail, ValidationOk, ValidationResult (+21 more)
+Cohesion: 0.09
+Nodes (20): CHECKOUT_ERROR, CheckoutErrorCode, DEFAULT_HTTP, DomainError, DomainErrorCode, isDomainError(), cancelled(), computeJoinPolicy() (+12 more)
 
 ### Community 8 - "Live Lesson Call Handlers"
-Cohesion: 0.08
-Nodes (58): chunks, registerInCallMediaSyncHandlers(), relayToSessionRoomOrPeer(), processOnCallJoin(), registerLessonTimerSocketHandlers(), registerWebrtcRelayHandlers(), touchUserPresence(), saved_session (+50 more)
+Cohesion: 0.09
+Nodes (50): EVENTS, chunks, registerInCallMediaSyncHandlers(), relayToSessionRoomOrPeer(), processOnCallJoin(), registerLessonTimerSocketHandlers(), registerWebrtcRelayHandlers(), touchUserPresence() (+42 more)
 
 ### Community 9 - "Wallet & Ledger Config"
 Cohesion: 0.12
-Nodes (19): isRegionWalletEnabled(), LedgerReferenceType, resolveCurrencyForRegion(), WALLET_CONFIG, financialAuditLogSchema, balanceCacheSchema, walletAccountSchema, walletLedgerEntrySchema (+11 more)
+Nodes (18): isRegionWalletEnabled(), LedgerReferenceType, resolveCurrencyForRegion(), WALLET_CONFIG, WalletBucket, balanceCacheSchema, walletAccountSchema, walletLedgerEntrySchema (+10 more)
 
 ### Community 10 - "Admin & Common Services"
-Cohesion: 0.12
-Nodes (12): traineeController, TraineeMiddleware, authorizeMiddleware, route, traineeC, traineeMiddleware, V, bookInstantMeetingModal (+4 more)
+Cohesion: 0.13
+Nodes (15): AdminController, ffmpeg, ffmpegInstaller, fs, path, allowedImageExtensions, CONSTANCE, Message (+7 more)
 
 ### Community 11 - "Instant Lesson Lifecycle"
-Cohesion: 0.10
-Nodes (40): INSTANT_PHASE, INSTANT_REFUND_REASON, InstantAllowedDuration, InstantPhase, recoverExpiredInstantLessons(), clearInstantLessonAcceptExpiry(), clearInstantLessonTimers(), clearMemoryTimer() (+32 more)
+Cohesion: 0.12
+Nodes (36): INSTANT_PHASE, recoverExpiredInstantLessons(), clearInstantLessonAcceptExpiry(), clearInstantLessonTimers(), clearMemoryTimer(), ExpireHandler, registerInstantLessonExpireHandler(), scheduleInstantLessonAcceptExpiry() (+28 more)
 
 ### Community 12 - "Chat Policy & AI Moderation"
-Cohesion: 0.09
-Nodes (19): ALLOWED_REACTIONS, aiModeration, ChatPolicyResult, checkChatPolicy(), FLAG_TYPE_MAP, getChatPolicyInfo(), hasPaidSessionBetween(), isEncryptedChatContent() (+11 more)
+Cohesion: 0.11
+Nodes (17): ALLOWED_REACTIONS, aiModeration, ChatPolicyResult, checkChatPolicy(), FLAG_TYPE_MAP, getChatPolicyInfo(), hasPaidSessionBetween(), isEncryptedChatContent() (+9 more)
 
 ### Community 13 - "Core Constants & Helpers"
-Cohesion: 0.18
-Nodes (16): addLiveNote(), bucketQuality(), clearLessonLiveState(), drainLiveNotesForPersist(), emptyState(), ensure(), liveBySession, LiveNoteEntry (+8 more)
+Cohesion: 0.13
+Nodes (12): Netquix, getSearchRegexQuery(), availability, availabilitySchema, raise_concern, raiseConcernSchema, moneyRequestSchema, report (+4 more)
 
 ### Community 14 - "Auth Validators & Social Login"
-Cohesion: 0.09
-Nodes (15): appleLoginModel, googleLoginModel, confirmResetPasswordModal, forgotPasswordEmailModal, loginModel, CreatePromoCodeDto, UpdatePromoCodeDto, ValidatePromoDto (+7 more)
+Cohesion: 0.08
+Nodes (21): authC, authMiddleware, authorizeMiddleware, route, V, appleLoginModel, googleLoginModel, confirmResetPasswordModal (+13 more)
 
 ### Community 15 - "Bootstrap Eventpubsubbootstrap"
 Cohesion: 0.08
-Nodes (40): bootstrapEventPubSubBridge(), logger, BOOKING_EVENTS, extractParticipantIds(), handleBookingEvent(), handleSessionListInvalidation(), logger, registerDomainEventHandlers() (+32 more)
+Nodes (33): bootstrapEventPubSubBridge(), logger, CmsNotifyScope, BOOKING_EVENTS, extractParticipantIds(), handleBookingEvent(), handleSessionListInvalidation(), logger (+25 more)
 
 ### Community 16 - "Concept Clip Analysis"
 Cohesion: 0.14
 Nodes (33): Clip Analysis Mode, Expert Approval Workflow, Game Plan, Instant Session Booking, Meeting Link Placeholder, NetQwix Email Template System, NetQwix Locker, Payment Refund Flow (+25 more)
 
 ### Community 17 - "Chat Chatcontroller"
-Cohesion: 0.10
-Nodes (16): ChatController, authorizeMiddleware, chatC, route, ALLOWED_TYPES, validateChatSendBody(), commonController, authorizeMiddleware (+8 more)
+Cohesion: 0.18
+Nodes (8): commonController, authorizeMiddleware, chatC, commonC, promoC, route, storage, upload
 
 ### Community 18 - "Helpers Livelessonrules Mergejoinpolicywithcallslot"
 Cohesion: 0.14
@@ -347,95 +374,87 @@ Nodes (22): mergeJoinPolicyWithCallSlot(), computeMixedClientWarning(), LessonCl
 
 ### Community 20 - "Booking Bookingconflictservice"
 Cohesion: 0.08
-Nodes (20): amountType, buildTrainerCategoryMongoFilter(), buildTrainerDirectoryMatchStage(), mongoMatchTrainerVisibleToTrainees(), parseTrainerCategoryFilterList(), TrainerBookingWindow, availability, availabilitySchema (+12 more)
+Nodes (23): amountType, computeInstantReservationWindowMs(), INSTANT_ALLOWED_DURATIONS, InstantAllowedDuration, InstantPhase, isInstantAllowedDuration(), buildTrainerCategoryMongoFilter(), buildTrainerDirectoryMatchStage() (+15 more)
 
 ### Community 21 - "Clips Cliplibraryadminservice"
-Cohesion: 0.16
-Nodes (5): sendAccountReviewPush(), TraineeAccountReviewService, verificationEmailPlaceholders(), sendVerificationPush(), TrainerReviewService
+Cohesion: 0.14
+Nodes (8): adminLibraryKey(), ClipLibraryAdminService, ALLOWED_CLIP_TYPES, AWS, ClipPresignInput, ClipPresignService, extFromContentType(), s3
 
 ### Community 22 - "Cronjob Extensionreconcilejob"
-Cohesion: 0.14
-Nodes (22): runExtensionReconcileJob(), withIdempotency(), broadcastSessionExtensionEvent(), getLessonTimerSnapshot(), setPendingExtensionRequest(), refundExtensionStripePaymentIntent(), stripe, asPendingSnapshot() (+14 more)
+Cohesion: 0.19
+Nodes (18): runExtensionReconcileJob(), broadcastSessionExtensionEvent(), getLessonTimerSnapshot(), setPendingExtensionRequest(), asPendingSnapshot(), clearExtensionTimer(), extensionRequestTimers, findRequestById() (+10 more)
 
 ### Community 23 - "Auth Authroutes"
 Cohesion: 0.10
-Nodes (20): authController, authC, authMiddleware, authorizeMiddleware, route, V, confirmWakeUp(), sendRb() (+12 more)
+Nodes (16): ChatController, authorizeMiddleware, chatC, route, authForgotLimiter, authLoginLimiter, authReferralInviteLimiter, authRefreshLimiter (+8 more)
 
 ### Community 24 - "Config Sessionextension"
-Cohesion: 0.16
-Nodes (7): SESSION_EXTENSION, SessionExtensionBlockMinutes, sessionExtensionCancelModal, sessionExtensionConfirmModal, sessionExtensionPaymentIntentModal, sessionExtensionQuoteQuery, sessionExtensionRequestModal
+Cohesion: 0.09
+Nodes (17): SESSION_EXTENSION, SessionExtensionBlockMinutes, sessionExtensionCancelModal, sessionExtensionConfirmModal, sessionExtensionPaymentIntentModal, sessionExtensionQuoteQuery, sessionExtensionRequestModal, sessionExtensionRespondModal (+9 more)
 
 ### Community 26 - "Cms Cmscontentquery"
-Cohesion: 0.25
-Nodes (17): listActiveBanners(), activeBannerFilter(), activeScheduleWindow(), activeTipFilter(), audiencesForBannerCaller(), audiencesForTipCaller(), BannerPlacement, countLiveBanners() (+9 more)
+Cohesion: 0.12
+Nodes (24): activeScheduleWindow(), activeTipFilter(), audiencesForBannerCaller(), audiencesForTipCaller(), BANNER_PLACEMENTS, BannerPlacement, countLiveBanners(), countLiveTips() (+16 more)
 
 ### Community 27 - "Broadcast Broadcastservice"
-Cohesion: 0.07
-Nodes (65): addAccountDeletionNote(), apiUrl(), getAuthHeaders(), handleRes(), listAccountDeletions(), restoreAccountDeletion(), apiUrl(), createBanner() (+57 more)
+Cohesion: 0.06
+Nodes (67): addAccountDeletionNote(), apiUrl(), getAuthHeaders(), handleRes(), listAccountDeletions(), restoreAccountDeletion(), apiUrl(), createBanner() (+59 more)
 
 ### Community 28 - "Cms Cmscontroller"
-Cohesion: 0.16
-Nodes (26): adminCreatePage(), adminDeletePage(), adminDenied(), adminGetFaq(), adminListLegal(), adminListPages(), adminSeedFaq(), adminTogglePage() (+18 more)
+Cohesion: 0.13
+Nodes (31): adminController, authorizeMiddleware, route, adminDeleteBanner(), adminCreatePage(), adminDeletePage(), adminDenied(), adminGetFaq() (+23 more)
 
 ### Community 29 - "Config Points Earn"
-Cohesion: 0.10
-Nodes (22): EARN_RULES, EarnRule, getEarnRule(), matrixKey(), POINTS_CONFIG, PointsActionKey, pointsToWalletMinor(), redeemBlocksAvailable() (+14 more)
+Cohesion: 0.15
+Nodes (11): EARN_RULES, getEarnRule(), PointsActionKey, PointsLedgerDoc, pointsLedgerSchema, getPointsEligibility(), PointsBlockReason, PointsEligibility (+3 more)
 
 ### Community 30 - "Bootstrap Redisbootstrap Bootstrapredis"
-Cohesion: 0.06
-Nodes (35): bootstrapRedis(), logger, socketRedisReady(), initSentry(), CORS_ALLOWED_HEADERS, resolveCorsOrigins(), ResolvedCorsOrigin, assertJwtConfiguredAtStartup() (+27 more)
+Cohesion: 0.16
+Nodes (14): CORS_ALLOWED_HEADERS, resolveCorsOrigins(), ResolvedCorsOrigin, clusterInstanceLabel(), isClusterLeader(), cronjobs(), securityHeaders(), registerTrainerTraineePresenceProvider() (+6 more)
 
 ### Community 31 - "Config Messaging"
 Cohesion: 0.18
 Nodes (18): getEmailEnv(), getSmsEnv(), hasValue(), isEmailConfigured(), isSmsConfigured(), isWhatsAppConfigured(), MessagingChannelStatus, buildSmtpTransport() (+10 more)
 
 ### Community 32 - "Handlers Chathandlers"
-Cohesion: 0.21
-Nodes (8): idempotentHandler(), IdempotentHttpResult, readIdempotencyKey(), requireIdempotencyKey(), walletPinLimiter, WalletController, authorizeMiddleware, route
+Cohesion: 0.17
+Nodes (20): pushService, registerChatSocketHandlers(), deliverSocketEvent(), logger, broadcastUserStatus(), listenNotificationEvents(), chatRoom(), emitAuthSessionRevoked() (+12 more)
 
 ### Community 33 - "Middleware Authorize Middleware"
-Cohesion: 0.14
-Nodes (26): trainerOnboardingGate(), ACCOUNT_STATUS_ALLOWED_PREFIXES, buildAccountRestrictedPayload(), isAccountAccessRestricted(), isAccountStatusWhitelistedPath(), maskEmail(), maskPhone(), syncSignupOtpContactVerification() (+18 more)
+Cohesion: 0.11
+Nodes (24): trainerOnboardingGate(), trainerVerificationAuditSchema, maskEmail(), maskPhone(), syncSignupOtpContactVerification(), syncTrustedContactVerification(), ensureTrainerGracePeriod(), graceDaysRemaining() (+16 more)
 
 ### Community 34 - "Middleware Idempotency Middleware"
-Cohesion: 0.12
-Nodes (13): PromoCodeController, authorizeMiddleware, controller, route, sessionExtensionRespondModal, trainerController, TrainerMiddleware, authorizeMiddleware (+5 more)
+Cohesion: 0.09
+Nodes (21): AuthorizeMiddleware, idempotentHandler(), IdempotentHttpResult, readIdempotencyKey(), requireIdempotencyKey(), walletPinLimiter, PromoCodeController, authorizeMiddleware (+13 more)
 
 ### Community 35 - "Auth Authenum Logintype"
-Cohesion: 0.07
-Nodes (24): bcrypt, LifecycleOtpPurpose, lifecycleOtpService, bcrypt, sendRate, SignupContactCheckResult, bcrypt, ONBOARDING_STEPS (+16 more)
+Cohesion: 0.08
+Nodes (22): LoginType, bcrypt, LifecycleOtpPurpose, lifecycleOtpService, MagicLinkVerifyResult, sendRate, bcrypt, ONBOARDING_STEPS (+14 more)
 
 ### Community 36 - "Clips Clipshareservice"
-Cohesion: 0.60
-Nodes (9): apiUrl(), getAuthHeaders(), getOpsEventDetail(), getOpsEvents(), getOpsEventsForUser(), getOpsPlaybook(), getOpsStats(), parse() (+1 more)
+Cohesion: 0.17
+Nodes (10): lastPresenceFlush, logger, recordUserActivity(), UserActivityEvent, ClipConfirmBody, ClipConfirmService, keyOwnedByUser(), resolveShareUserIds() (+2 more)
 
 ### Community 37 - "Admin Accountdeletionadmincontroller"
-Cohesion: 0.11
-Nodes (14): BroadcastController, authorizeMiddleware, controller, route, ClipsController, authorizeMiddleware, mountAdminClipRoutes(), route (+6 more)
-
-### Community 38 - "Admin Adminpermission Assertadminuser"
-Cohesion: 0.64
-Nodes (8): apiUrl(), createTip(), deleteTip(), getAuthHeaders(), handleRes(), listTips(), toggleTip(), updateTip()
-
-### Community 39 - "Chat Chatservice Chatservice"
-Cohesion: 0.29
-Nodes (6): BoxWrapper, ForgotPasswordIllustration, ForgotPasswordIllustrationWrapper, LinkStyled, RightWrapper, TypographyStyled
+Cohesion: 0.22
+Nodes (5): ClipsController, authorizeMiddleware, mountAdminClipRoutes(), route, TraineeAccountReviewService
 
 ### Community 40 - "Helpers Mongoose"
-Cohesion: 0.13
-Nodes (16): getSearchRegexQuery(), isValidMongoObjectId(), report, reportSchema, appendEvents(), cleanSearches(), GuestActivityService, IncomingPayload (+8 more)
+Cohesion: 0.27
+Nodes (11): isValidMongoObjectId(), appendEvents(), cleanSearches(), GuestActivityService, IncomingPayload, isValidId(), mergeFavorites(), mergeSearches() (+3 more)
 
 ### Community 41 - "Report Reportcontroller Reportcontroller"
-Cohesion: 0.15
-Nodes (13): reportController, TrainerMiddleware, authorizeMiddleware, reportC, reportMiddleware, route, V, reportAddImageModal (+5 more)
+Cohesion: 0.16
+Nodes (12): reportController, authorizeMiddleware, reportC, reportMiddleware, route, V, reportAddImageModal, reportCropImageModal (+4 more)
 
 ### Community 42 - "Checkout Checkoutorchestrator"
-Cohesion: 0.16
-Nodes (9): CheckoutOrchestrator, ScheduledWalletPayParams, applyPromoAfterBookingSave(), BookingCheckoutDiscounts, computeScheduledBookingDiscounts(), markReferralDiscountUsed(), rollbackWalletBookingPayment(), reservePromoForBooking() (+1 more)
+Cohesion: 0.17
+Nodes (8): CheckoutOrchestrator, ScheduledWalletPayParams, applyPromoAfterBookingSave(), BookingCheckoutDiscounts, computeScheduledBookingDiscounts(), markReferralDiscountUsed(), rollbackWalletBookingPayment(), reservePromoForBooking()
 
 ### Community 43 - "Config Paymentstatus"
-Cohesion: 0.14
-Nodes (17): BOOKED_SESSIONS_STATUS, processScheduledNoShowRefunds(), booked_session, bookedSessionsSchema, refundTransferSchema, clawbackReferralFirstBookingForSession(), onBookingCancelled(), onBookingCancelledById() (+9 more)
+Cohesion: 0.10
+Nodes (27): BOOKED_SESSIONS_STATUS, ESCROW_HOLD_STATUS, isRefundTerminal(), REFUND_STATUS, REFUND_TRANSFER_STATUS, RefundStatus, processScheduledNoShowRefunds(), booked_session (+19 more)
 
 ### Community 44 - "Common Commonservice Commonservice"
 Cohesion: 0.25
@@ -446,60 +465,68 @@ Cohesion: 0.11
 Nodes (24): AccountType, MONGO_DATE_FORMAT, mongodbDate, NetquixImage, SessionReminderMinutes, aiService, meetingConfirmationJob(), processBookedSessions() (+16 more)
 
 ### Community 46 - "Config Referral Referralrole"
-Cohesion: 0.33
-Nodes (4): NUDGE_RATE, NudgeTemplate, templateFor(), TraineeNudgeService
+Cohesion: 0.19
+Nodes (4): asReferralRole(), normalizeEmail(), randomCodeBody(), ReferralService
 
 ### Community 47 - "Services Ai Service"
 Cohesion: 0.10
 Nodes (20): buildActivityFingerprint(), collectTrainerReviews(), describeActivityDelta(), generateInsight(), getTrainerReviewInsight(), insufficientPayload(), ReviewInsightPayload, ReviewRow (+12 more)
 
 ### Community 48 - "Auth Authservice"
-Cohesion: 0.11
-Nodes (16): loginAttemptStore, LoginType, AuthService, stripe, assertLoginNotLocked(), byKey, clearLoginFailures(), LockEntry (+8 more)
+Cohesion: 0.14
+Nodes (13): stripe, assertLoginNotLocked(), byKey, clearLoginFailures(), LockEntry, normalizeEmail(), recordLoginFailure(), validateSignupPassword() (+5 more)
 
 ### Community 49 - "Auth Totp"
 Cohesion: 0.03
 Nodes (73): dependencies, apexcharts-clevision, axios, axios-mock-adapter, @babel/core, babel-eslint, @babel/eslint-parser, bootstrap-icons (+65 more)
 
+### Community 50 - "Common Chatmediapendingstore"
+Cohesion: 0.03
+Nodes (3): Overrides(), Progress(), typography
+
 ### Community 51 - "Helpers Instantlessonexpiry"
-Cohesion: 0.47
-Nodes (3): route, optionalAuthorize(), route
+Cohesion: 0.38
+Nodes (8): DelayedJobOptions, removeDelayedJob(), upsertDelayedJob(), cancelInstantDeadlineJobs(), getInstantDeadlineQueue(), InstantDeadlineKind, jobId(), scheduleInstantDeadlineJob()
 
 ### Community 52 - "Session Lessonlivestatestore"
-Cohesion: 0.16
-Nodes (10): CallDiagnostics, callDiagnosticsSchema, logCallQualityOps(), logPrecallCheckOps(), recordOpsEvent(), normalizeCallQualityStatsPayload(), NormalizedCallQualityStats, toNum() (+2 more)
+Cohesion: 0.09
+Nodes (27): CallDiagnostics, callDiagnosticsSchema, logCallQualityOps(), logPrecallCheckOps(), recordOpsEvent(), normalizeCallQualityStatsPayload(), NormalizedCallQualityStats, toNum() (+19 more)
 
 ### Community 53 - "Verification Contactverificationsync"
 Cohesion: 0.05
 Nodes (44): dependencies, aws-sdk, axios, bcrypt, body-parser, bullmq, class-validator, cors (+36 more)
 
 ### Community 54 - "Admin Adminservice"
-Cohesion: 0.16
-Nodes (14): adminAddAccountDeletionNote(), adminDenied(), adminListAccountDeletions(), adminRestoreAccountDeletion(), serialize(), AdminController, adminController, authorizeMiddleware (+6 more)
+Cohesion: 0.12
+Nodes (14): adminAddAccountDeletionNote(), adminDenied(), adminListAccountDeletions(), adminRestoreAccountDeletion(), serialize(), assertAdminPermission(), report, reportSchema (+6 more)
 
 ### Community 55 - "Config Pubsub"
-Cohesion: 0.08
-Nodes (48): chatMediaKeyFromUrl(), clearAllPendingChatMediaForDev(), clearPendingChatMedia(), memoryPending, PendingChatMedia, pendingKey(), registerPendingChatMedia(), sweepOrphanChatMediaObjects() (+40 more)
+Cohesion: 0.13
+Nodes (25): REDIS_KEYS, REDIS_TTL, localLocks, withDistributedLock(), IdempotencyRecord, IdempotencyResult, runIdempotency(), withIdempotency() (+17 more)
+
+### Community 56 - "Admin Adminpermission"
+Cohesion: 0.17
+Nodes (7): admin_audit, adminAuditSchema, financialAuditLogSchema, opsEventSchema, suggestedActionSchema, write_us, writeUSSchema
 
 ### Community 57 - "Auth Signupotpservice"
-Cohesion: 0.38
-Nodes (5): canSend(), generateCode(), normalizeSignupEmail(), SignupOtpService, normalizeSignupPhone()
+Cohesion: 0.17
+Nodes (11): bcrypt, canSend(), generateCode(), normalizeSignupEmail(), sendRate, SignupContactCheckResult, SignupOtpService, mapSmsSendError() (+3 more)
 
 ### Community 58 - "Bootstrap Jobworkersbootstrap"
-Cohesion: 0.13
-Nodes (32): bootstrapJobWorkers(), logger, isClusterLeader(), handleBookingReminderJob(), pushService, BookingReminderJob, BookingReminderKind, cancelBookingReminderJobs() (+24 more)
+Cohesion: 0.22
+Nodes (16): bootstrapJobWorkers(), logger, handleBookingReminderJob(), pushService, BookingReminderJob, BookingReminderKind, startBookingReminderWorker(), getBullmqConnection() (+8 more)
 
 ### Community 59 - "Broadcast Broadcastservice Broadcastservice"
-Cohesion: 0.07
-Nodes (9): assertAdminUser(), BroadcastService, adminPresignCmsAsset(), ALLOWED_KINDS, ALLOWED_TYPES, extFromContentType(), publicUrlForKey(), promoCodeSchema (+1 more)
+Cohesion: 0.12
+Nodes (7): assertAdminUser(), BroadcastService, adminPresignCmsAsset(), ALLOWED_KINDS, ALLOWED_TYPES, extFromContentType(), publicUrlForKey()
 
-### Community 60 - "Config Constance Events"
-Cohesion: 0.33
-Nodes (5): ColorBox, Customizer(), CustomizerSpacing, Drawer, Toggler
+### Community 61 - "Config Referral"
+Cohesion: 0.14
+Nodes (15): estimateFirstLessonCheckoutDiscount(), FIRST_BOOKING_REFERRER, formatRewardPreview(), matrixKey(), ReferralBeneficiary, referralMatrixAmount(), ReferralRewardTrigger, ReferralRole (+7 more)
 
 ### Community 62 - "Auth Authmiddleware"
-Cohesion: 0.06
-Nodes (31): assertAdminPermission(), authenticateSocket(), AuthMiddleware, SocketAuthFailureReason, allowedImageExtensions, CONSTANCE, Message, Netquix (+23 more)
+Cohesion: 0.08
+Nodes (23): authenticateSocket(), AuthMiddleware, SocketAuthFailureReason, extractSocketToken(), normalizeSocketAuthToken(), StripeHelper, log, masterController (+15 more)
 
 ### Community 63 - "Chat Chatextrasservice Chatextrasservice"
 Cohesion: 0.16
@@ -510,8 +537,8 @@ Cohesion: 0.13
 Nodes (11): onlineUser, onlineUserSchema, eventLogSchema, favoriteSnapshotSchema, recentSearchSchema, traineeGuestActivitySchema, viewedTrainerSchema, PersonalizedFeedService (+3 more)
 
 ### Community 65 - "Model Wallet Auto"
-Cohesion: 0.18
-Nodes (6): walletAutoTopupSchema, AutoTopUpDto, autoTopUpService, SavedPaymentMethodDto, savedPaymentMethodsService, stripe
+Cohesion: 0.15
+Nodes (9): walletAutoTopupSchema, AutoTopUpDto, autoTopUpService, SavedPaymentMethodDto, savedPaymentMethodsService, stripe, ensureStripeCustomerForUser(), isStripeCustomerId() (+1 more)
 
 ### Community 66 - "Payments Pricingservice Parsequotefrommetadata"
 Cohesion: 0.23
@@ -522,8 +549,8 @@ Cohesion: 0.06
 Nodes (34): 10. Configuration (`src/config`), 11. Helpers (`src/helpers`), 12. Utilities (`src/Utils`), 13. Templates & i18n, 14. Environment Variables (key), 15. Operational Cases Handled, 16. Scripts, 17. How to Extend (Convention) (+26 more)
 
 ### Community 68 - "Auth Authenum"
-Cohesion: 0.06
-Nodes (36): AccountType, signupModel, formatRewardPreviewPoints(), referralMatrixPoints(), estimateFirstLessonCheckoutDiscount(), FIRST_BOOKING_REFERRER, formatRewardPreview(), matrixKey() (+28 more)
+Cohesion: 0.16
+Nodes (15): AccountType, REFERRAL_CONFIG, pointsRedemptionSchema, IReferralAttribution, ReferralAttribution, referralAttributionSchema, IReferredUser, ReferralInviteStatus (+7 more)
 
 ### Community 69 - "Model Verification Otps"
 Cohesion: 0.22
@@ -538,48 +565,72 @@ Cohesion: 0.07
 Nodes (17): PricingOverviewTab(), PricingRegionTab(), DEFAULT_INPUT, PricingSimulatorTab(), CA_PAYMENT_METHODS, CA_PROVINCE_OPTIONS, centsToInput(), decimalToPctInput() (+9 more)
 
 ### Community 72 - "Banners Bannerscontroller"
-Cohesion: 0.27
-Nodes (15): adminCreateBanner(), adminDeleteBanner(), adminDenied(), adminListBanners(), adminToggleBanner(), adminUpdateBanner(), AUDIENCE_VALUES, PLACEMENTS (+7 more)
+Cohesion: 0.24
+Nodes (16): adminCreateBanner(), adminDenied(), adminListBanners(), adminToggleBanner(), adminUpdateBanner(), AUDIENCE_VALUES, listActiveBanners(), PLACEMENTS (+8 more)
 
 ### Community 73 - "Config Referral Referralbeneficiary"
 Cohesion: 0.08
 Nodes (15): LinkStyled, AppBar, Toolbar, LinkStyled, ContentWrapper, HorizontalLayout(), HorizontalLayoutWrapper, MainContentWrapper (+7 more)
 
 ### Community 75 - "Enum Notification Enum"
-Cohesion: 0.12
-Nodes (17): NotificationType, pushService, registerChatSocketHandlers(), notification, notificationSchema, isInsideQuietWindow(), NOTIFICATION_CATEGORIES, NotificationCategory (+9 more)
+Cohesion: 0.19
+Nodes (11): NotificationType, notification, notificationSchema, INSTANT_NOTIFICATION, notifyDedupeKey(), pushService, recentNotifyKeys, SessionNotifyPayload (+3 more)
 
 ### Community 76 - "Helpers Trainercredentials"
-Cohesion: 0.31
-Nodes (10): asTrimmedString(), newId(), sanitizeArray(), sanitizeCertificate(), sanitizeDegree(), sanitizeTrainerCredentialsExtraInfo(), sanitizeWorkExperience(), TrainerCertificate (+2 more)
+Cohesion: 0.26
+Nodes (11): asTrimmedString(), mergeExtraInfo(), newId(), sanitizeArray(), sanitizeCertificate(), sanitizeDegree(), sanitizeTrainerCredentialsExtraInfo(), sanitizeWorkExperience() (+3 more)
 
 ### Community 78 - "Ai Aibusinessservice Aibusinessservice"
 Cohesion: 0.07
 Nodes (27): cSpell.words, [css], editor.defaultFormatter, editor.codeActionsOnSave, source.fixAll.eslint, source.organizeImports, editor.defaultFormatter, editor.formatOnSave (+19 more)
 
+### Community 79 - "Config Points"
+Cohesion: 0.24
+Nodes (10): EarnRule, formatRewardPreviewPoints(), matrixKey(), POINTS_CONFIG, pointsToWalletMinor(), redeemBlocksAvailable(), REFERRAL_FIRST_BOOKING_REFERRER_PTS, REFERRAL_SIGNUP_REFEREE_PTS (+2 more)
+
 ### Community 80 - "Cronjob Bookingremindersjob"
-Cohesion: 0.20
-Nodes (10): CADENCE_KINDS, computeSessionStartInstant(), fireReminder(), KIND_COPY, KIND_OFFSETS, logger, processBookingReminders(), pushService (+2 more)
+Cohesion: 0.13
+Nodes (16): CADENCE_KINDS, computeSessionStartInstant(), fireReminder(), KIND_COPY, KIND_OFFSETS, logger, processBookingReminders(), pushService (+8 more)
 
 ### Community 81 - "Model Stripe Webhook"
 Cohesion: 0.17
 Nodes (5): stripeWebhookEventSchema, stripe, StripeWebhookService, reconcilePendingTopUps(), TopUpService
 
+### Community 82 - "Services Cacheservice"
+Cohesion: 0.22
+Nodes (13): cacheGetOrSet(), cacheInvalidate(), invalidateAllTrainerSlotsCache(), invalidateBookingCaches(), InvalidateBookingCachesOpts, invalidateUserSessionsCache(), sessionsListCacheKey(), sessionsListInvalidatePattern() (+5 more)
+
 ### Community 83 - "Banners Bannerscontroller Listactivebanners"
 Cohesion: 0.15
 Nodes (17): Editor, editorFromHtml(), emptyEditor(), STEPS, BroadcastDetailDrawer(), AUDIENCE_OPTIONS, CHANNELS, HISTORY_STATUS_FILTERS (+9 more)
 
+### Community 85 - "Common Chatmediapendingstore Clearallpendingchatmediafordev"
+Cohesion: 0.20
+Nodes (10): clearAllPendingChatMediaForDev(), clearPendingChatMedia(), memoryPending, PendingChatMedia, pendingKey(), registerPendingChatMedia(), sweepOrphanChatMediaObjects(), runChatMediaSweepJob() (+2 more)
+
+### Community 86 - "Queues Bookingreminderqueue"
+Cohesion: 0.43
+Nodes (7): cancelBookingReminderJobs(), getBookingReminderQueue(), reminderJobId(), scheduleBookingReminderJob(), cancelSessionReminders(), computeSessionStartUtc(), scheduleSessionRemindersForBooking()
+
 ### Community 87 - "Assets NetQwix Logo"
 Cohesion: 0.51
 Nodes (10): NetQwix Brand Logo, Email Notification System, Trainer Onboarding Flow, Trainer Verification Flow, Trainer Join Email Template, Trainer Welcome Email Template, Verification Approved Email Template, Verification Rejected Email Template (+2 more)
+
+### Community 88 - "Bootstrap Redisbootstrap"
+Cohesion: 0.28
+Nodes (10): bootstrapRedis(), logger, socketRedisReady(), clusterInstanceCount(), connectRedis(), getRedisPubSub(), isSocketAdapterAttached(), setSocketAdapterAttached() (+2 more)
+
+### Community 89 - "Clips Cliplibrarysubmissionservice"
+Cohesion: 0.11
+Nodes (9): ACTIVE_CLIP, ClipLibrarySubmissionService, OPEN_STATUSES, clip_library_submission, clipLibrarySubmissionSchema, LIBRARY_SUBMISSION_STATUSES, LibrarySubmissionStatus, clip (+1 more)
 
 ### Community 90 - "Cms Cmsnotify Notifycmsupdated"
 Cohesion: 0.44
 Nodes (7): adminCreateTip(), adminDeleteTip(), adminDenied(), adminListTips(), adminToggleTip(), adminUpdateTip(), serializeTip()
 
 ### Community 91 - "Config Constance Accounttype"
-Cohesion: 0.18
-Nodes (6): BlankLayoutAppBar(), LinkStyled, ForgotPassword(), useSettings(), OptionsMenu(), Accordion()
+Cohesion: 0.08
+Nodes (17): BlankLayoutAppBar(), LinkStyled, ColorBox, Customizer(), CustomizerSpacing, Drawer, Toggler, BoxWrapper (+9 more)
 
 ### Community 92 - "Http Sendresponse"
 Cohesion: 0.31
@@ -589,13 +640,25 @@ Nodes (21): api(), approveLibrarySubmission(), approveTraineeAccount(), confirmL
 Cohesion: 0.40
 Nodes (4): AIController, authorizeMiddleware, controller, route
 
+### Community 94 - "Lib Structuredlog"
+Cohesion: 0.28
+Nodes (7): LogLevel, serialize(), slog(), StructuredLogFields, winston, Request, requestContextMiddleware()
+
 ### Community 95 - "Socket Lessontimerstore"
 Cohesion: 0.12
 Nodes (8): AdminUser360Tabs(), ExtraInfoTree(), formatPrimitive(), RATING_FIELD_LABELS, safeImg(), tabLabels, timelineDotBg(), timelineDotColor()
 
+### Community 96 - "Model Trainee Favorite"
+Cohesion: 0.29
+Nodes (5): traineeFavoriteTrainerSchema, attachTrainerSocialSignals(), pushUniquePeer(), SESSION_TAKEN_STATUSES, TrainerFriendPeer
+
 ### Community 97 - "Notifications Notificationsservice"
 Cohesion: 0.12
 Nodes (11): BannerHeroPreview(), BannerPlacementPreview(), formWithResolvedImage(), PLACEMENT_LABELS, SEVERITY_BG, SEVERITY_FG, CmsImageUploader(), StickyBottomPreview() (+3 more)
+
+### Community 98 - "Bootstrap Sentry"
+Cohesion: 0.13
+Nodes (14): AccessTokenClaims, initSentry(), assertJwtConfiguredAtStartup(), getAccessJwtExpiration(), getAccessJwtExpirationSeconds(), getJwtExpiration(), getJwtSecret(), getRefreshSessionTtlDays() (+6 more)
 
 ### Community 99 - "Checkout Checkouthookregistry"
 Cohesion: 0.33
@@ -609,37 +672,49 @@ Nodes (3): dotenv, Twilio, WhatsAppService
 Cohesion: 0.11
 Nodes (18): compileOnSave, compilerOptions, allowJs, experimentalDecorators, forceConsistentCasingInFileNames, module, moduleResolution, outDir (+10 more)
 
+### Community 103 - "Broadcast Broadcastcontroller"
+Cohesion: 0.40
+Nodes (4): BroadcastController, authorizeMiddleware, controller, route
+
 ### Community 104 - "User Accountdeletionservice Accountdeletionservice"
-Cohesion: 0.22
-Nodes (8): BoxWrapper, defaultValues, FormControlLabel, LoginIllustration, LoginIllustrationWrapper, RightWrapper, schema, TypographyStyled
+Cohesion: 0.12
+Nodes (13): Badge(), Chip(), showAdminMfaNotice(), UseBgColor(), BoxWrapper, defaultValues, FormControlLabel, LoginIllustration (+5 more)
 
 ### Community 105 - "Model Clip Share"
 Cohesion: 0.40
 Nodes (4): ClipShareRequest, clipShareRequestSchema, ClipShareRequestStatus, IClipShareRequest
 
 ### Community 106 - "Model Cms Faq"
-Cohesion: 0.10
-Nodes (14): CmsNotifyScope, CmsFaq, cmsFaqSchema, faqItemSchema, faqSectionSchema, CmsLegalDocument, cmsLegalDocumentSchema, CmsPage (+6 more)
+Cohesion: 0.40
+Nodes (4): CmsFaq, cmsFaqSchema, faqItemSchema, faqSectionSchema
+
+### Community 107 - "Points Pointscontroller"
+Cohesion: 0.50
+Nodes (3): PointsController, authorizeMiddleware, route
 
 ### Community 110 - "Auth Appletokenverify"
 Cohesion: 0.67
 Nodes (3): AppleKey, getAppleKeys(), verifyAppleIdentityToken()
 
 ### Community 111 - "Model Pricing Config"
-Cohesion: 0.24
-Nodes (5): admin_setting, adminSettingSchema, paymentMethodFeeSchema, pricingConfigSchema, regionSchema
+Cohesion: 0.50
+Nodes (3): paymentMethodFeeSchema, pricingConfigSchema, regionSchema
 
 ### Community 112 - "Model Trainer Review"
-Cohesion: 0.13
-Nodes (8): breakpoints(), UserThemeOptions(), Navigation(), Shadows(), GlobalStyles(), ThemeComponent(), themeOptions(), typography
+Cohesion: 0.14
+Nodes (7): breakpoints(), UserThemeOptions(), Shadows(), GlobalStyles(), ThemeComponent(), themeOptions(), typography
+
+### Community 119 - "Model Cms Legal"
+Cohesion: 0.17
+Nodes (8): DefaultSocketEmitter, emitChatDelivered(), emitChatMessage(), emitter, getChatSocketEmitter(), SocketEmitter, chatMediaKeyFromUrl(), isChatBlocked()
 
 ### Community 120 - "Model Cms Page"
-Cohesion: 0.05
-Nodes (38): ffmpeg, ffmpegInstaller, fs, path, planFromId(), STORAGE_PLANS, StorageBillingInterval, StoragePlanId (+30 more)
+Cohesion: 0.22
+Nodes (7): planFromId(), STORAGE_PLANS, StorageBillingInterval, StoragePlanId, StorageController, StorageService, stripe
 
 ### Community 126 - "Admin Adminroutes Adminroute"
-Cohesion: 0.06
-Nodes (28): adminRoute, aiRoute, authRoute, bannersRoute, broadcastRoute, clipsRoute, cmsRoute, commonRoute (+20 more)
+Cohesion: 0.08
+Nodes (24): adminRoute, aiRoute, authRoute, bannersRoute, broadcastRoute, clipsRoute, cmsRoute, commonRoute (+16 more)
 
 ### Community 127 - "Ai Airoutes Airoute"
 Cohesion: 0.39
@@ -657,9 +732,13 @@ Nodes (4): defaultSx, ADMIN_LIST_GRID_HEIGHT, AdminLoadingState(), AdminMasterDe
 Cohesion: 0.12
 Nodes (9): Booking(), booking_status, ConcernByUsers(), statusColors, useCommon(), ManageTrainee(), ManageTrainer(), statusColors (+1 more)
 
-### Community 133 - "Common Commonroutes Commonroute"
-Cohesion: 0.07
-Nodes (11): ACTIVE_CLIP, loadCategoryMaps(), nestClipsByTaxonomy(), NestedCategoryGroup, commonService, clip_library_submission, clipLibrarySubmissionSchema, LIBRARY_SUBMISSION_STATUSES (+3 more)
+### Community 131 - "Clips Clipsroutes Clipsroute"
+Cohesion: 0.54
+Nodes (15): apiUrl(), deleteAdminEntity(), getAuditLogs(), getAuthHeaders(), getCallDiagnostics(), getClipPlayUrl(), getUser360(), getUserAssets() (+7 more)
+
+### Community 132 - "Cms Cmsroutes Cmsroute"
+Cohesion: 0.17
+Nodes (7): ACTIVE_CLIP, ClipListService, loadCategoryMaps(), nestClipsByTaxonomy(), NestedCategoryGroup, clip_subcategory, clipSubcategorySchema
 
 ### Community 134 - "Master Masterroutes Masterroute"
 Cohesion: 0.13
@@ -670,8 +749,16 @@ Cohesion: 0.14
 Nodes (9): AuthGuard(), GuestGuard(), AdminRealtimeProvider(), CommonContext, CommonProvider(), defaultProvider, useAuth(), BadgeContentSpan (+1 more)
 
 ### Community 137 - "Ops Opsroutes Opsroute"
+Cohesion: 0.26
+Nodes (9): mockFindOne, mockBookedSessionCtor, mockConflict, mockSave, mockUserFindById, checkBothPartiesBookingConflict(), checkPartyBookingConflict(), checkTraineeBookingConflict() (+1 more)
+
+### Community 138 - "Payments Pricingroutes Paymentsroute"
 Cohesion: 0.17
-Nodes (16): computeInstantReservationWindowMs(), INSTANT_ALLOWED_DURATIONS, isInstantAllowedDuration(), schedule_inventory, scheduleInventorySchema, mockFindOne, checkInstantLessonEligibility(), DAY_MAP (+8 more)
+Nodes (4): AIBusinessService, aiService, POISONED_ASSISTANT_SNIPPETS, sanitizeChatMessages()
+
+### Community 139 - "Points Pointsroutes Pointsroute"
+Cohesion: 0.28
+Nodes (9): PAYMENT_METHODS, resolveScheduledUtcWindow(), ScheduledBookPayloadInput, validateScheduledBookPayload(), validateScheduledBookWindow(), ValidationFail, ValidationOk, ValidationResult (+1 more)
 
 ### Community 140 - "Promo Code Promocoderoutes"
 Cohesion: 0.15
@@ -682,28 +769,36 @@ Cohesion: 0.18
 Nodes (10): adminRegisterEnvHint(), isAdminRegisterEnabled(), BoxWrapper, FormControlLabel, LinkStyled, Register(), RegisterIllustration, RegisterIllustrationWrapper (+2 more)
 
 ### Community 142 - "Report Reportroutes Reportroute"
-Cohesion: 0.13
-Nodes (12): assertSessionParticipant(), assertTrainerOwnsSession(), computeScheduledDurationMinutes(), SessionAccessFail, SessionAccessOk, onGamePlanSavedPoints(), ReportService, buildTimelinePayload() (+4 more)
+Cohesion: 0.26
+Nodes (9): assertSessionParticipant(), computeScheduledDurationMinutes(), SessionAccessFail, SessionAccessOk, buildTimelinePayload(), getSessionTimeline(), getSessionTimelineById(), getSessionTimelineForAdmin() (+1 more)
 
 ### Community 143 - "Storage Storageroutes Storageroute"
 Cohesion: 0.17
 Nodes (4): MenuItemTextWrapper, MenuItemTextMetaWrapper, MenuNavLink, ListSubheader
+
+### Community 144 - "Tips Tipsroutes Tipsroute"
+Cohesion: 0.20
+Nodes (4): OpsAdminController, buildDefaultActions(), OpsEventService, OPS_RESOLUTION_PLAYBOOK
 
 ### Community 145 - "Trainee Traineeroute Traineeroute"
 Cohesion: 0.53
 Nodes (11): apiUrl(), createPromoCode(), deletePromoCode(), getAuthHeaders(), getPromoAdminStats(), getPromoCodeById(), handleRes(), listPromoCodes() (+3 more)
 
 ### Community 146 - "Trainer Trainerroutes Trainerroute"
-Cohesion: 0.11
-Nodes (11): AnalyticsOverview(), AnalyticsSessions(), AnalyticsTotalRevenue(), defaultSeries, Badge(), Chip(), showAdminMfaNotice(), UseBgColor() (+3 more)
+Cohesion: 0.18
+Nodes (6): AnalyticsOverview(), AnalyticsSessions(), AnalyticsTotalRevenue(), defaultSeries, TimelineDot(), hexToRGBA()
+
+### Community 147 - "Transaction Transactionroutes Transactionroute"
+Cohesion: 0.25
+Nodes (3): assertTrainerOwnsSession(), onGamePlanSavedPoints(), ReportService
 
 ### Community 148 - "User Userroutes Userroute"
-Cohesion: 0.20
-Nodes (5): SwipeableDrawer, StyledBoxForShadow, HeaderTitle, LinkStyled, MenuHeaderWrapper
+Cohesion: 0.18
+Nodes (6): SwipeableDrawer, StyledBoxForShadow, HeaderTitle, LinkStyled, MenuHeaderWrapper, Navigation()
 
 ### Community 149 - "Verification Verificationroutes Verificationroute"
-Cohesion: 0.17
-Nodes (13): payoutRequestSchema, buildDetailPayload(), formatUser(), getSessionDetailForAdmin(), getSessionDetailForUser(), loadSessionAggregate(), normalizeExtensions(), formatRefundTransferForApi() (+5 more)
+Cohesion: 0.22
+Nodes (6): payoutRequestSchema, parseAmountMinor(), recordRefundTransfer(), RefundDestination, RefundTransferDoc, RefundTransferStatus
 
 ### Community 150 - "Wallet Walletroutes Walletroute"
 Cohesion: 0.20
@@ -741,6 +836,10 @@ Nodes (4): AUDIENCES, EMPTY_FORM, PLACEMENTS, SEVERITIES
 Cohesion: 0.28
 Nodes (5): fmt(), SessionTimelinePanel(), BookingDetailDrawer(), refundTransferLabel(), isCurrentDateBefore()
 
+### Community 159 - "Community 159"
+Cohesion: 0.42
+Nodes (8): INSTANT_REFUND_REASON, buildDetailPayload(), formatUser(), getSessionDetailForAdmin(), getSessionDetailForUser(), loadSessionAggregate(), normalizeExtensions(), formatRefundTransferForApi()
+
 ### Community 160 - "Community 160"
 Cohesion: 0.22
 Nodes (5): BookedSession, debouncedSearchMedicine, statusColors, trainerStatusColors, updateTicketBaseUrl
@@ -765,6 +864,10 @@ Nodes (3): UserLayout(), HorizontalNavItems(), VerticalNavItems()
 Cohesion: 0.25
 Nodes (5): { dirname }, { getIcons, stringToIcon, minifyIconSet }, { importDirectory, cleanupSVG, parseColors, isEmptyColor, runSVGO }, { promises: fs }, sources
 
+### Community 166 - "Community 166"
+Cohesion: 0.25
+Nodes (4): walletTimelineEventSchema, walletTopupSchema, TimelineEventDto, walletTimelineService
+
 ### Community 167 - "Community 167"
 Cohesion: 0.25
 Nodes (8): scripts, build, build:icons, dev, export, format, lint, start
@@ -772,6 +875,10 @@ Nodes (8): scripts, build, build:icons, dev, export, format, lint, start
 ### Community 169 - "Community 169"
 Cohesion: 0.36
 Nodes (5): clearNumber(), formatCreditCardNumber(), formatCVC(), formatDateToMonthShort(), isToday()
+
+### Community 170 - "Community 170"
+Cohesion: 0.52
+Nodes (4): PROMO_SPONSOR, PromoSponsorType, computePromoPayoutSplit(), PromoPayoutSplit
 
 ### Community 171 - "Community 171"
 Cohesion: 0.29
@@ -782,16 +889,12 @@ Cohesion: 0.29
 Nodes (6): info, _exporter_id, name, _postman_id, schema, item
 
 ### Community 173 - "Community 173"
-Cohesion: 0.10
-Nodes (16): ESCROW_HOLD_STATUS, isRefundTerminal(), REFUND_STATUS, REFUND_TRANSFER_STATUS, RefundStatus, escrowHoldSchema, walletTimelineEventSchema, mockFindOneLean (+8 more)
+Cohesion: 0.33
+Nodes (4): escrowHoldSchema, mockFindOneLean, extensionWalletIdempotencyKey(), isExtensionWalletSettled()
 
 ### Community 174 - "Community 174"
 Cohesion: 0.29
 Nodes (6): name, overrides, react-credit-cards, private, react, version
-
-### Community 175 - "Community 175"
-Cohesion: 0.27
-Nodes (3): OpsAdminController, OpsBackfillService, OPS_RESOLUTION_PLAYBOOK
 
 ### Community 176 - "Community 176"
 Cohesion: 0.33
@@ -845,6 +948,10 @@ Nodes (5): compilerOptions, skipLibCheck, types, exclude, extends
 Cohesion: 0.50
 Nodes (3): LibrarySubmissionsPanel(), proposedLabel(), STATUS_TABS
 
+### Community 196 - "Community 196"
+Cohesion: 0.83
+Nodes (3): confirmWakeUp(), sendRb(), startWakeUp()
+
 ### Community 200 - "Community 200"
 Cohesion: 0.50
 Nodes (3): compilerOptions, baseUrl, include
@@ -866,24 +973,24 @@ Cohesion: 0.67
 Nodes (3): base, main(), probe()
 
 ## Knowledge Gaps
-- **987 isolated node(s):** `_postman_id`, `name`, `schema`, `_exporter_id`, `item` (+982 more)
+- **986 isolated node(s):** `_postman_id`, `name`, `schema`, `_exporter_id`, `item` (+981 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **69 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **76 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `ResponseBuilder` connect `AI Business Services` to `Auth & Login Rate Limiting`, `Scheduled Booking`, `Ops Opsroutes Opsroute`, `Admin & Common Services`, `Wallet & Ledger Config`, `Chat Policy & AI Moderation`, `Report Reportroutes Reportroute`, `User Userservice Userservice`, `Booking Bookingconflictservice`, `Cronjob Extensionreconcilejob`, `Admin Adminservice Adminservice`, `Config Points Earn`, `Auth Authenum Logintype`, `Helpers Mongoose`, `Config Constance Mongodbdate`, `Config Referral Referralrole`, `Services Ai Service`, `Auth Authservice`, `Broadcast Broadcastservice Broadcastservice`, `Auth Authmiddleware`, `Chat Chatextrasservice Chatextrasservice`, `Model Booked Sessions`, `Model Wallet Auto`, `Auth Authenum`, `Enum Notification Enum`, `Model Cms Page`?**
-  _High betweenness centrality (0.050) - this node is a cross-community bridge._
-- **Why does `CONSTANCE` connect `Auth Authmiddleware` to `Auth & Login Rate Limiting`, `2FA & Storage Plans`, `Pricing & Commission`, `Clips Library Service`, `Scheduled Booking`, `Wallet & Ledger Config`, `Chat Chatcontroller`, `Booking Bookingconflictservice`, `Cronjob Extensionreconcilejob`, `Auth Authroutes`, `Cms Cmscontentquery`, `Cms Cmscontroller`, `Middleware Authorize Middleware`, `Admin Accountdeletionadmincontroller`, `Helpers Mongoose`, `Config Constance Mongodbdate`, `Auth Authservice`, `Admin Adminservice`, `Broadcast Broadcastservice Broadcastservice`, `Auth Authenum`, `Banners Bannerscontroller`, `Cms Cmsnotify Notifycmsupdated`, `Ai Aibusinessservice`, `Model Cms Page`?**
-  _High betweenness centrality (0.020) - this node is a cross-community bridge._
-- **Why does `requireApiBaseUrl()` connect `Broadcast Broadcastservice` to `Clips Clipshareservice`, `Admin Adminpermission Assertadminuser`, `Community 177`, `Trainee Traineeroute Traineeroute`, `Community 154`, `Http Sendresponse`, `Ai Airoutes Airoute`?**
+- **Why does `ResponseBuilder` connect `AI Business Services` to `Auth & Login Rate Limiting`, `Pricing & Commission`, `Live Lesson Call Handlers`, `Wallet & Ledger Config`, `Admin & Common Services`, `Payments Pricingroutes Paymentsroute`, `Chat Policy & AI Moderation`, `Points Pointsroutes Pointsroute`, `Core Constants & Helpers`, `Transaction Transactionroutes Transactionroute`, `Booking Bookingconflictservice`, `User Userservice Userservice`, `Cronjob Extensionreconcilejob`, `Admin Adminservice Adminservice`, `Config Points Earn`, `Auth Authenum Logintype`, `Clips Clipshareservice`, `Admin Adminpermission Assertadminuser`, `Chat Chatservice Chatservice`, `Helpers Mongoose`, `Config Constance Mongodbdate`, `Services Ai Service`, `Auth Authservice`, `Admin Adminservice`, `Auth Signupotpservice`, `Broadcast Broadcastservice Broadcastservice`, `Auth Authmiddleware`, `Chat Chatextrasservice Chatextrasservice`, `Model Booked Sessions`, `Model Wallet Auto`, `Auth Authenum`, `Helpers Trainercredentials`, `Cronjob Bookingremindersjob`, `Bootstrap Sentry`, `Model Cms Legal`, `Model Cms Page`?**
+  _High betweenness centrality (0.040) - this node is a cross-community bridge._
+- **Why does `CONSTANCE` connect `Admin & Common Services` to `Auth & Login Rate Limiting`, `2FA & Storage Plans`, `Pricing & Commission`, `Scheduled Booking`, `Wallet & Ledger Config`, `Chat Policy & AI Moderation`, `Core Constants & Helpers`, `Chat Chatcontroller`, `Booking Bookingconflictservice`, `Clips Cliplibraryadminservice`, `Cronjob Extensionreconcilejob`, `Config Sessionextension`, `Cms Cmscontentquery`, `Cms Cmscontroller`, `Middleware Authorize Middleware`, `Middleware Idempotency Middleware`, `Clips Clipshareservice`, `Admin Accountdeletionadmincontroller`, `Config Constance Mongodbdate`, `Auth Authservice`, `Admin Adminservice`, `Auth Signupotpservice`, `Broadcast Broadcastservice Broadcastservice`, `Auth Authmiddleware`, `Community 196`, `Auth Authenum`, `Banners Bannerscontroller`, `Cms Cmsnotify Notifycmsupdated`, `Ai Aibusinessservice`, `Broadcast Broadcastcontroller`, `Points Pointscontroller`, `Model Cms Page`?**
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
+- **Why does `requireApiBaseUrl()` connect `Broadcast Broadcastservice` to `Clips Clipsroutes Clipsroute`, `Community 177`, `Trainee Traineeroute Traineeroute`, `Community 154`, `Http Sendresponse`, `Ai Airoutes Airoute`?**
   _High betweenness centrality (0.014) - this node is a cross-community bridge._
 - **What connects `_postman_id`, `name`, `schema` to the rest of the system?**
-  _987 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _986 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Auth & Login Rate Limiting` be split into smaller, more focused modules?**
-  _Cohesion score 0.053613053613053616 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06976744186046512 - nodes in this community are weakly interconnected._
 - **Should `2FA & Storage Plans` be split into smaller, more focused modules?**
-  _Cohesion score 0.06954887218045112 - nodes in this community are weakly interconnected._
-- **Should `Ops Configuration` be split into smaller, more focused modules?**
-  _Cohesion score 0.1368421052631579 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07142857142857142 - nodes in this community are weakly interconnected._
+- **Should `AI Business Services` be split into smaller, more focused modules?**
+  _Cohesion score 0.06887755102040816 - nodes in this community are weakly interconnected._

@@ -42,7 +42,7 @@ export class ClipLibrarySubmissionService {
       source_clip_id: sourceId,
       status: "accepted",
     });
-    if (accepted) throw new Error("This clip is already in the Netqwix Library");
+    if (accepted) throw new Error("This clip is already in the NetQwix Library");
 
     if (authUser.account_type === AccountType.TRAINER) {
       const profileCatId = await clipTaxonomyService.findCategoryIdByName(

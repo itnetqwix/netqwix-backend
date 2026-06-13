@@ -97,7 +97,7 @@
 - [[_COMMUNITY_Clips Clipshareservice Clipshareservice|Clips Clipshareservice Clipshareservice]]
 - [[_COMMUNITY_Common Chatmediapendingstore Clearallpendingchatmediafordev|Common Chatmediapendingstore Clearallpendingchatmediafordev]]
 - [[_COMMUNITY_Queues Bookingreminderqueue|Queues Bookingreminderqueue]]
-- [[_COMMUNITY_Assets Netqwix Logo|Assets Netqwix Logo]]
+- [[_COMMUNITY_Assets NetQwix Logo|Assets NetQwix Logo]]
 - [[_COMMUNITY_Bootstrap Redisbootstrap|Bootstrap Redisbootstrap]]
 - [[_COMMUNITY_Clips Cliplibrarysubmissionservice|Clips Cliplibrarysubmissionservice]]
 - [[_COMMUNITY_Cms Cmsnotify Notifycmsupdated|Cms Cmsnotify Notifycmsupdated]]
@@ -515,7 +515,7 @@ Nodes (4): clearAllPendingChatMediaForDev(), isRedisEnabled(), releaseAllLessonC
 Cohesion: 0.35
 Nodes (8): BookingReminderKind, cancelBookingReminderJobs(), getBookingReminderQueue(), reminderJobId(), scheduleBookingReminderJob(), cancelSessionReminders(), computeSessionStartUtc(), scheduleSessionRemindersForBooking()
 
-### Community 87 - "Assets Netqwix Logo"
+### Community 87 - "Assets NetQwix Logo"
 Cohesion: 0.51
 Nodes (10): NetQwix Brand Logo, Email Notification System, Trainer Onboarding Flow, Trainer Verification Flow, Trainer Join Email Template, Trainer Welcome Email Template, Verification Approved Email Template, Verification Rejected Email Template (+2 more)
 

@@ -772,6 +772,74 @@ export const scheduleLessonEnd = (socket: any, roomName: string, session: Lesson
   }, remainingMs);
 };
 
+/**
+ * End a live lesson before the booked window ends — shortens the booking slot
+ * so trainer and trainee become available for new sessions immediately.
+ * Idempotent: safe if both parties emit LESSON_END_EARLY_REQUEST.
+ */
+export async function endLessonEarly(
+  sessionId: string,
+  options?: { reason?: string }
+): Promise<boolean> {
+  if (!ioInstance) return false;
+  const sid = String(sessionId);
+  if (!sid || !mongoose.isValidObjectId(sid)) return false;
+
+  const existing = await booked_session
+    .findById(sid)
+    .select("actual_end_at end_time is_instant")
+    .lean();
+  if (!existing) return false;
+  if (existing.actual_end_at) return true;
+
+  const now = new Date();
+  const roomName = `session:${sid}`;
+  const updateFields: Record<string, unknown> = {
+    actual_end_at: now,
+    end_time: now,
+  };
+  if (existing.is_instant) {
+    updateFields.instant_phase = INSTANT_PHASE.COMPLETED;
+  }
+
+  const updated = await booked_session.updateOne(
+    { _id: sid, actual_end_at: null },
+    { $set: updateFields }
+  );
+  if (updated.matchedCount === 0) return true;
+
+  await hydrateLessonSessionFromRedis(sid);
+  const session = lessonSessionsGet(sid);
+  const stubSocket = { nsp: ioInstance?.to(roomName) };
+
+  if (session) {
+    clearLessonTimeouts(session);
+    if (session.status === "running" && session.startedAt != null) {
+      const elapsed = Math.floor((Date.now() - session.startedAt) / 1000);
+      session.remainingSeconds = Math.max(0, session.remainingSeconds - elapsed);
+    }
+    session.startedAt = null;
+    session.remainingSeconds = 0;
+    session.status = "ended";
+  }
+
+  const endedPayload = {
+    sessionId: sid,
+    endedAt: now.toISOString(),
+    endedEarly: true,
+    reason: options?.reason ?? "participant_hangup",
+  };
+  lessonRoomEmit(roomName, EVENTS.LESSON_TIMER.ENDED, endedPayload);
+  if (session) {
+    emitLessonStateSync(stubSocket, roomName, session);
+    lessonSessionsDelete(sid);
+  }
+
+  void finalizeLessonEnd(sid);
+  void releaseAllLessonCallSlotsForSession(sid);
+  return true;
+}
+
 /** Socket user may be a Mongoose document or plain object — avoid relying on `_doc`. */
 export function socketAttachedUserId(socket: any): string {
   const u = socket?.user;

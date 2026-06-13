@@ -14,6 +14,7 @@ import {
 } from "../../helpers/lesson/lessonClientTelemetry";
 import { getLessonCallSlotStatus } from "../socket/lessonCallSlotStore";
 import { getLessonTimerSnapshot } from "../socket/socket.service";
+import { getIceServerCredentials } from "../../Utils/Utils";
 
 const extensionService = new SessionExtensionService();
 
@@ -106,6 +107,7 @@ export async function getSessionJoinReadiness(
       join_deadline_at: row.join_deadline_at,
       start_time: row.start_time,
       end_time: row.end_time,
+      actual_end_at: row.actual_end_at,
       both_joined_at: row.both_joined_at,
       first_joined_at: row.first_joined_at,
     }),
@@ -159,6 +161,7 @@ export async function getSessionJoinReadiness(
     booked_date: row.booked_date,
     session_start_time: row.session_start_time,
     session_end_time: row.session_end_time,
+    actual_end_at: row.actual_end_at ?? null,
     time_zone: row.time_zone ?? null,
     join_deadline_at: row.join_deadline_at ?? null,
     accept_deadline_at: row.accept_deadline_at ?? null,
@@ -184,7 +187,16 @@ export async function getSessionJoinReadiness(
         }
       : null,
     extension_preview: extensionPreview,
-    iceServers: Array.isArray(row.iceServers) ? row.iceServers : [],
+    iceServers: await (async () => {
+      const stored = Array.isArray(row.iceServers) ? row.iceServers : [];
+      if (stored.length > 0) return stored;
+      try {
+        const fresh = await getIceServerCredentials();
+        return Array.isArray(fresh) ? fresh : [];
+      } catch {
+        return [];
+      }
+    })(),
     lesson_client_requirement: "native_app" as const,
     mixed_client_warning: await (async () => {
       const viewerClient = opts?.viewerClientKind ?? "unknown";

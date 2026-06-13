@@ -70,6 +70,11 @@ const bookedSessionsSchema: Schema = new Schema(
             type: Date,
             default: null,
         },
+        /** Set when the lesson ends before the booked window (manual hang-up). Frees the remaining slot. */
+        actual_end_at: {
+            type: Date,
+            default: null,
+        },
         time_zone: {
             type: String,
             default: null,

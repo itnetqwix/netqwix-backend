@@ -161,6 +161,7 @@ export class EVENTS {
     EXTENDED: 'LESSON_TIMER_EXTENDED',
     PAUSED: 'LESSON_TIME_PAUSED',
     RESUMED: 'LESSON_TIME_RESUMED',
+    END_EARLY_REQUEST: 'LESSON_END_EARLY_REQUEST',
   }
   /** Two-party paid extension lifecycle (trainee request -> trainer approve -> pay). */
   public static readonly SESSION_EXTENSION = {
