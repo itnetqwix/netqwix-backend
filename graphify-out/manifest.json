@@ -2875,8 +2875,8 @@
     "semantic_hash": ""
   },
   "src/modules/session/sessionJoinReadinessService.ts": {
-    "mtime": 1781339274.9331386,
-    "ast_hash": "00bba8c8e0e327f0f8ee2a9661045c73",
+    "mtime": 1781339870.95451,
+    "ast_hash": "52ef8b45fb9412ee38bb515fe91bf620",
     "semantic_hash": ""
   },
   "src/modules/session/sessionNotificationService.ts": {
@@ -2930,8 +2930,8 @@
     "semantic_hash": ""
   },
   "src/modules/socket/handlers/webrtcRelayHandlers.ts": {
-    "mtime": 1780636428.8261209,
-    "ast_hash": "c803489b958d8e047c20658702392650",
+    "mtime": 1781340847.1042972,
+    "ast_hash": "e49530bc7340657114f137982e8cf538",
     "semantic_hash": ""
   },
   "src/modules/socket/init.ts": {
@@ -2955,8 +2955,8 @@
     "semantic_hash": ""
   },
   "src/modules/socket/socket.service.ts": {
-    "mtime": 1781339821.9070075,
-    "ast_hash": "c9261d26282e9804d99c1181cfd9ca6d",
+    "mtime": 1781340845.713904,
+    "ast_hash": "e093748238632b6b0e3ef20c53fd0650",
     "semantic_hash": ""
   },
   "src/modules/socket/socketEmit.ts": {

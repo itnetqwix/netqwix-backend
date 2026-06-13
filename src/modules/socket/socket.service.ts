@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import { Readable } from "stream";
 import { MemCache } from "../../Utils/memCache";
 import {
@@ -787,17 +788,28 @@ export async function endLessonEarly(
 
   const existing = await booked_session
     .findById(sid)
-    .select("actual_end_at end_time is_instant")
+    .select(
+      "actual_end_at end_time is_instant time_zone session_end_time extended_session_end_time"
+    )
     .lean();
   if (!existing) return false;
   if (existing.actual_end_at) return true;
 
   const now = new Date();
   const roomName = `session:${sid}`;
+  const tz = String((existing as any).time_zone ?? "UTC");
+  const endHm = DateTime.fromJSDate(now, { zone: tz }).toFormat("HH:mm");
+
   const updateFields: Record<string, unknown> = {
     actual_end_at: now,
     end_time: now,
   };
+  if ((existing as any).session_end_time) {
+    updateFields.session_end_time = endHm;
+  }
+  if ((existing as any).extended_session_end_time) {
+    updateFields.extended_session_end_time = endHm;
+  }
   if (existing.is_instant) {
     updateFields.instant_phase = INSTANT_PHASE.COMPLETED;
   }
