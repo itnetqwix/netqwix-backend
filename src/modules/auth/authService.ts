@@ -247,7 +247,10 @@ export class AuthService {
 
       SendEmail.sendRawEmail(
         emailTemplate,
-        null,
+        {
+          "{NAME}": createUser.fullname || "there",
+          "{FIRSTNAME}": (createUser.fullname || "there").split(" ")[0],
+        },
         [createUser.email],
         "Welcome to NetQwix!",
         "Thank you for joining!"

@@ -51,9 +51,12 @@ export class UserService {
 
     SendEmail.sendRawEmail(
       emailTemplate,
-      null,
+      {
+        "{NAME}": createUser.fullname || "there",
+        "{FIRSTNAME}": (createUser.fullname || "there").split(" ")[0],
+      },
       [createUser.email],
-      "Welcome to Our Platform!",
+      "Welcome to NetQwix!",
       "Thank you for joining!"
     );
 
