@@ -133,6 +133,10 @@ export class ClipShareService {
                 "[TRAINER/TRAINEE NAME2]": params.sharerName,
                 "[DISPLAY_SINGLE]": "",
                 "[DISPLAY_MULTIPLE]": "",
+                "{FIRSTNAME1}": params.sharerName.split(" ")[0] || params.sharerName,
+                "{FIRSTNAME2}": (recipient?.fullname ?? "").split(" ")[0] || "there",
+                "{FULLNAME1}": params.sharerName,
+                "{FULLNAME2}": recipient?.fullname ?? "there",
               },
               [recipient.email],
               `${params.sharerName} shared ${params.sourceClips.length} clip(s) in your NetQwix Locker`
