@@ -12,8 +12,8 @@ async function sendAccountReviewPush(
   data?: Record<string, unknown>
 ) {
   try {
-    const { notificationsService } = await import("../notifications/notificationsService");
-    const push = new notificationsService();
+    const { NotificationsService } = await import("../notifications/notificationsService");
+    const push = new NotificationsService();
     await push.sendPushNotification(userId, title, body, {
       category: "account_verification",
       ...data,
