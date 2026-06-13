@@ -475,6 +475,46 @@ async function finalizeLessonEnd(sessionId: string): Promise<void> {
         { $set: { game_plan_expected_at: expectedBy } }
       )
       .catch(() => undefined);
+
+    // Send meeting_ended email to both trainer and trainee
+    try {
+      const { SendEmail } = require("../Utils/sendEmail");
+      const session = await booked_session
+        .findById(sessionId)
+        .populate("trainer_id", "fullname email")
+        .populate("trainee_id", "fullname email")
+        .lean();
+      if (session) {
+        const trainer = session.trainer_id as any;
+        const trainee = session.trainee_id as any;
+        const trainerName = trainer?.fullname ?? "Expert";
+        const traineeName = trainee?.fullname ?? "Enthusiast";
+        if (trainee?.email) {
+          SendEmail.sendRawEmail(
+            "meeting_ended",
+            {
+              "{FIRSTNAME}": traineeName.split(" ")[0] || traineeName,
+              "{TRAINER_NAME}": trainerName,
+            },
+            [trainee.email],
+            "Your NetQwix session has ended"
+          );
+        }
+        if (trainer?.email) {
+          SendEmail.sendRawEmail(
+            "meeting_ended",
+            {
+              "{FIRSTNAME}": trainerName.split(" ")[0] || trainerName,
+              "{TRAINER_NAME}": traineeName,
+            },
+            [trainer.email],
+            "Your NetQwix session has ended"
+          );
+        }
+      }
+    } catch (emailErr) {
+      console.warn("[finalizeLessonEnd] meeting_ended email failed", emailErr);
+    }
   } catch (err) {
     console.warn("[LessonLiveState] persist on end failed", err);
   }

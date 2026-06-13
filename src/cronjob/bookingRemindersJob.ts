@@ -69,11 +69,11 @@ export async function processBookingReminders(): Promise<void> {
       })
       .populate({
         path: "trainee_id",
-        select: "_id notifications fullname",
+        select: "_id notifications fullname email",
       })
       .populate({
         path: "trainer_id",
-        select: "_id notifications fullname",
+        select: "_id notifications fullname email",
       })
       .lean();
 
@@ -103,6 +103,8 @@ export async function processBookingReminders(): Promise<void> {
           kind,
           title: copy.title,
           body: copy.body(when),
+          when,
+          session,
         });
         await fireReminder({
           sessionId: String(session._id),
@@ -110,6 +112,8 @@ export async function processBookingReminders(): Promise<void> {
           kind,
           title: copy.title,
           body: copy.body(when),
+          when,
+          session,
         });
       }
     }
@@ -142,10 +146,12 @@ function computeSessionStartInstant(session: any): DateTime | null {
 
 async function fireReminder(args: {
   sessionId: string;
-  recipient: { _id?: any; notifications?: any } | null | undefined;
+  recipient: { _id?: any; notifications?: any; email?: string; fullname?: string } | null | undefined;
   kind: ReminderKind;
   title: string;
   body: string;
+  when?: string;
+  session?: any;
 }): Promise<void> {
   const recipient = args.recipient;
   if (!recipient?._id) return;
@@ -181,5 +187,53 @@ async function fireReminder(args: {
     );
   } catch (err) {
     logger.error("[bookingReminders] push send failed", err);
+  }
+
+  // Send email for 10-minute reminder (before_meeting) and 24-hour reminder
+  if ((args.kind === "m10" || args.kind === "h24") && recipient.email && args.session) {
+    try {
+      const session = args.session;
+      const trainerName = (session.trainer_id as any)?.fullname ?? "Your Expert";
+      const traineeName = (session.trainee_id as any)?.fullname ?? "there";
+      const isTrainer = String(recipient._id) === String((session.trainer_id as any)?._id);
+      const recipientName = isTrainer ? trainerName : traineeName;
+      const otherName = isTrainer ? traineeName : trainerName;
+      const meetingLink = `${process.env.FRONTEND_URL_SMS}/meeting?id=${session._id}`;
+      const when = args.when ?? "";
+      const duration = session.session_end_time && session.session_start_time
+        ? `${session.session_start_time} - ${session.session_end_time}`
+        : "";
+
+      if (args.kind === "m10") {
+        SendEmail.sendRawEmail(
+          "before_meeting",
+          {
+            "{FIRSTNAME}": recipientName.split(" ")[0] || recipientName,
+            "{TRAINER_NAME}": otherName,
+            "{MEETING_LINK}": meetingLink,
+            "{SESSION_TIME}": when,
+            "{SESSION_DURATION}": duration,
+          },
+          [recipient.email],
+          `Your NetQwix session starts in 10 minutes`
+        );
+      } else if (args.kind === "h24") {
+        SendEmail.sendRawEmail(
+          "meeting_confirmed",
+          {
+            "{FIRSTNAME}": recipientName.split(" ")[0] || recipientName,
+            "{TRAINER_NAME}": otherName,
+            "{TRAINEE_NAME}": traineeName.split(" ")[0] || traineeName,
+            "{MEETING_LINK}": meetingLink,
+            "{SESSION_TIME}": when,
+            "{SESSION_DURATION}": duration,
+          },
+          [recipient.email],
+          `Your NetQwix session is tomorrow — ${when}`
+        );
+      }
+    } catch (emailErr) {
+      logger.error("[bookingReminders] email send failed", emailErr);
+    }
   }
 }
